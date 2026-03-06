@@ -11,7 +11,7 @@
 //!
 //! ```rust
 //! use bevy_app::App;
-//! use open_entities_lib::setup_app;
+//! use open_entities::setup_app;
 //!
 //! fn main() {
 //!     let mut app = App::new();
@@ -21,16 +21,24 @@
 //! ```
 
 pub mod components;
+pub mod entity_loader;
 pub mod systems;
 
 pub use components::{Position, Velocity};
-pub use systems::{move_system, print_position_system, setup_app};
+pub use entity_loader::{
+    load_and_spawn_all_from_path, spawn_entity_by_type, EntityDefinitions, EntityDefinitionsFile,
+    EntityTemplate, LoadError, PositionDef, VelocityDef,
+};
+pub use systems::{
+    load_entities_from_yaml_system, move_system, print_position_system, setup_app,
+    setup_app_with_yaml, EntityDefinitionsPath,
+};
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use bevy_app::App;
-    use bevy_ecs::prelude::Entity;
+    use bevy_ecs::prelude::{Commands, Entity, Res};
 
     #[test]
     fn test_components_compile() {
@@ -54,7 +62,7 @@ mod tests {
         // Query for entities with Velocity
         {
             let mut query = app.world_mut().query::<&Velocity>();
-            let velocities: Vec<_> = query.iter(&app.world()).collect();
+            let velocities: Vec<_> = query.iter(app.world()).collect();
             assert_eq!(velocities.len(), 1);
         }
 
@@ -62,7 +70,7 @@ mod tests {
         {
             let mut query = app.world_mut().query::<(&Position, Entity)>();
             let positions: Vec<_> = query
-                .iter(&app.world())
+                .iter(app.world())
                 .filter(|(_, entity)| app.world().get::<Velocity>(*entity).is_none())
                 .collect();
             assert_eq!(positions.len(), 0);
@@ -74,5 +82,47 @@ mod tests {
             assert_eq!(pos.x, 5.0);
             assert_eq!(pos.y, 5.0);
         }
+    }
+
+    #[test]
+    fn test_entity_loader_from_str_and_spawn_by_type() {
+        let yaml = r#"
+entities:
+  mover:
+    position: { x: 1.0, y: 2.0 }
+    velocity: { vx: 0.5, vy: 0.5 }
+  static:
+    position: { x: 10.0, y: 10.0 }
+"#;
+        let definitions = EntityDefinitions::load_from_str(yaml).unwrap();
+        assert!(definitions.get("mover").is_some());
+        assert!(definitions.get("static").is_some());
+        assert!(definitions.get("missing").is_none());
+
+        let mut app = App::new();
+        app.insert_resource(definitions)
+            .add_systems(
+                bevy_app::Startup,
+                |mut commands: Commands, defs: Res<EntityDefinitions>| {
+                    spawn_entity_by_type(&mut commands, &defs, "mover");
+                    spawn_entity_by_type(&mut commands, &defs, "static");
+                },
+            )
+            .add_systems(bevy_app::Update, move_system);
+
+        app.update();
+
+        let mut query = app.world_mut().query::<(&Position, Option<&Velocity>)>();
+        let entities: Vec<_> = query.iter(app.world()).collect();
+        assert_eq!(entities.len(), 2);
+
+        let with_vel: Vec<_> = entities.iter().filter(|(_, vel)| vel.is_some()).collect();
+        let without_vel: Vec<_> = entities.iter().filter(|(_, vel)| vel.is_none()).collect();
+        assert_eq!(with_vel.len(), 1);
+        assert_eq!(without_vel.len(), 1);
+
+        let (pos, _) = with_vel[0];
+        assert_eq!(pos.x, 1.5); // 1.0 + 0.5 after one move_system tick
+        assert_eq!(pos.y, 2.5);
     }
 }
