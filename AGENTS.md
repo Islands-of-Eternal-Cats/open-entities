@@ -212,8 +212,8 @@ pos.set_y(y: f32)
 ### JsVelocity API
 ```javascript
 new JsVelocity(vx: f32, vy: f32)  // Constructor
-vel.vx() -> f32                    // Getter
-vel.set_x(vx: f32)                // Setter (note: set_x for vx)
+vel.vx() -> f32                   // Getter
+vel.set_vx(vx: f32)               // Setter
 vel.vy() -> f32
 vel.set_vy(vy: f32)
 ```
@@ -329,7 +329,7 @@ cargo test -p wasm-bindings
 
 2. **Component public fields**: Position and Velocity have public fields - no encapsulation
 
-3. **Velocity setter naming**: `JsVelocity` uses `set_x()` for vx (not `set_vx()`) - inconsistent API
+3. **Velocity setters**: `JsVelocity` uses `set_vx()` and `set_vy()` to match getters `vx()` and `vy()`
 
 4. **System mutability**: `move_system` takes `&mut Position` to modify; `print_position_system` takes `&Position` read-only
 

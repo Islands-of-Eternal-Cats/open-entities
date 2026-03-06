@@ -65,7 +65,7 @@ impl JsVelocity {
         self.velocity.vx
     }
 
-    pub fn set_x(&mut self, vx: f32) {
+    pub fn set_vx(&mut self, vx: f32) {
         self.velocity.vx = vx;
     }
 
