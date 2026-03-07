@@ -1,8 +1,7 @@
 //! # OpenEntities
 //!
-//! A library for working with entities using the **bevy_ecs** framework.
+//! A library for working with entities using the **bevy_ecs** framework (no bevy_app).
 //!
-//! This example demonstrates the basic concepts of ECS:
 //! - **Components**: Data attached to entities (Position, Velocity)
 //! - **Systems**: Functions that operate on components
 //! - **Entities**: Unique objects in the world
@@ -10,13 +9,11 @@
 //! # Examples
 //!
 //! ```rust
-//! use bevy_app::App;
-//! use open_entities::setup_app;
+//! use open_entities::setup_world;
 //!
 //! fn main() {
-//!     let mut app = App::new();
-//!     setup_app(&mut app);
-//!     app.run();
+//!     let (mut world, mut schedule) = setup_world();
+//!     schedule.run(&mut world); // one tick
 //! }
 //! ```
 
@@ -30,15 +27,15 @@ pub use entity_loader::{
     EntityTemplate, LoadError, PositionDef, VelocityDef,
 };
 pub use systems::{
-    load_entities_from_yaml_system, move_system, print_position_system, setup_app,
-    setup_app_with_yaml, EntityDefinitionsPath,
+    load_entities_from_yaml_system, move_system, print_position_system, setup_world,
+    setup_world_with_yaml, EntityDefinitionsPath,
 };
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bevy_app::App;
-    use bevy_ecs::prelude::{Commands, Entity, Res};
+    use bevy_ecs::prelude::{Commands, Entity, Res, World};
+    use bevy_ecs::schedule::Schedule;
 
     #[test]
     fn test_components_compile() {
@@ -49,36 +46,33 @@ mod tests {
 
     #[test]
     fn test_spawn_entity_and_query() {
-        let mut app = App::new();
+        let mut world = World::new();
 
         // Spawn an entity with both Position and Velocity
-        let entity = {
-            let world = app.world_mut();
-            world
-                .spawn((Position { x: 5.0, y: 5.0 }, Velocity { vx: 2.0, vy: 3.0 }))
-                .id()
-        };
+        let entity = world
+            .spawn((Position { x: 5.0, y: 5.0 }, Velocity { vx: 2.0, vy: 3.0 }))
+            .id();
 
         // Query for entities with Velocity
         {
-            let mut query = app.world_mut().query::<&Velocity>();
-            let velocities: Vec<_> = query.iter(app.world()).collect();
+            let mut query = world.query::<&Velocity>();
+            let velocities: Vec<_> = query.iter(&world).collect();
             assert_eq!(velocities.len(), 1);
         }
 
         // Query for entities with Position but without Velocity
         {
-            let mut query = app.world_mut().query::<(&Position, Entity)>();
+            let mut query = world.query::<(&Position, Entity)>();
             let positions: Vec<_> = query
-                .iter(app.world())
-                .filter(|(_, entity)| app.world().get::<Velocity>(*entity).is_none())
+                .iter(&world)
+                .filter(|(_, entity)| world.get::<Velocity>(*entity).is_none())
                 .collect();
             assert_eq!(positions.len(), 0);
         }
 
         // Query for specific entity by ID
         {
-            let pos = app.world().get::<Position>(entity).unwrap();
+            let pos = world.get::<Position>(entity).unwrap();
             assert_eq!(pos.x, 5.0);
             assert_eq!(pos.y, 5.0);
         }
@@ -99,21 +93,24 @@ entities:
         assert!(definitions.get("static").is_some());
         assert!(definitions.get("missing").is_none());
 
-        let mut app = App::new();
-        app.insert_resource(definitions)
-            .add_systems(
-                bevy_app::Startup,
-                |mut commands: Commands, defs: Res<EntityDefinitions>| {
-                    spawn_entity_by_type(&mut commands, &defs, "mover");
-                    spawn_entity_by_type(&mut commands, &defs, "static");
-                },
-            )
-            .add_systems(bevy_app::Update, move_system);
+        let mut world = World::new();
+        world.insert_resource(definitions);
 
-        app.update();
+        let mut startup = Schedule::default();
+        startup.add_systems(
+            |mut commands: Commands, defs: Res<EntityDefinitions>| {
+                spawn_entity_by_type(&mut commands, &defs, "mover");
+                spawn_entity_by_type(&mut commands, &defs, "static");
+            },
+        );
+        startup.run(&mut world);
 
-        let mut query = app.world_mut().query::<(&Position, Option<&Velocity>)>();
-        let entities: Vec<_> = query.iter(app.world()).collect();
+        let mut update = Schedule::default();
+        update.add_systems(move_system);
+        update.run(&mut world);
+
+        let mut query = world.query::<(&Position, Option<&Velocity>)>();
+        let entities: Vec<(&Position, Option<&Velocity>)> = query.iter(&world).collect();
         assert_eq!(entities.len(), 2);
 
         let with_vel: Vec<_> = entities.iter().filter(|(_, vel)| vel.is_some()).collect();
