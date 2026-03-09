@@ -24,7 +24,7 @@ pub mod systems;
 pub use components::{Position, Velocity};
 pub use entity_loader::{
     load_and_spawn_all_from_path, spawn_entity_by_type, EntityDefinitions, EntityDefinitionsFile,
-    EntityTemplate, LoadError, PositionDef, VelocityDef,
+    EntityTemplate, LoadError,
 };
 pub use systems::{
     load_entities_from_yaml_system, move_system, print_position_system, setup_world,

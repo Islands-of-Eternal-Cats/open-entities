@@ -9,26 +9,12 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
 
-/// Описание позиции в YAML
-#[derive(Debug, Clone, Deserialize)]
-pub struct PositionDef {
-    pub x: f32,
-    pub y: f32,
-}
-
-/// Описание скорости в YAML
-#[derive(Debug, Clone, Deserialize)]
-pub struct VelocityDef {
-    pub vx: f32,
-    pub vy: f32,
-}
-
 /// Шаблон одной сущности: какие компоненты и с какими значениями.
 /// Отсутствующие поля означают отсутствие компонента у этого типа.
 #[derive(Debug, Clone, Deserialize)]
 pub struct EntityTemplate {
-    pub position: Option<PositionDef>,
-    pub velocity: Option<VelocityDef>,
+    pub position: Option<Position>,
+    pub velocity: Option<Velocity>,
 }
 
 /// Корневая структура YAML-файла: именованные типы сущностей.
@@ -112,10 +98,10 @@ pub fn spawn_entity_by_type(
     let mut entity = commands.spawn_empty();
 
     if let Some(p) = &template.position {
-        entity.insert(Position { x: p.x, y: p.y });
+        entity.insert(p.clone());
     }
     if let Some(v) = &template.velocity {
-        entity.insert(Velocity { vx: v.vx, vy: v.vy });
+        entity.insert(v.clone());
     }
 
     Some(entity.id())
