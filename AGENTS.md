@@ -38,11 +38,19 @@ open-entities/
 │   ├── Cargo.toml
 │   └── src/
 │       └── lib.rs           # wasm-bindgen exports
-└── js-app/                   # JavaScript demo app
+└── js-app/                   # TypeScript demo app (WASM core + visualization)
     ├── package.json
+    ├── tsconfig.json
     ├── vite.config.js
+    ├── CORE-API.md          # Contract: WASM ↔ TS (see for extension)
     └── src/
-        └── main.js          # HTML + JS integration
+        ├── main.ts          # Entry: init, UI, game loop
+        ├── core/            # WASM wrapper and app types
+        │   ├── wasm-types.d.ts
+        │   ├── wasm.ts
+        │   └── types.ts
+        └── visualization/
+            └── render.ts    # Render state to DOM (or future Canvas/WebGL)
 ```
 
 ---
@@ -96,11 +104,14 @@ cargo fmt --all
 cargo test
 ```
 
-### JavaScript App Commands
+### JavaScript/TypeScript App Commands
 
 ```bash
 # Development server
 cd js-app && npm run dev
+
+# Type-check (TypeScript)
+cd js-app && npm run typecheck
 
 # Build for production
 cd js-app && npm run build
@@ -108,6 +119,8 @@ cd js-app && npm run build
 # Preview production build
 cd js-app && npm run preview
 ```
+
+The js-app is written in **TypeScript**. The boundary between WASM core and visualization is documented in `js-app/CORE-API.md`.
 
 ### Pre-requisites
 

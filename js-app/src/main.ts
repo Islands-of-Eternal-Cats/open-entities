@@ -1,0 +1,65 @@
+/**
+ * Entry point: init WASM core, wire UI and visualization.
+ */
+import {
+  initWasm,
+  isWasmReady,
+  JsPosition,
+  JsVelocity,
+  move_position,
+} from "./core/wasm";
+import type { GameEntity } from "./core/types";
+import { renderEntities } from "./visualization/render";
+
+const entities: GameEntity[] = [];
+const statusEl = document.getElementById("status");
+const entityListEl = document.getElementById("entity-list");
+const addEntityBtn = document.getElementById("add-entity");
+const moveAllBtn = document.getElementById("move-all");
+
+function createEntity(
+  x: number = Math.random() * 100,
+  y: number = Math.random() * 100
+): GameEntity {
+  const velocity = new JsVelocity(
+    Math.random() * 2 - 1,
+    Math.random() * 2 - 1
+  );
+  const position = new JsPosition(x, y);
+  const entity: GameEntity = {
+    id: entities.length,
+    position,
+    velocity,
+  };
+  entities.push(entity);
+  if (entityListEl) renderEntities(entities, entityListEl);
+  return entity;
+}
+
+function moveAllEntities(): void {
+  if (!isWasmReady() || !entityListEl) return;
+  for (const entity of entities) {
+    entity.position = move_position(entity.position, entity.velocity);
+  }
+  renderEntities(entities, entityListEl);
+}
+
+async function run(): Promise<void> {
+  if (!statusEl) return;
+  try {
+    await initWasm();
+    statusEl.textContent = "WASM loaded successfully!";
+    if (entityListEl) renderEntities(entities, entityListEl);
+    createEntity();
+    setInterval(moveAllEntities, 1000);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    statusEl.textContent = `Error loading WASM: ${message}`;
+    console.error("WASM init error:", error);
+  }
+}
+
+addEntityBtn?.addEventListener("click", () => createEntity());
+moveAllBtn?.addEventListener("click", () => moveAllEntities());
+
+run();
