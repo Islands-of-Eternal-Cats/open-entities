@@ -20,6 +20,7 @@
 pub mod components;
 pub mod entity_loader;
 pub mod systems;
+pub mod world;
 
 pub use components::{Position, Velocity};
 pub use entity_loader::{
@@ -27,9 +28,9 @@ pub use entity_loader::{
     EntityTemplate, LoadError,
 };
 pub use systems::{
-    load_entities_from_yaml_system, move_system, print_position_system, setup_world,
-    setup_world_with_yaml, EntityDefinitionsPath,
+    load_entities_from_yaml_system, move_system, print_position_system, EntityDefinitionsPath,
 };
+pub use world::{setup_world, setup_world_with_yaml};
 
 #[cfg(test)]
 mod tests {
@@ -121,5 +122,43 @@ entities:
         let (pos, _) = with_vel[0];
         assert_eq!(pos.x, 1.5); // 1.0 + 0.5 after one move_system tick
         assert_eq!(pos.y, 2.5);
+    }
+
+    #[test]
+    fn test_load_entities_from_yaml_system_via_setup_world_with_yaml() {
+        // Full pipeline: setup_world_with_yaml -> load_entities_from_yaml_system -> spawn
+        use std::io::Write;
+        let yaml = r#"
+entities:
+  mover:
+    position: { x: 0.0, y: 0.0 }
+    velocity: { vx: 1.0, vy: 2.0 }
+  another_mover:
+    position: { x: 5.0, y: 5.0 }
+    velocity: { vx: -0.5, vy: 0.5 }
+  static_obstacle:
+    position: { x: 10.0, y: 10.0 }
+"#;
+        let dir = std::env::temp_dir();
+        let path = dir.join("open_entities_test_entities.yaml");
+        std::fs::File::create(&path)
+            .unwrap()
+            .write_all(yaml.as_bytes())
+            .unwrap();
+
+        let (mut world, mut update) = setup_world_with_yaml(&path);
+        let mut query = world.query::<&Position>();
+        let count_before = query.iter(&world).count();
+        assert_eq!(count_before, 3, "YAML defines mover, another_mover, static_obstacle");
+
+        update.run(&mut world); // one tick: movers move
+        let _ = std::fs::remove_file(&path);
+        let positions: Vec<_> = query.iter(&world).collect();
+        assert_eq!(positions.len(), 3);
+        let xs: Vec<f32> = positions.iter().map(|p| p.x).collect();
+        let ys: Vec<f32> = positions.iter().map(|p| p.y).collect();
+        assert!(xs.contains(&1.0) && ys.contains(&2.0));
+        assert!(xs.contains(&4.5) && ys.contains(&5.5));
+        assert!(xs.contains(&10.0) && ys.contains(&10.0));
     }
 }
