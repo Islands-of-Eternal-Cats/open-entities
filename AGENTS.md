@@ -2,11 +2,11 @@
 
 ## Project Overview
 
-OpenEntities is a Rust-based Entity Component System (ECS) library built on Bevy ECS, with WebAssembly bindings for JavaScript integration. It provides a minimal framework for building ECS-based applications.
+OpenEntities is a Rust-based Entity Component System (ECS) library built on **bevy_ecs only** (no bevy_app). It uses `World` and `Schedule` directly. WebAssembly bindings provide JavaScript integration.
 
 **Core Stack:**
 - Language: Rust (edition 2021)
-- ECS Framework: `bevy_ecs`
+- ECS Framework: `bevy_ecs` (no `bevy_app`)
 - WASM Target: `wasm32-unknown-unknown`
 - JS Bundler: Vite 5
 
@@ -24,14 +24,16 @@ open-entities/
 │   └── entities.yaml         # Example entity type definitions (YAML)
 ├── open-entities-lib/         # Core ECS library
 │   ├── Cargo.toml
+│   ├── examples/
+│   │   └── run_ecs.rs        # Example: run ECS one tick (native)
 │   └── src/
 │       ├── lib.rs            # Main lib with tests
 │       ├── components/       # Component definitions
 │       │   ├── mod.rs
 │       │   ├── position.rs   # Position component
-│       │   └── velocity.rs  # Velocity component
+│       │   └── velocity.rs   # Velocity component
 │       ├── entity_loader.rs  # YAML load + spawn by type name
-│       └── systems.rs        # ECS systems
+│       └── systems.rs        # ECS systems + setup_world
 ├── wasm-bindings/            # WebAssembly bindings
 │   ├── Cargo.toml
 │   └── src/
@@ -124,7 +126,7 @@ cd js-app && npm run preview
 |--------|---------|
 | `open-entities-lib/src/components/` | ECS Component definitions (Position, Velocity) |
 | `open-entities-lib/src/entity_loader.rs` | Load entity definitions from YAML, spawn by type name |
-| `open-entities-lib/src/systems.rs` | ECS system functions and app setup |
+| `open-entities-lib/src/systems.rs` | ECS systems and world/schedule setup |
 | `wasm-bindings/src/lib.rs` | JavaScript-compatible wrappers via wasm-bindgen |
 
 ### Component Patterns
@@ -143,24 +145,28 @@ cd js-app && npm run preview
 
 **ECS Systems** (`open-entities-lib/src/systems.rs`)
 
-| System | Schedule | Purpose |
+| System | When run | Purpose |
 |--------|----------|---------|
-| `setup_system` | `Startup` | Spawns initial entities |
-| `move_system` | `Update` | Updates position based on velocity |
-| `print_position_system` | `Update` | Logs entity positions |
+| `setup_system` | Startup (only in `setup_world`) | Spawns hardcoded initial entities |
+| `load_entities_from_yaml_system` | Startup (only in `setup_world_with_yaml`) | Loads YAML and spawns one entity per type |
+| `move_system` | Update | Updates position based on velocity |
+| `print_position_system` | Update | Logs entity positions |
 
 **Key Patterns:**
-- Systems use Bevy's `Query` for component access
-- `move_system` uses mutable query: `Query<(&mut Position, &Velocity)>`
-- `print_position_system` uses immutable query: `Query<&Position>`
-- System functions are exported from the lib for external wiring
+- No `bevy_app::App`: the lib uses `World` and `Schedule` directly.
+- Systems use Bevy's `Query` for component access.
+- `move_system`: `Query<(&mut Position, &Velocity)>`; `print_position_system`: `Query<&Position>`.
+- System functions are exported for external wiring.
 
-**App Setup:**
+**World / Schedule setup:**
 ```rust
-pub fn setup_app(app: &mut App) {
-    app.add_systems(Startup, setup_system)
-        .add_systems(Update, (move_system, print_position_system));
-}
+// Hardcoded entities (setup_system runs at startup)
+let (mut world, mut schedule) = setup_world();
+schedule.run(&mut world);  // one tick
+
+// Entities from YAML (load_entities_from_yaml_system runs at startup)
+let (mut world, mut schedule) = setup_world_with_yaml("assets/entities.yaml");
+schedule.run(&mut world);
 ```
 
 ### Entity definitions (YAML)
@@ -183,9 +189,9 @@ entities:
 - `EntityDefinitions::load_from_path(path)` / `load_from_str(s)` — загрузка определений
 - `spawn_entity_by_type(commands, &definitions, "mover")` — создать одну сущность по имени типа
 - `load_and_spawn_all_from_path(commands, path)` — загрузить файл и заспавнить по одной сущности каждого типа
-- `setup_app_with_yaml(app, path)` — инициализация приложения: при старте загружается YAML и заспавниваются все типы (без жёстко заданных сущностей в `setup_system`)
+- `setup_world_with_yaml(path)` — инициализация: возвращает `(World, Schedule)`; при первом запуске schedule стартовая система загружает YAML и спавнит по одной сущности каждого типа (без `setup_system`)
 
-**Ресурс:** `EntityDefinitionsPath(Option<PathBuf>)` — при `Some(path)` стартовая система загружает YAML и спавнит сущности. `EntityDefinitions` можно положить в мир как ресурс и вызывать `spawn_entity_by_type` из своих систем.
+**Ресурс:** `EntityDefinitionsPath(Option<PathBuf>)` — при `Some(path)` стартовая система `load_entities_from_yaml_system` загружает YAML и спавнит сущности. `EntityDefinitions` можно положить в мир как ресурс и вызывать `spawn_entity_by_type` из своих систем.
 
 ---
 
@@ -257,9 +263,9 @@ cargo test -p wasm-bindings
 
 ### Test Patterns
 
-- Uses `bevy_app::App` for ECS world setup
-- Tests access world via `app.world_mut()` and `app.world()`
-- Tests use `query.iter(&app.world()).collect()` for iteration
+- Uses `World` and `Schedule` for ECS (no App)
+- Tests spawn entities and insert resources into `World`, then run `Schedule::run(&mut world)`
+- Queries use `world.query::<...>()` and `query.iter(&world)`
 
 ---
 
@@ -325,19 +331,21 @@ cargo test -p wasm-bindings
 
 ### Non-Obvious Patterns
 
-1. **Module import in WASM**: The `wasm-bindings/src/lib.rs` imports `open_entities` (from lib), not `open_entities_lib` (crate name)
+1. **No bevy_app**: The library uses only `bevy_ecs`. You get `(World, Schedule)` from `setup_world()` / `setup_world_with_yaml()`, not an `App`. Run the schedule with `schedule.run(&mut world)` each tick.
 
-2. **Component public fields**: Position and Velocity have public fields - no encapsulation
+2. **Module import in WASM**: The `wasm-bindings/src/lib.rs` imports `open_entities` (from lib), not `open_entities_lib` (crate name)
 
-3. **Velocity setters**: `JsVelocity` uses `set_vx()` and `set_vy()` to match getters `vx()` and `vy()`
+3. **Component public fields**: Position and Velocity have public fields - no encapsulation
 
-4. **System mutability**: `move_system` takes `&mut Position` to modify; `print_position_system` takes `&Position` read-only
+4. **Velocity setters**: `JsVelocity` uses `set_vx()` and `set_vy()` to match getters `vx()` and `vy()`
 
-5. **JS app self-initializes**: `js-app/src/main.js` calls `initWasm()` immediately on load - no explicit initialization needed from user
+5. **System mutability**: `move_system` takes `&mut Position` to modify; `print_position_system` takes `&Position` read-only
 
-6. **No distance check**: The `move_system` moves every entity every frame without boundary checks
+6. **JS app self-initializes**: `js-app/src/main.js` calls `initWasm()` immediately on load - no explicit initialization needed from user
 
-7. **YAML entity path**: `EntityDefinitions::load_from_path` and `load_and_spawn_all_from_path` resolve paths relative to the current working directory (e.g. run from repo root: `assets/entities.yaml`)
+7. **No distance check**: The `move_system` moves every entity every frame without boundary checks
+
+8. **YAML entity path**: `EntityDefinitions::load_from_path` and `load_and_spawn_all_from_path` resolve paths relative to the current working directory (e.g. run from repo root: `assets/entities.yaml`)
 
 ### Build Gotchas
 
@@ -383,9 +391,9 @@ cargo test -p wasm-bindings
    }
    ```
 
-2. Add to `setup_app()` in same file:
+2. Register in both `setup_world()` and `setup_world_with_yaml()` (add to the update schedule):
    ```rust
-   app.add_systems(Update, <name>_system)
+   update.add_systems((move_system, print_position_system, <name>_system));
    ```
 
 ---
@@ -411,7 +419,7 @@ cargo test -p wasm-bindings
 - Check browser console for WASM fetch errors
 
 **Query errors:**
-- Ensure components are added to App via `App::init_resource()` or spawned
+- Ensure components are spawned into `World` or resources are inserted with `world.insert_resource()`
 - Verify Query type signature matches component types
 
 **JS imports fail:**

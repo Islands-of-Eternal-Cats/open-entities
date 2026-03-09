@@ -69,14 +69,25 @@ make docs
 
 ## Usage Example
 
+The library uses `bevy_ecs` only (no `bevy_app`). You get a `World` and `Schedule` and run the schedule each tick:
+
 ```rust
-use bevy_app::App;
-use open_entities_lib::setup_app;
+use open_entities::setup_world;
 
 fn main() {
-    let mut app = App::new();
-    setup_app(&mut app);
-    app.run();
+    let (mut world, mut schedule) = setup_world();
+    schedule.run(&mut world); // one tick
+}
+```
+
+To load entities from a YAML file instead of hardcoded ones:
+
+```rust
+use open_entities::setup_world_with_yaml;
+
+fn main() {
+    let (mut world, mut schedule) = setup_world_with_yaml("assets/entities.yaml");
+    schedule.run(&mut world);
 }
 ```
 
@@ -87,4 +98,3 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
-```
