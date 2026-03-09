@@ -5,7 +5,7 @@
 OpenEntities is a Rust-based Entity Component System (ECS) library built on **bevy_ecs only** (no bevy_app). It uses `World` and `Schedule` directly. WebAssembly bindings provide JavaScript integration.
 
 **Core Stack:**
-- Language: Rust (edition 2021)
+- Language: Rust (edition 2024)
 - ECS Framework: `bevy_ecs` (no `bevy_app`)
 - WASM Target: `wasm32-unknown-unknown`
 - JS Bundler: Vite 5
@@ -124,7 +124,7 @@ The js-app is written in **TypeScript**. The boundary between WASM core and visu
 
 ### Pre-requisites
 
-- Rust and Cargo (`rustc`, `cargo`)
+- Rust and Cargo (`rustc`, `cargo`) — Rust 1.85+ for edition 2024
 - WASM target: `rustup target add wasm32-unknown-unknown`
 - Node.js 18+ (for js-app)
 - wasm-pack (for building WASM from JS app)
@@ -286,7 +286,7 @@ cargo test -p wasm-bindings
 
 ### Rust Conventions
 
-- Edition: 2021
+- Edition: 2024
 - Indentation: 4 spaces (standard Rust fmt)
 - Module structure: One file per component, `mod.rs` for module exports
 - Documentation: Rustdoc comments on all public items
