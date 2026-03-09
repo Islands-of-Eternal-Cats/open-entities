@@ -10,7 +10,7 @@ authors = ["OpenEntities Contributors"]
 [dependencies]
 bevy_ecs = "0.18"
 serde = { version = "1", features = ["derive"] }
-serde_yaml = "0.9"
+yaml_serde = "0.10"
 
 [lib]
 name = "open_entities"

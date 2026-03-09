@@ -60,7 +60,7 @@ impl EntityDefinitions {
     /// Загрузить определения из YAML-строки.
     pub fn load_from_str(s: &str) -> Result<Self, LoadError> {
         let file: EntityDefinitionsFile =
-            serde_yaml::from_str(s).map_err(|e| LoadError::Yaml(e.to_string()))?;
+            yaml_serde::from_str(s).map_err(|e| LoadError::Yaml(e.to_string()))?;
         Ok(Self {
             definitions: file.entities,
         })
