@@ -25,10 +25,7 @@ export default defineConfig({
     },
     build: {
         outDir: 'dist',
-        sourcemap: true,
-        watch: {
-            include: ['src/**', '../open-entities-lib/**/*.rs', '../wasm-bindings/**/*.rs']
-        }
+        sourcemap: true
     },
     plugins: [
         wasmPackWatchPlugin({
