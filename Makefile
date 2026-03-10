@@ -37,10 +37,11 @@ docs:
 wasm:
 	cargo build --target wasm32-unknown-unknown --release -p wasm-bindings
 
-# Чистка проекта
+# Чистка проекта (target/ и wasm-bindings/pkg/)
 clean:
 	cargo clean
 	rm -rf target
+	rm -rf wasm-bindings/pkg
 
 # Запуск всех проверок (для CI)
 ci: check clippy fmt test

@@ -155,10 +155,21 @@ entities:
         let _ = std::fs::remove_file(&path);
         let positions: Vec<_> = query.iter(&world).collect();
         assert_eq!(positions.len(), 3);
-        let xs: Vec<f32> = positions.iter().map(|p| p.x).collect();
-        let ys: Vec<f32> = positions.iter().map(|p| p.y).collect();
-        assert!(xs.contains(&1.0) && ys.contains(&2.0));
-        assert!(xs.contains(&4.5) && ys.contains(&5.5));
-        assert!(xs.contains(&10.0) && ys.contains(&10.0));
+        let pairs: Vec<(f32, f32)> = positions.iter().map(|p| (p.x, p.y)).collect();
+        assert!(
+            pairs.contains(&(1.0, 2.0)),
+            "mover should be at (1.0, 2.0) after one tick, got pairs: {:?}",
+            pairs
+        );
+        assert!(
+            pairs.contains(&(4.5, 5.5)),
+            "another_mover should be at (4.5, 5.5) after one tick, got pairs: {:?}",
+            pairs
+        );
+        assert!(
+            pairs.contains(&(10.0, 10.0)),
+            "static_obstacle should stay at (10.0, 10.0), got pairs: {:?}",
+            pairs
+        );
     }
 }
