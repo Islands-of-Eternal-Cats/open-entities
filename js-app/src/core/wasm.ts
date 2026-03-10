@@ -10,8 +10,10 @@ import initWasmModule, {
 
 let initialized = false;
 
+const WASM_URL = "/wasm_bindings_bg.wasm";
+
 export async function initWasm(): Promise<void> {
-  await initWasmModule();
+  await initWasmModule(WASM_URL);
   initialized = true;
 }
 

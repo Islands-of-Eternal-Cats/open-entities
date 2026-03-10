@@ -2,13 +2,14 @@
 
 ## Project Overview
 
-OpenEntities is a Rust-based Entity Component System (ECS) library built on **bevy_ecs only** (no bevy_app). It uses `World` and `Schedule` directly. WebAssembly bindings provide JavaScript integration.
+OpenEntities is a Rust-based Entity Component System (ECS) library built on **bevy_ecs only** (no bevy_app). It uses `World` and `Schedule` directly. WebAssembly bindings provide TypeScript/JavaScript integration.
 
 **Core Stack:**
 - Language: Rust (edition 2024)
 - ECS Framework: `bevy_ecs` (no `bevy_app`)
 - WASM Target: `wasm32-unknown-unknown`
-- JS Bundler: Vite 5
+- Frontend: **TypeScript** + Vite 5
+- WASM build: автоматическая сборка при `npm run dev` и при изменении файлов Rust (vite-plugin-wasm-pack-watcher + watch-rust-dirs)
 
 ---
 
@@ -104,30 +105,30 @@ cargo fmt --all
 cargo test
 ```
 
-### JavaScript/TypeScript App Commands
+### TypeScript App Commands (js-app)
 
 ```bash
-# Development server
+# Development server (WASM собирается автоматически при старте и при изменении .rs)
 cd js-app && npm run dev
 
 # Type-check (TypeScript)
 cd js-app && npm run typecheck
 
-# Build for production
+# Build for production (сначала соберите WASM: npm run build:wasm, затем npm run build)
 cd js-app && npm run build
 
 # Preview production build
 cd js-app && npm run preview
 ```
 
-The js-app is written in **TypeScript**. The boundary between WASM core and visualization is documented in `js-app/CORE-API.md`.
+js-app написан на **TypeScript**. WASM собирается автоматически: при запуске `npm run dev` и при изменении файлов в `open-entities-lib/` и `wasm-bindings/` (плагины `vite-plugin-wasm-pack-watcher` и watch-rust-dirs в `vite.config.js`). Отдельно запускать `make wasm` перед разработкой не обязательно. Граница между WASM-ядром и визуализацией описана в `js-app/CORE-API.md`.
 
 ### Pre-requisites
 
 - Rust and Cargo (`rustc`, `cargo`) — Rust 1.85+ for edition 2024
 - WASM target: `rustup target add wasm32-unknown-unknown`
-- Node.js 18+ (for js-app)
-- wasm-pack (for building WASM from JS app)
+- Node.js 18+ (для js-app)
+- wasm-pack (для сборки WASM; используется скриптом `js-app/build-wasm.sh` при dev и при `npm run build:wasm`)
 
 ---
 
@@ -140,7 +141,7 @@ The js-app is written in **TypeScript**. The boundary between WASM core and visu
 | `open-entities-lib/src/components/` | ECS Component definitions (Position, Velocity) |
 | `open-entities-lib/src/entity_loader.rs` | Load entity definitions from YAML, spawn by type name |
 | `open-entities-lib/src/systems.rs` | ECS systems and world/schedule setup |
-| `wasm-bindings/src/lib.rs` | JavaScript-compatible wrappers via wasm-bindgen |
+| `wasm-bindings/src/lib.rs` | TypeScript/JavaScript wrappers via wasm-bindgen |
 
 ### Component Patterns
 
@@ -237,9 +238,9 @@ vel.vy() -> f32
 vel.set_vy(vy: f32)
 ```
 
-### JS Usage Pattern (`js-app/src/main.js`)
+### TypeScript Usage Pattern (`js-app/src/main.ts`)
 
-```javascript
+```typescript
 import init, { JsPosition, JsVelocity, move_position } from "open-entities-wasm";
 
 await init();  // Required before using WASM
@@ -320,15 +321,16 @@ cargo test -p wasm-bindings
    make build  # or: cargo build
    ```
 
-2. **Build WASM bindings:**
+2. **WASM bindings** — вручную при необходимости:
    ```bash
    make wasm  # or: cargo build --target wasm32-unknown-unknown --release -p wasm-bindings
    ```
+   Для **js-app** WASM собирается автоматически при `npm run dev` (и при изменении `.rs`), отдельный шаг не нужен.
 
-3. **Build JavaScript app:**
+3. **TypeScript app (production):**
    ```bash
-   cd js-app && npm run build:wasm  # Builds WASM first
-   npm run build
+   cd js-app && npm run build:wasm  # Собрать WASM
+   npm run build                   # Собрать приложение
    ```
 
 ### Build Artifacts
@@ -354,7 +356,7 @@ cargo test -p wasm-bindings
 
 5. **System mutability**: `move_system` takes `&mut Position` to modify; `print_position_system` takes `&Position` read-only
 
-6. **JS app self-initializes**: `js-app/src/main.js` calls `initWasm()` immediately on load - no explicit initialization needed from user
+6. **TS app self-initializes**: `js-app/src/main.ts` calls `initWasm()` immediately on load - no explicit initialization needed from user
 
 7. **No distance check**: The `move_system` moves every entity every frame without boundary checks
 
@@ -364,7 +366,7 @@ cargo test -p wasm-bindings
 
 1. **WASM requires target**: Must specify `--target wasm32-unknown-unknown` for WASM builds
 
-2. **JS app dependency**: `js-app/package.json` references `"open-entities-wasm": "file:../wasm-bindings/pkg"` - requires WASM build first
+2. **js-app dependency**: `js-app/package.json` references `"open-entities-wasm": "file:../wasm-bindings/pkg"`. При `npm run dev` WASM собирается автоматически; для чистого production build выполните `npm run build:wasm` перед `npm run build`
 
 3. **Clean removes target**: `make clean` removes `target/` and `wasm-bindings/pkg/` - build artifacts are ephemeral
 
@@ -435,9 +437,10 @@ cargo test -p wasm-bindings
 - Ensure components are spawned into `World` or resources are inserted with `world.insert_resource()`
 - Verify Query type signature matches component types
 
-**JS imports fail:**
-- Run `make wasm` or `npm run build:wasm` before `npm run dev`
-- Check `package.json` dependency path is correct
+**WASM/TS imports fail:**
+- При `npm run dev` WASM должен собираться автоматически; при ошибках проверьте наличие wasm-pack и `rustup target add wasm32-unknown-unknown`
+- Или соберите WASM вручную: `cd js-app && npm run build:wasm`, затем снова `npm run dev`
+- Проверьте путь зависимости в `package.json`
 
 ### Logging
 
@@ -450,6 +453,6 @@ cargo test -p wasm-bindings
 
 - **ECS Pattern**: Data (Components) + Logic (Systems) separation
 - **Target Use**: Educational example or lightweight ECS base
-- **Platform**: Desktop (Rust) + Web (WASM + JS)
+- **Platform**: Desktop (Rust) + Web (WASM + TypeScript)
 - **License**: MIT (per README)
 - **Status**: Minimal prototype with Position/Velocity components

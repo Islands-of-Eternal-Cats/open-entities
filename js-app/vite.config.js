@@ -1,7 +1,11 @@
 import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
 import { defineConfig } from 'vite';
 import wasmPackWatchPlugin from 'vite-plugin-wasm-pack-watcher';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const rustDirs = [
     path.resolve(process.cwd(), '../open-entities-lib'),
@@ -19,6 +23,14 @@ function runWasmBuild() {
 }
 
 export default defineConfig({
+    resolve: {
+        alias: {
+            'open-entities-wasm': path.resolve(__dirname, 'node_modules/open-entities-wasm/wasm_bindings.js'),
+        },
+    },
+    optimizeDeps: {
+        exclude: ['open-entities-wasm'],
+    },
     server: {
         port: 5173,
         open: true
@@ -31,6 +43,22 @@ export default defineConfig({
         wasmPackWatchPlugin({
             buildCommand: './build-wasm.sh'
         }),
+        {
+            name: 'serve-wasm-with-mime',
+            configureServer(server) {
+                const publicDir = path.resolve(server.config.root, 'public');
+                const wasmPath = path.join(publicDir, 'wasm_bindings_bg.wasm');
+                const wasmMiddleware = (req, res, next) => {
+                    if (req.url !== '/wasm_bindings_bg.wasm' && !req.url.startsWith('/wasm_bindings_bg.wasm?')) {
+                        return next();
+                    }
+                    if (!fs.existsSync(wasmPath)) return next();
+                    res.setHeader('Content-Type', 'application/wasm');
+                    fs.createReadStream(wasmPath).pipe(res);
+                };
+                server.middlewares.stack.unshift({ route: '', handle: wasmMiddleware });
+            }
+        },
         {
             name: 'watch-rust-dirs',
             configureServer(server) {

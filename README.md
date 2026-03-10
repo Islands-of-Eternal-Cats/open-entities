@@ -1,6 +1,6 @@
 # OpenEntities
 
-A library for working with entities using the **bevy_ecs** framework, with WebAssembly bindings.
+A library for working with entities using the **bevy_ecs** framework, with WebAssembly bindings and a **TypeScript** demo app (Vite). WASM собирается автоматически при запуске dev-сервера и при изменении кода на Rust.
 
 ## Features
 
@@ -15,7 +15,7 @@ A library for working with entities using the **bevy_ecs** framework, with WebAs
 open-entities/
 ├── open-entities-lib/    # Core ECS library
 ├── wasm-bindings/        # WebAssembly bindings
-├── js-app/              # JavaScript application (if any)
+├── js-app/              # TypeScript demo app (Vite, auto WASM build)
 ├── target/              # Build artifacts
 ├── Cargo.toml           # Workspace configuration
 └── Makefile             # Build helpers
@@ -27,6 +27,7 @@ open-entities/
 
 - Rust and Cargo (`rustc`, `cargo`)
 - `wasm32-unknown-unknown` target: `rustup target add wasm32-unknown-unknown`
+- Для js-app: Node.js 18+, wasm-pack
 
 ### Building
 
@@ -37,8 +38,18 @@ make
 # Build in release mode
 make release
 
-# Build WebAssembly
+# Build WebAssembly (вручную; для js-app при npm run dev собирается автоматически)
 make wasm
+```
+
+### TypeScript app (js-app)
+
+Фронтенд на **TypeScript** (Vite). WASM собирается автоматически при `npm run dev` и при изменении файлов в `open-entities-lib/` и `wasm-bindings/`.
+
+```bash
+cd js-app && npm run dev      # Dev-сервер с автосборкой WASM
+cd js-app && npm run typecheck
+cd js-app && npm run build:wasm && npm run build   # Production build
 ```
 
 ### Running Tests
