@@ -43,7 +43,7 @@ function createEntity(
 }
 
 function moveAllEntities(): void {
-  if (!isWasmReady() || !entityListEl) return;
+  if (!isWasmReady()) return;
   for (const entity of entities) {
     entity.position = move_position(entity.position, entity.velocity);
   }
