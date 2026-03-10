@@ -9,12 +9,14 @@
         .entity { padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px; }
         button { padding: 10px 20px; margin: 5px; cursor: pointer; }
         #status { font-weight: bold; color: #666; }
+        #canvas-container { margin: 16px 0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
     </style>
 </head>
 <body>
     <h1>OpenEntities WASM Demo</h1>
     <p>Demonstrating Rust compiled to WebAssembly with ECS components.</p>
     <div id="status">Loading WASM...</div>
+    <div id="canvas-container"></div>
     <div id="entities"><h2>Entities</h2><div id="entity-list"></div></div>
     <div><button id="add-entity">Add Entity</button><button id="move-all">Move All Entities</button></div>
     <script type="module" src="./src/main.ts"></script>
