@@ -65,12 +65,12 @@ export async function initPixiCanvas(
       }
     }
 
-    // Add or update
-    entities.forEach((entity, index) => {
+    // Add or update (color by entity id for consistent visual per entity)
+    entities.forEach((entity) => {
       let g = entityGraphics.get(entity.id);
       if (!g) {
         g = new Graphics();
-        const color = COLORS[index % COLORS.length];
+        const color = COLORS[entity.id % COLORS.length];
         makeCircle(g, color);
         entityGraphics.set(entity.id, g);
         stage.addChild(g);

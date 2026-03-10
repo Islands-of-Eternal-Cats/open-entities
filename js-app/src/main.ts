@@ -24,7 +24,8 @@ let updatePixiEntities: ((entities: GameEntity[]) => void) | null = null;
 function createEntity(
   x: number = Math.random() * 100,
   y: number = Math.random() * 100
-): GameEntity {
+): GameEntity | void {
+  if (!isWasmReady()) return;
   const velocity = new JsVelocity(
     Math.random() * 2 - 1,
     Math.random() * 2 - 1
@@ -63,14 +64,13 @@ async function run(): Promise<void> {
     createEntity();
     if (updatePixiEntities) updatePixiEntities(entities);
     setInterval(moveAllEntities, 1000);
+    addEntityBtn?.addEventListener("click", () => createEntity());
+    moveAllBtn?.addEventListener("click", () => moveAllEntities());
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     statusEl.textContent = `Error loading WASM: ${message}`;
     console.error("WASM init error:", error);
   }
 }
-
-addEntityBtn?.addEventListener("click", () => createEntity());
-moveAllBtn?.addEventListener("click", () => moveAllEntities());
 
 run();
