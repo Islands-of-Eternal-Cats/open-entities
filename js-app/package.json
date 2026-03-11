@@ -11,15 +11,19 @@
         "build": "vite build",
         "preview": "vite preview",
         "build:wasm": "cd ../wasm-bindings && wasm-pack build --target web",
-        "typecheck": "tsc --noEmit"
+        "typecheck": "tsc --noEmit",
+        "test": "vitest",
+        "test:run": "vitest run"
     },
     "dependencies": {
         "open-entities-wasm": "file:../wasm-bindings/pkg",
         "pixi.js": "^8.0.0"
     },
     "devDependencies": {
+        "jsdom": "^25.0.0",
         "typescript": "^5.0.0",
         "vite": "^5.0.0",
-        "vite-plugin-wasm-pack-watcher": "^1.0.1"
+        "vite-plugin-wasm-pack-watcher": "^1.0.1",
+        "vitest": "^2.0.0"
     }
 }

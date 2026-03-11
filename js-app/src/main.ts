@@ -20,6 +20,7 @@ const addEntityBtn = document.getElementById("add-entity");
 const moveAllBtn = document.getElementById("move-all");
 
 let updatePixiEntities: ((entities: GameEntity[]) => void) | null = null;
+let lastFrameTime: number | null = null;
 
 function createEntity(
   x: number = Math.random() * 100,
@@ -42,13 +43,29 @@ function createEntity(
   return entity;
 }
 
-function moveAllEntities(): void {
+/**
+ * Advances all entities by dt seconds (velocity * dt).
+ * @param dt - time step in seconds (e.g. from requestAnimationFrame delta)
+ */
+function moveAllEntities(dt: number): void {
   if (!isWasmReady()) return;
   for (const entity of entities) {
-    entity.position = move_position(entity.position, entity.velocity);
+    const vel = entity.velocity;
+    const scaledVel = new JsVelocity(vel.vx() * dt, vel.vy() * dt);
+    entity.position = move_position(entity.position, scaledVel);
   }
   if (entityListEl) renderEntities(entities, entityListEl);
   if (updatePixiEntities) updatePixiEntities(entities);
+}
+
+function gameLoop(timestamp: number): void {
+  const dtSec =
+    lastFrameTime !== null
+      ? Math.min((timestamp - lastFrameTime) / 1000, 0.1)
+      : 1 / 60;
+  lastFrameTime = timestamp;
+  moveAllEntities(dtSec);
+  requestAnimationFrame(gameLoop);
 }
 
 async function run(): Promise<void> {
@@ -63,9 +80,9 @@ async function run(): Promise<void> {
     if (entityListEl) renderEntities(entities, entityListEl);
     createEntity();
     if (updatePixiEntities) updatePixiEntities(entities);
-    setInterval(moveAllEntities, 1000);
+    requestAnimationFrame(gameLoop);
     addEntityBtn?.addEventListener("click", () => createEntity());
-    moveAllBtn?.addEventListener("click", () => moveAllEntities());
+    moveAllBtn?.addEventListener("click", () => moveAllEntities(1 / 60));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     statusEl.textContent = `Error loading WASM: ${message}`;
