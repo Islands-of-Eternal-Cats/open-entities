@@ -4,7 +4,9 @@ use bevy_ecs::prelude::*;
 use std::path::PathBuf;
 
 pub mod movement;
+pub mod time;
 pub use movement::move_system;
+pub use time::DeltaTime;
 
 /// System: Print positions of all entities
 pub fn print_position_system(query: Query<&Position>) {

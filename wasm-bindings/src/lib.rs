@@ -3,7 +3,11 @@
 //! This crate provides WebAssembly bindings to use open-entities
 //! from JavaScript projects.
 
-use open_entities::{Position, Velocity};
+use js_sys::Array;
+use open_entities::{
+    create_empty_world, get_entities_position_velocity, run_tick, Position, Schedule, Velocity,
+    World,
+};
 use wasm_bindgen::prelude::*;
 
 /// Initialize the WASM environment
@@ -78,10 +82,8 @@ impl JsVelocity {
     }
 }
 
-/// Move an entity's position based on its velocity
-///
-/// This function takes a position and velocity, and returns a new position
-/// after moving for one tick (assuming 1 second delta time).
+/// Move an entity's position based on its velocity for one tick (legacy helper).
+/// Prefer using `JsWorld` and `tick(dt)` for time-based simulation.
 #[wasm_bindgen]
 pub fn move_position(pos: &JsPosition, vel: &JsVelocity) -> JsPosition {
     let new_x = pos.position.x + vel.velocity.vx;
@@ -89,5 +91,55 @@ pub fn move_position(pos: &JsPosition, vel: &JsVelocity) -> JsPosition {
 
     JsPosition {
         position: Position { x: new_x, y: new_y },
+    }
+}
+
+/// ECS world for use from JavaScript. Holds entities and runs simulation ticks with delta time.
+#[wasm_bindgen]
+pub struct JsWorld {
+    world: World,
+    schedule: Schedule,
+}
+
+#[wasm_bindgen]
+impl JsWorld {
+    /// Create an empty world. Call `spawn` to add entities, then `tick(dt)` each frame.
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        let (world, schedule) = create_empty_world();
+        Self { world, schedule }
+    }
+
+    /// Spawn an entity with position and velocity.
+    #[wasm_bindgen]
+    pub fn spawn(&mut self, x: f32, y: f32, vx: f32, vy: f32) {
+        self.world
+            .spawn((Position { x, y }, Velocity { vx, vy }));
+    }
+
+    /// Run one simulation tick with the given delta time in seconds.
+    #[wasm_bindgen]
+    pub fn tick(&mut self, dt: f32) {
+        run_tick(&mut self.world, &mut self.schedule, dt);
+    }
+
+    /// Snapshot of all entities as an array of `{ x, y, vx, vy }` for rendering.
+    #[wasm_bindgen]
+    pub fn get_entities(&mut self) -> Array {
+        let snapshot = get_entities_position_velocity(&mut self.world);
+        let arr = Array::new();
+        for (x, y, vx, vy) in snapshot {
+            let obj = js_sys::Object::new();
+            js_sys::Reflect::set(&obj, &JsValue::from_str("x"), &JsValue::from_f64(x as f64))
+                .unwrap();
+            js_sys::Reflect::set(&obj, &JsValue::from_str("y"), &JsValue::from_f64(y as f64))
+                .unwrap();
+            js_sys::Reflect::set(&obj, &JsValue::from_str("vx"), &JsValue::from_f64(vx as f64))
+                .unwrap();
+            js_sys::Reflect::set(&obj, &JsValue::from_str("vy"), &JsValue::from_f64(vy as f64))
+                .unwrap();
+            arr.push(&obj);
+        }
+        arr
     }
 }

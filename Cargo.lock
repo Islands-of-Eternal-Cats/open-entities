@@ -1162,6 +1162,7 @@ version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
  "getrandom",
+ "js-sys",
  "open-entities-lib",
  "wasm-bindgen",
  "wasm-bindgen-test",

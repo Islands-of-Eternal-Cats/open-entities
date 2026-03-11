@@ -18,22 +18,20 @@
 - **`init()`** (default export)  
   Инициализирует WASM и panic hook. Должна быть вызвана один раз до любого другого вызова.
 
-### Типы (экспортируемые классы)
+### Мир и тик с delta time
 
-- **`JsPosition`**  
-  - `new JsPosition(x: number, y: number)`  
-  - `x(): number`, `set_x(x: number): void`  
-  - `y(): number`, `set_y(y: number): void`
+- **`JsWorld`**  
+  - `new JsWorld()` — пустой мир (только move_system в расписании).
+  - `world.spawn(x, y, vx, vy)` — создать сущность с Position и Velocity.
+  - `world.tick(dt)` — один тик симуляции; `dt` в секундах (например из `requestAnimationFrame`).
+  - `world.get_entities()` — снапшот всех сущностей: массив `{ x, y, vx, vy }` для отрисовки.
 
-- **`JsVelocity`**  
-  - `new JsVelocity(vx: number, vy: number)`  
-  - `vx(): number`, `set_vx(vx: number): void`  
-  - `vy(): number`, `set_vy(vy: number): void`
+Delta time связан с движком: в Rust в мир перед тиком кладётся ресурс `DeltaTime(dt)`, `move_system` делает `position += velocity * dt`.
 
-### Функции
+### Legacy (по желанию)
 
-- **`move_position(pos: JsPosition, vel: JsVelocity): JsPosition`**  
-  Возвращает новую позицию после одного тика: `(x + vx, y + vy)`. Входы не мутируются.
+- **`JsPosition`** / **`JsVelocity`** — обёртки для компонентов.
+- **`move_position(pos, vel): JsPosition`** — один тик без dt (для совместимости).
 
 ## Где что лежит в js-app
 
@@ -41,15 +39,15 @@
 |------|------------|
 | `src/core/wasm-types.d.ts` | Объявления типов для модуля `open-entities-wasm`. |
 | `src/core/wasm.ts` | Обёртка: `initWasm()`, `isWasmReady()`, реэкспорт API. |
-| `src/core/types.ts` | Типы приложения (например, `GameEntity`). |
+| `src/core/types.ts` | Типы приложения (например, `EntitySnapshot`). |
 | `src/visualization/render.ts` | Отрисовка состояния в DOM (или в будущем Canvas/WebGL). |
 | `src/main.ts` | Точка входа: инит, цикл, кнопки. |
 
-## Рекомендуемое развитие API для большой игры
+## Дальнейшее развитие API
 
-1. **Инициализация**: `init()`, опционально `createWorld(options?)`.
-2. **Тик**: `tick(deltaMs?: number)` — вызов из TS каждый кадр/интервал; вся симуляция в WASM.
-3. **Чтение состояния**: например `getEntities()` / `getEntitiesWithPosition()` — возврат типизированных структур для отрисовки.
+1. **Инициализация**: `init()`, `new JsWorld()` — уже есть.
+2. **Тик**: `world.tick(dt)` — реализовано.
+3. **Чтение состояния**: `world.get_entities()` — реализовано.
 4. **Ввод**: `applyInput(playerId, input)` или `queueCommand(...)` — TS только передаёт события, логика в WASM.
 
 Типы для новых функций и структур описывать в `core/` (или использовать сгенерированные wasm-pack `.d.ts`).

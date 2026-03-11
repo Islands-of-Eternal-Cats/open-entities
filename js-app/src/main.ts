@@ -1,60 +1,47 @@
 /**
  * Entry point: init WASM core, wire UI and visualization.
  */
-import {
-  initWasm,
-  isWasmReady,
-  JsPosition,
-  JsVelocity,
-  move_position,
-} from "./core/wasm";
-import type { GameEntity } from "./core/types";
+import { initWasm, isWasmReady, JsWorld } from "./core/wasm";
+import type { EntitySnapshot } from "./core/types";
 import { renderEntities } from "./visualization/render";
 import { initPixiCanvas } from "./visualization/pixi-canvas";
 
-const entities: GameEntity[] = [];
+let world: JsWorld | null = null;
 const statusEl = document.getElementById("status");
 const entityListEl = document.getElementById("entity-list");
 const canvasContainer = document.getElementById("canvas-container");
 const addEntityBtn = document.getElementById("add-entity");
-const moveAllBtn = document.getElementById("move-all");
 
-let updatePixiEntities: ((entities: GameEntity[]) => void) | null = null;
+let updatePixiEntities: ((entities: EntitySnapshot[]) => void) | null = null;
 let lastFrameTime: number | null = null;
 
 function createEntity(
   x: number = Math.random() * 100,
   y: number = Math.random() * 100
-): GameEntity | void {
-  if (!isWasmReady()) return;
-  const velocity = new JsVelocity(
+): void {
+  if (!isWasmReady() || !world) return;
+  world.spawn(
+    x,
+    y,
     Math.random() * 2 - 1,
     Math.random() * 2 - 1
   );
-  const position = new JsPosition(x, y);
-  const entity: GameEntity = {
-    id: entities.length,
-    position,
-    velocity,
-  };
-  entities.push(entity);
-  if (entityListEl) renderEntities(entities, entityListEl);
-  if (updatePixiEntities) updatePixiEntities(entities);
-  return entity;
+  syncAndRender();
 }
 
-/**
- * Advances all entities by dt seconds (velocity * dt).
- * @param dt - time step in seconds (e.g. from requestAnimationFrame delta)
- */
-function moveAllEntities(dt: number): void {
-  if (!isWasmReady()) return;
-  for (const entity of entities) {
-    const vel = entity.velocity;
-    const scaledVel = new JsVelocity(vel.vx() * dt, vel.vy() * dt);
-    entity.position = move_position(entity.position, scaledVel);
-  }
-  if (entityListEl) renderEntities(entities, entityListEl);
+function syncAndRender(): void {
+  if (!world || !entityListEl) return;
+  const raw = world.get_entities();
+  const entities: EntitySnapshot[] = Array.from(raw).map(
+    (e: { x: number; y: number; vx: number; vy: number }, i: number) => ({
+      id: i,
+      x: e.x,
+      y: e.y,
+      vx: e.vx,
+      vy: e.vy,
+    })
+  );
+  renderEntities(entities, entityListEl);
   if (updatePixiEntities) updatePixiEntities(entities);
 }
 
@@ -64,7 +51,10 @@ function gameLoop(timestamp: number): void {
       ? Math.min((timestamp - lastFrameTime) / 1000, 0.1)
       : 1 / 60;
   lastFrameTime = timestamp;
-  moveAllEntities(dtSec);
+  if (world) {
+    world.tick(dtSec);
+    syncAndRender();
+  }
   requestAnimationFrame(gameLoop);
 }
 
@@ -72,17 +62,16 @@ async function run(): Promise<void> {
   if (!statusEl) return;
   try {
     await initWasm();
+    world = new JsWorld();
     statusEl.textContent = "WASM loaded successfully!";
     if (canvasContainer) {
       const pixi = await initPixiCanvas(canvasContainer);
       updatePixiEntities = pixi.updateEntities;
     }
-    if (entityListEl) renderEntities(entities, entityListEl);
     createEntity();
-    if (updatePixiEntities) updatePixiEntities(entities);
+    syncAndRender();
     requestAnimationFrame(gameLoop);
     addEntityBtn?.addEventListener("click", () => createEntity());
-    moveAllBtn?.addEventListener("click", () => moveAllEntities(1 / 60));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     statusEl.textContent = `Error loading WASM: ${message}`;

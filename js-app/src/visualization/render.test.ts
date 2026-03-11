@@ -1,20 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { renderEntities } from "./render";
-import type { GameEntity } from "../core/types";
+import type { EntitySnapshot } from "../core/types";
 
-function mockEntity(overrides: Partial<{
-  id: number;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-}> = {}): GameEntity {
-  const { id = 0, x = 0, y = 0, vx = 0, vy = 0 } = overrides;
-  return {
-    id,
-    position: { x: () => x, y: () => y },
-    velocity: { vx: () => vx, vy: () => vy },
-  } as unknown as GameEntity;
+function mockEntity(
+  overrides: Partial<EntitySnapshot> = {}
+): EntitySnapshot {
+  return { id: 0, x: 0, y: 0, vx: 0, vy: 0, ...overrides };
 }
 
 describe("renderEntities", () => {

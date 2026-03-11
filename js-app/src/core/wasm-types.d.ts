@@ -29,11 +29,18 @@ declare module "open-entities-wasm" {
   }
 
   /**
-   * Advance position by velocity for one tick (delta = 1 time unit).
-   * Returns a new JsPosition; does not mutate inputs.
+   * Advance position by velocity for one tick (legacy; prefer JsWorld.tick(dt)).
    */
   export function move_position(
     pos: JsPosition,
     vel: JsVelocity
   ): JsPosition;
+
+  /** ECS world: run simulation with delta time and get entity snapshots. */
+  export class JsWorld {
+    constructor();
+    spawn(x: number, y: number, vx: number, vy: number): void;
+    tick(dt: number): void;
+    get_entities(): Array<{ x: number; y: number; vx: number; vy: number }>;
+  }
 }

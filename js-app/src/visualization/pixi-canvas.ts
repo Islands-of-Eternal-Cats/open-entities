@@ -3,7 +3,7 @@
  * World coordinates (from WASM) are scaled to canvas size.
  */
 import { Application, Graphics } from "pixi.js";
-import type { GameEntity } from "../core/types";
+import type { EntitySnapshot } from "../core/types";
 
 const CANVAS_WIDTH = 640;
 const CANVAS_HEIGHT = 480;
@@ -36,7 +36,7 @@ function makeCircle(g: Graphics, color: number): void {
  */
 export async function initPixiCanvas(
   container: HTMLElement
-): Promise<{ updateEntities: (entities: GameEntity[]) => void }> {
+): Promise<{ updateEntities: (entities: EntitySnapshot[]) => void }> {
   const application = new Application();
   await application.init({
     width: CANVAS_WIDTH,
@@ -50,7 +50,7 @@ export async function initPixiCanvas(
   app = application;
   container.appendChild(application.canvas as HTMLCanvasElement);
 
-  function updateEntities(entities: GameEntity[]): void {
+  function updateEntities(entities: EntitySnapshot[]): void {
     if (!app) return;
 
     const stage = app.stage;
@@ -76,7 +76,7 @@ export async function initPixiCanvas(
         stage.addChild(g);
       }
 
-      const { x, y } = worldToScreen(entity.position.x(), entity.position.y());
+      const { x, y } = worldToScreen(entity.x, entity.y);
       g.x = x;
       g.y = y;
     });
