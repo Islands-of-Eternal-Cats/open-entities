@@ -372,6 +372,14 @@ cargo test -p wasm-bindings
 
 4. **No Windows support noted**: Makefile uses Unix shell syntax (`rm -rf`)
 
+### Обновление воркера и WASM без перезагрузки страницы (вариант B)
+
+Предпочтительный способ: **главный поток сам качает WASM** (с обходом кэша), затем передаёт буфер воркеру.
+
+- Главный поток: `fetch(wasmUrl, { cache: 'no-store' })` с cache-bust в URL (`?t=...` или `?v=...`), получает `ArrayBuffer`.
+- Передача воркеру: `worker.postMessage({ type: 'init', wasmBuffer }, [wasmBuffer])` (transferable).
+- Воркер инстанциирует WASM из переданного буфера, создаёт мир, шлёт `ready`.
+
 ---
 
 ## Adding New Components
