@@ -38,8 +38,9 @@ docs:
 wasm:
 	cd js-app && ./build-wasm.sh
 
-# Запуск dev-сервера js-app (Vite; WASM собирается автоматически)
+# Запуск dev-сервера js-app (Vite). Сначала пересобирает WASM, затем стартует сервер.
 js-app:
+	$(MAKE) wasm
 	cd js-app && npm run dev
 
 # Чистка проекта (target/ и wasm-bindings/pkg/)
