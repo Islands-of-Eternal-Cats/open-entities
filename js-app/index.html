@@ -7,6 +7,7 @@
     <style>
         body { font-family: monospace; padding: 20px; max-width: 800px; margin: 0 auto; }
         .entity { padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px; }
+        .entity-count { margin: 0 0 10px 0; }
         button { padding: 10px 20px; margin: 5px; cursor: pointer; }
         #status { font-weight: bold; color: #666; }
         #canvas-container { margin: 16px 0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
@@ -17,7 +18,10 @@
     <p>Demonstrating Rust compiled to WebAssembly with ECS components.</p>
     <div id="status">Loading WASM...</div>
     <div id="canvas-container"></div>
-    <div id="entities"><h2>Entities</h2><div id="entity-list"></div></div>
+    <div id="entities">
+        <h2>Entities</h2>
+        <div id="entity-list"></div>
+    </div>
     <div><button id="add-entity">Add Entity</button></div>
     <script type="module" src="./src/main.ts"></script>
 </body>

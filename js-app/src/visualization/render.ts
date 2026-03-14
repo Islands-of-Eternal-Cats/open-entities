@@ -9,13 +9,15 @@ function formatCoord(value: number): string {
 }
 
 /**
- * Renders the list of entities into the given container element.
+ * Renders the entity count and list into the given container element.
+ * Count is part of the same output so it always stays in sync with the list.
  */
 export function renderEntities(
   entities: EntitySnapshot[],
   container: HTMLElement
 ): void {
-  container.innerHTML = entities
+  const count = entities.length;
+  const listHtml = entities
     .map(
       (e) => `<div class="entity">
         <strong>Entity ${e.id}</strong><br>
@@ -24,4 +26,5 @@ export function renderEntities(
       </div>`
     )
     .join("");
+  container.innerHTML = `<p class="entity-count"><strong>Count: ${count}</strong></p>${listHtml}`;
 }
