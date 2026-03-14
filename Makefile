@@ -1,6 +1,6 @@
 # Makefile for open-entities Rust Workspace
 
-.PHONY: all build test clippy fmt run-wasm-todo clean check docs
+.PHONY: all build test clippy fmt run-wasm-todo clean check docs js-app
 
 # По умолчанию - сборка всего
 all: build
@@ -36,6 +36,10 @@ docs:
 # Сборка WASM в релизном режиме
 wasm:
 	cargo build --target wasm32-unknown-unknown --release -p wasm-bindings
+
+# Запуск dev-сервера js-app (Vite; WASM собирается автоматически)
+js-app:
+	cd js-app && npm run dev
 
 # Чистка проекта (target/ и wasm-bindings/pkg/)
 clean:
