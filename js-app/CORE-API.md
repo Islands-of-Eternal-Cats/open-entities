@@ -6,8 +6,8 @@
 
 ## Общая схема
 
-- **Ядро (WASM)**: симуляция, ECS-логика, состояние мира. Не знает о DOM/Canvas.
-- **Визуализация (TS)**: рендер, ввод, UI. Вызывает ядро через этот API.
+- **Ядро (WASM)** выполняется в **web worker**: симуляция, ECS-логика, состояние мира. Не знает о DOM/Canvas.
+- **Визуализация (TS)** в главном потоке: рендер, ввод, UI. Общается с ядром через `postMessage` (см. `core/worker-types.ts`).
 
 Граница — только данные и вызовы функций; никаких общих мутабельных структур.
 
@@ -15,18 +15,16 @@
 
 ### Инициализация
 
-- **`init()`** (default export)  
-  Инициализирует WASM и panic hook. Должна быть вызвана один раз до любого другого вызова.
+- **`initWasm()`** (из `core/wasm.ts`)  
+  Создаёт web worker, загружает в нём WASM и создаёт `JsWorld`. Возвращает `Promise<void>`. Вызывать один раз до `tick`/`spawn`.
+- **`isWasmReady()`** — `true` после успешного `initWasm()`.
 
-### Мир и тик с delta time
+### Мир и тик с delta time (через worker)
 
-- **`JsWorld`**  
-  - `new JsWorld()` — пустой мир (только move_system в расписании).
-  - `world.spawn(x, y, vx, vy)` — создать сущность с Position и Velocity.
-  - `world.tick(dt)` — один тик симуляции; `dt` в секундах (например из `requestAnimationFrame`).
-  - `world.get_entities()` — снапшот всех сущностей: массив `{ x, y, vx, vy }` для отрисовки.
+- **`tick(dt): Promise<EntitySnapshot[]>`** — отправить в worker один тик симуляции; `dt` в секундах. Резолвится снапшотом сущностей для отрисовки.
+- **`spawn(x, y, vx, vy): Promise<EntitySnapshot[]>`** — создать сущность в worker; резолвится актуальным снапшотом сущностей.
 
-Delta time связан с движком: в Rust в мир перед тиком кладётся ресурс `DeltaTime(dt)`, `move_system` делает `position += velocity * dt`.
+В worker живёт один экземпляр **`JsWorld`** (Rust/WASM): `world.tick(dt)`, `world.spawn(...)`, `world.get_entities()`. Delta time в Rust: ресурс `DeltaTime(dt)`, `move_system` делает `position += velocity * dt`.
 
 ### Legacy (по желанию)
 
@@ -38,7 +36,9 @@ Delta time связан с движком: в Rust в мир перед тико
 | Путь | Назначение |
 |------|------------|
 | `src/core/wasm-types.d.ts` | Объявления типов для модуля `open-entities-wasm`. |
-| `src/core/wasm.ts` | Обёртка: `initWasm()`, `isWasmReady()`, реэкспорт API. |
+| `src/core/worker-types.ts` | Типы сообщений main ↔ worker (`WorkerInMessage`, `WorkerOutMessage`). |
+| `src/core/ecs-worker.ts` | Web worker: загрузка WASM, `JsWorld`, обработка `init`/`tick`/`spawn`. |
+| `src/core/wasm.ts` | Обёртка главного потока: `initWasm()`, `isWasmReady()`, `tick(dt)`, `spawn(...)` (все вызовы уходят в worker). |
 | `src/core/types.ts` | Типы приложения (например, `EntitySnapshot`). |
 | `src/visualization/render.ts` | Отрисовка состояния в DOM (или в будущем Canvas/WebGL). |
 | `src/main.ts` | Точка входа: инит, цикл, кнопки. |

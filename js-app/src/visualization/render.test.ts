@@ -15,9 +15,10 @@ describe("renderEntities", () => {
     container = document.createElement("div");
   });
 
-  it("renders empty list as empty container", () => {
+  it("renders empty list with count 0", () => {
     renderEntities([], container);
-    expect(container.innerHTML).toBe("");
+    expect(container.innerHTML).toContain("Count: 0");
+    expect(container.querySelectorAll(".entity").length).toBe(0);
   });
 
   it("renders one entity with position and velocity", () => {

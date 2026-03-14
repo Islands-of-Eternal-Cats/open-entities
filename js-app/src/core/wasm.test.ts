@@ -1,12 +1,41 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("open-entities-wasm", () => ({
-  default: vi.fn().mockResolvedValue(undefined),
-}));
+/** Mock Worker so init runs without loading real WASM in worker. */
+function installMockWorker(): void {
+  class MockWorker {
+    onmessage: ((e: MessageEvent) => void) | null = null;
+    private listeners: Array<(e: MessageEvent) => void> = [];
+
+    addEventListener(_: string, fn: (e: MessageEvent) => void): void {
+      this.listeners.push(fn);
+    }
+
+    removeEventListener(_: string, fn: (e: MessageEvent) => void): void {
+      this.listeners = this.listeners.filter((l) => l !== fn);
+    }
+
+    postMessage(data: unknown): void {
+      if (
+        data &&
+        typeof data === "object" &&
+        "type" in data &&
+        (data as { type: string }).type === "init"
+      ) {
+        setTimeout(() => {
+          const e = { data: { type: "ready" } } as MessageEvent;
+          this.onmessage?.(e);
+          this.listeners.forEach((fn) => fn(e));
+        }, 0);
+      }
+    }
+  }
+  vi.stubGlobal("Worker", MockWorker);
+}
 
 describe("wasm module", () => {
   beforeEach(() => {
     vi.resetModules();
+    installMockWorker();
   });
 
   it("isWasmReady returns false before init", async () => {
