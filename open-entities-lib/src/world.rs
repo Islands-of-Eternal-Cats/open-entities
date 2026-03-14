@@ -55,11 +55,8 @@ pub fn run_tick(world: &mut World, schedule: &mut Schedule, dt: f32) {
 }
 
 /// Snapshot of all entities that have both Position and Velocity.
-/// Returns `(x, y, vx, vy)` per entity for use by WASM/JS.
-pub fn get_entities_position_velocity(world: &mut World) -> Vec<(f32, f32, f32, f32)> {
+/// Returns `(Position, Velocity)` per entity for use by WASM/JS.
+pub fn get_entities_position_velocity(world: &mut World) -> Vec<(Position, Velocity)> {
     let mut query = world.query::<(&Position, &Velocity)>();
-    query
-        .iter(world)
-        .map(|(p, v)| (p.x, p.y, v.vx, v.vy))
-        .collect()
+    query.iter(world).map(|(p, v)| (*p, *v)).collect()
 }

@@ -15,14 +15,15 @@ let pending:
   | null = null;
 
 function rawToSnapshots(
-  raw: Array<{ x: number; y: number; vx: number; vy: number }>
+  raw: Array<{
+    pos: { x: number; y: number };
+    velocity: { vx: number; vy: number };
+  }>
 ): EntitySnapshot[] {
   return raw.map((e, i) => ({
     id: i,
-    x: e.x,
-    y: e.y,
-    vx: e.vx,
-    vy: e.vy,
+    pos: e.pos,
+    velocity: e.velocity,
   }));
 }
 

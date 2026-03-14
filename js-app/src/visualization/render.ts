@@ -21,8 +21,8 @@ export function renderEntities(
     .map(
       (e) => `<div class="entity">
         <strong>Entity ${e.id}</strong><br>
-        Position: (${formatCoord(e.x)}, ${formatCoord(e.y)})<br>
-        Velocity: (${formatCoord(e.vx)}, ${formatCoord(e.vy)})
+        Position: (${formatCoord(e.pos.x)}, ${formatCoord(e.pos.y)})<br>
+        Velocity: (${formatCoord(e.velocity.vx)}, ${formatCoord(e.velocity.vy)})
       </div>`
     )
     .join("");

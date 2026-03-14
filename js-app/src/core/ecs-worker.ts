@@ -32,12 +32,10 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
       world.tick(msg.dt);
       const raw = world.get_entities();
       const entities = Array.from(raw).map(
-        (e: { x: number; y: number; vx: number; vy: number }) => ({
-          x: e.x,
-          y: e.y,
-          vx: e.vx,
-          vy: e.vy,
-        })
+        (e: {
+          pos: { x: number; y: number };
+          velocity: { vx: number; vy: number };
+        }) => ({ pos: e.pos, velocity: e.velocity })
       );
       post({ type: "entities", entities });
       return;
@@ -47,12 +45,10 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
       world.spawn(msg.x, msg.y, msg.vx, msg.vy);
       const raw = world.get_entities();
       const entities = Array.from(raw).map(
-        (e: { x: number; y: number; vx: number; vy: number }) => ({
-          x: e.x,
-          y: e.y,
-          vx: e.vx,
-          vy: e.vy,
-        })
+        (e: {
+          pos: { x: number; y: number };
+          velocity: { vx: number; vy: number };
+        }) => ({ pos: e.pos, velocity: e.velocity })
       );
       post({ type: "entities", entities });
       return;

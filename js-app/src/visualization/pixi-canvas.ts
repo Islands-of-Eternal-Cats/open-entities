@@ -76,7 +76,7 @@ export async function initPixiCanvas(
         stage.addChild(g);
       }
 
-      const { x, y } = worldToScreen(entity.x, entity.y);
+      const { x, y } = worldToScreen(entity.pos.x, entity.pos.y);
       g.x = x;
       g.y = y;
     });
