@@ -54,6 +54,7 @@ export default defineConfig({
                     }
                     if (!fs.existsSync(wasmPath)) return next();
                     res.setHeader('Content-Type', 'application/wasm');
+                    res.setHeader('Cache-Control', 'no-store');
                     fs.createReadStream(wasmPath).pipe(res);
                 };
                 server.middlewares.stack.unshift({ route: '', handle: wasmMiddleware });

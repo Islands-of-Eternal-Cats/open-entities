@@ -58,6 +58,15 @@ export async function initWasm(): Promise<void> {
     }
   };
 
+  const origin =
+    typeof window !== "undefined" && window.location
+      ? window.location.origin
+      : "http://localhost:5173";
+  const wasmUrl = `${origin}/wasm_bindings_bg.wasm?t=${Date.now()}`;
+  const res = await fetch(wasmUrl, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Failed to fetch WASM: ${res.status}`);
+  const wasmBuffer = await res.arrayBuffer();
+
   return new Promise<void>((resolve, reject) => {
     const onReady = () => {
       worker!.removeEventListener("message", handler);
@@ -69,7 +78,9 @@ export async function initWasm(): Promise<void> {
         reject(new Error((event.data as { message: string }).message));
     };
     worker!.addEventListener("message", handler);
-    worker!.postMessage({ type: "init" } satisfies WorkerInMessage);
+    worker!.postMessage({ type: "init", wasmBuffer } satisfies WorkerInMessage, [
+      wasmBuffer,
+    ]);
   });
 }
 

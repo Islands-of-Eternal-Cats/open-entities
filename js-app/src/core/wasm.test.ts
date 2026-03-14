@@ -1,5 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+/** Mock fetch so initWasm gets a wasm buffer without hitting the network. */
+function installMockFetch(): void {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+      } as Response)
+    )
+  );
+}
+
 /** Mock Worker so init runs without loading real WASM in worker. */
 function installMockWorker(): void {
   class MockWorker {
@@ -35,6 +48,7 @@ function installMockWorker(): void {
 describe("wasm module", () => {
   beforeEach(() => {
     vi.resetModules();
+    installMockFetch();
     installMockWorker();
   });
 

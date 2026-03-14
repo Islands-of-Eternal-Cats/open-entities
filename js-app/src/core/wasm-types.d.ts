@@ -8,7 +8,9 @@ declare module "open-entities-wasm" {
    * WASM module initialization; must be called before using any other export.
    * Optional URL/path to the .wasm file; if omitted, wasm-pack uses import.meta.url (can fail in some bundlers).
    */
-  export default function init(module_or_path?: string | URL | Request): Promise<void>;
+  export default function init(
+    module_or_path?: string | URL | Request | ArrayBuffer
+  ): Promise<void>;
 
   /** JavaScript wrapper for Position component (x, y). */
   export class JsPosition {

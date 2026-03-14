@@ -5,7 +5,21 @@
 import initWasmModule, { JsWorld } from "open-entities-wasm";
 import type { WorkerInMessage, WorkerOutMessage } from "./worker-types";
 
-const WASM_URL = "/wasm_bindings_bg.wasm";
+const OLD_WASM_HINT =
+  "WASM returned old format (no pos/velocity). Run: cd js-app && ./build-wasm.sh then hard-reload (Ctrl+Shift+R).";
+
+function toEntity(
+  e: unknown
+): { pos: { x: number; y: number }; velocity: { vx: number; vy: number } } {
+  const o = e as { pos?: { x: number; y: number }; velocity?: { vx: number; vy: number } };
+  if (o.pos == null || o.velocity == null) {
+    throw new Error(OLD_WASM_HINT);
+  }
+  return {
+    pos: { x: o.pos.x, y: o.pos.y },
+    velocity: { vx: o.velocity.vx, vy: o.velocity.vy },
+  };
+}
 
 let world: JsWorld | null = null;
 
@@ -17,7 +31,14 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
   const msg = event.data;
   try {
     if (msg.type === "init") {
-      await initWasmModule(WASM_URL);
+      if (msg.wasmBuffer == null) {
+        post({
+          type: "error",
+          message: "init requires wasmBuffer from main thread",
+        });
+        return;
+      }
+      await initWasmModule(msg.wasmBuffer);
       world = new JsWorld();
       post({ type: "ready" });
       return;
@@ -31,12 +52,7 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
     if (msg.type === "tick") {
       world.tick(msg.dt);
       const raw = world.get_entities();
-      const entities = Array.from(raw).map(
-        (e: {
-          pos: { x: number; y: number };
-          velocity: { vx: number; vy: number };
-        }) => ({ pos: e.pos, velocity: e.velocity })
-      );
+      const entities = Array.from(raw).map(toEntity);
       post({ type: "entities", entities });
       return;
     }
@@ -44,12 +60,7 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
     if (msg.type === "spawn") {
       world.spawn(msg.x, msg.y, msg.vx, msg.vy);
       const raw = world.get_entities();
-      const entities = Array.from(raw).map(
-        (e: {
-          pos: { x: number; y: number };
-          velocity: { vx: number; vy: number };
-        }) => ({ pos: e.pos, velocity: e.velocity })
-      );
+      const entities = Array.from(raw).map(toEntity);
       post({ type: "entities", entities });
       return;
     }

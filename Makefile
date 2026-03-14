@@ -33,9 +33,10 @@ check:
 docs:
 	cargo doc --no-deps --open
 
-# Сборка WASM в релизном режиме
+# Сборка WASM (wasm-pack) и копирование в js-app/public для dev-сервера.
+# Скрипт использует абсолютные пути, чтобы public всегда обновлялся.
 wasm:
-	cargo build --target wasm32-unknown-unknown --release -p wasm-bindings
+	cd js-app && ./build-wasm.sh
 
 # Запуск dev-сервера js-app (Vite; WASM собирается автоматически)
 js-app:

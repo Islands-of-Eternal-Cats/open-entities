@@ -3,7 +3,7 @@
  */
 
 export type WorkerInMessage =
-  | { type: "init" }
+  | { type: "init"; wasmBuffer?: ArrayBuffer }
   | { type: "tick"; dt: number }
   | { type: "spawn"; x: number; y: number; vx: number; vy: number };
 
