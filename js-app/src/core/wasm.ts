@@ -34,7 +34,7 @@ function rawToSnapshots(
   raw: Array<{
     id: number;
     pos: { x: number; y: number };
-    velocity: { vx: number; vy: number };
+    velocity: { vx: number; vy: number } | null;
   }>
 ): EntitySnapshot[] {
   return raw.map((e) => ({

@@ -101,6 +101,12 @@ pub struct JsWorld {
     schedule: Schedule,
 }
 
+impl Default for JsWorld {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[wasm_bindgen]
 impl JsWorld {
     /// Create an empty world. Call `spawn` to add entities, then `tick(dt)` each frame.
@@ -123,13 +129,14 @@ impl JsWorld {
         run_tick(&mut self.world, &mut self.schedule, dt);
     }
 
-    /// Snapshot of all entities as an array of `{ id, pos: { x, y }, velocity: { vx, vy } }` for rendering.
+    /// Snapshot of all entities as an array of `{ id, pos: { x, y }, velocity: { vx, vy } | null }` for rendering.
+    /// Entities with only Position (static) have `velocity: null`; moving entities have velocity.
     /// `id` is a stable entity identifier (Entity::to_bits) so the same entity keeps the same id across frames.
     #[wasm_bindgen]
     pub fn get_entities(&mut self) -> Array {
         let snapshot = get_entities_position_velocity(&mut self.world);
         let arr = Array::new();
-        for (id_bits, pos, vel) in snapshot {
+        for (id_bits, pos, vel_opt) in snapshot {
             let pos_obj = js_sys::Object::new();
             js_sys::Reflect::set(
                 &pos_obj,
@@ -143,23 +150,29 @@ impl JsWorld {
                 &JsValue::from_f64(pos.y as f64),
             )
             .unwrap();
-            let vel_obj = js_sys::Object::new();
-            js_sys::Reflect::set(
-                &vel_obj,
-                &JsValue::from_str("vx"),
-                &JsValue::from_f64(vel.vx as f64),
-            )
-            .unwrap();
-            js_sys::Reflect::set(
-                &vel_obj,
-                &JsValue::from_str("vy"),
-                &JsValue::from_f64(vel.vy as f64),
-            )
-            .unwrap();
+            let vel_js = match vel_opt {
+                Some(vel) => {
+                    let vel_obj = js_sys::Object::new();
+                    js_sys::Reflect::set(
+                        &vel_obj,
+                        &JsValue::from_str("vx"),
+                        &JsValue::from_f64(vel.vx as f64),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &vel_obj,
+                        &JsValue::from_str("vy"),
+                        &JsValue::from_f64(vel.vy as f64),
+                    )
+                    .unwrap();
+                    JsValue::from(vel_obj)
+                }
+                None => JsValue::NULL,
+            };
             let obj = js_sys::Object::new();
             js_sys::Reflect::set(&obj, &JsValue::from_str("id"), &JsValue::from_f64(id_bits as f64)).unwrap();
             js_sys::Reflect::set(&obj, &JsValue::from_str("pos"), &pos_obj).unwrap();
-            js_sys::Reflect::set(&obj, &JsValue::from_str("velocity"), &vel_obj).unwrap();
+            js_sys::Reflect::set(&obj, &JsValue::from_str("velocity"), &vel_js).unwrap();
             arr.push(&obj);
         }
         arr

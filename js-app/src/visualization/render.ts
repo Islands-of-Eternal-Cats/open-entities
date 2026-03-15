@@ -22,7 +22,7 @@ export function renderEntities(
       (e) => `<div class="entity">
         <strong>Entity ${e.id}</strong><br>
         Position: (${formatCoord(e.pos.x)}, ${formatCoord(e.pos.y)})<br>
-        Velocity: (${formatCoord(e.velocity.vx)}, ${formatCoord(e.velocity.vy)})
+        Velocity: ${e.velocity != null ? `(${formatCoord(e.velocity.vx)}, ${formatCoord(e.velocity.vy)})` : "static"}
       </div>`
     )
     .join("");

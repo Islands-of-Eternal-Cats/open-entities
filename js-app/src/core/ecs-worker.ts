@@ -11,21 +11,25 @@ const OLD_WASM_HINT =
 function toEntity(e: unknown): {
   id: number;
   pos: { x: number; y: number };
-  velocity: { vx: number; vy: number };
+  velocity: { vx: number; vy: number } | null;
 } {
   const o = e as {
     id?: number;
     pos?: { x: number; y: number };
-    velocity?: { vx: number; vy: number };
+    velocity?: { vx: number; vy: number } | null;
   };
-  if (o.pos == null || o.velocity == null) {
+  if (o.pos == null) {
     throw new Error(OLD_WASM_HINT);
   }
   const id = typeof o.id === "number" ? o.id : 0;
+  const velocity =
+    o.velocity != null
+      ? { vx: o.velocity.vx, vy: o.velocity.vy }
+      : null;
   return {
     id,
     pos: { x: o.pos.x, y: o.pos.y },
-    velocity: { vx: o.velocity.vx, vy: o.velocity.vy },
+    velocity,
   };
 }
 

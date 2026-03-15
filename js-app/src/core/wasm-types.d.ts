@@ -44,8 +44,9 @@ declare module "open-entities-wasm" {
     spawn(x: number, y: number, vx: number, vy: number): void;
     tick(dt: number): void;
     get_entities(): Array<{
+      id: number;
       pos: { x: number; y: number };
-      velocity: { vx: number; vy: number };
+      velocity: { vx: number; vy: number } | null;
     }>;
   }
 }

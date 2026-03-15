@@ -6,5 +6,6 @@
 export interface EntitySnapshot {
   id: number;
   pos: { x: number; y: number };
-  velocity: { vx: number; vy: number };
+  /** null for static entities (Position only); present for moving entities. */
+  velocity: { vx: number; vy: number } | null;
 }

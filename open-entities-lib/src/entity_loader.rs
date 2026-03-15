@@ -98,10 +98,10 @@ pub fn spawn_entity_by_type(
     let mut entity = commands.spawn_empty();
 
     if let Some(p) = &template.position {
-        entity.insert(p.clone());
+        entity.insert(*p);
     }
     if let Some(v) = &template.velocity {
-        entity.insert(v.clone());
+        entity.insert(*v);
     }
 
     Some(entity.id())

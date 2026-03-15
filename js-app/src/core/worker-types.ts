@@ -15,6 +15,6 @@ export type WorkerOutMessage =
       entities: Array<{
         id: number;
         pos: { x: number; y: number };
-        velocity: { vx: number; vy: number };
+        velocity: { vx: number; vy: number } | null;
       }>;
     };
