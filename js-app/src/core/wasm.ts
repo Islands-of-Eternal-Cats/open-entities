@@ -32,7 +32,7 @@ const requestQueue: QueuedRequest[] = [];
 
 function rawToSnapshots(
   raw: Array<{
-    id: number;
+    id: string;
     pos: { x: number; y: number };
     velocity: { vx: number; vy: number } | null;
   }>

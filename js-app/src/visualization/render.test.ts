@@ -6,7 +6,7 @@ function mockEntity(
   overrides: Partial<EntitySnapshot> = {}
 ): EntitySnapshot {
   return {
-    id: 0,
+    id: "0",
     pos: { x: 0, y: 0 },
     velocity: { vx: 0, vy: 0 },
     ...overrides,
@@ -29,7 +29,7 @@ describe("renderEntities", () => {
   it("renders one entity with position and velocity", () => {
     const entities = [
       mockEntity({
-        id: 0,
+        id: "0",
         pos: { x: 1.5, y: 2.25 },
         velocity: { vx: -0.5, vy: 1 },
       }),
@@ -44,9 +44,9 @@ describe("renderEntities", () => {
 
   it("renders multiple entities", () => {
     const entities = [
-      mockEntity({ id: 0, pos: { x: 0, y: 0 } }),
+      mockEntity({ id: "0", pos: { x: 0, y: 0 } }),
       mockEntity({
-        id: 1,
+        id: "1",
         pos: { x: 10, y: 20 },
         velocity: { vx: 1, vy: 2 },
       }),

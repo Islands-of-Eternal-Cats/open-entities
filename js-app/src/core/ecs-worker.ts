@@ -9,19 +9,20 @@ const OLD_WASM_HINT =
   "WASM returned old format (no pos/velocity). Run: cd js-app && ./build-wasm.sh then hard-reload (Ctrl+Shift+R).";
 
 function toEntity(e: unknown): {
-  id: number;
+  id: string;
   pos: { x: number; y: number };
   velocity: { vx: number; vy: number } | null;
 } {
   const o = e as {
-    id?: number;
+    id?: string | number;
     pos?: { x: number; y: number };
     velocity?: { vx: number; vy: number } | null;
   };
   if (o.pos == null) {
     throw new Error(OLD_WASM_HINT);
   }
-  const id = typeof o.id === "number" ? o.id : 0;
+  const id =
+    typeof o.id === "string" ? o.id : typeof o.id === "number" ? String(o.id) : "0";
   const velocity =
     o.velocity != null
       ? { vx: o.velocity.vx, vy: o.velocity.vy }

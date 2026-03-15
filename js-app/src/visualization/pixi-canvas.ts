@@ -13,7 +13,14 @@ const ENTITY_RADIUS = 8;
 const COLORS = [0x3498db, 0xe74c3c, 0x2ecc71, 0xf39c12, 0x9b59b6, 0x1abc9c];
 
 let app: Application | null = null;
-const entityGraphics = new Map<number, Graphics>();
+const entityGraphics = new Map<string, Graphics>();
+
+/** Stable color index from entity id string (for consistent color per entity). */
+function colorIndex(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+  return Math.abs(h) % COLORS.length;
+}
 
 function worldToScreen(x: number, y: number): { x: number; y: number } {
   const scale = Math.min(CANVAS_WIDTH, CANVAS_HEIGHT) / WORLD_SIZE;
@@ -70,7 +77,7 @@ export async function initPixiCanvas(
       let g = entityGraphics.get(entity.id);
       if (!g) {
         g = new Graphics();
-        const color = COLORS[entity.id % COLORS.length];
+        const color = COLORS[colorIndex(entity.id)];
         makeCircle(g, color);
         entityGraphics.set(entity.id, g);
         stage.addChild(g);

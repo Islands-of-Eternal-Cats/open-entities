@@ -170,7 +170,13 @@ impl JsWorld {
                 None => JsValue::NULL,
             };
             let obj = js_sys::Object::new();
-            js_sys::Reflect::set(&obj, &JsValue::from_str("id"), &JsValue::from_f64(id_bits as f64)).unwrap();
+            // Entity id as string to avoid JS Number precision loss (u64 > 2^53-1)
+            js_sys::Reflect::set(
+                &obj,
+                &JsValue::from_str("id"),
+                &JsValue::from(id_bits.to_string()),
+            )
+            .unwrap();
             js_sys::Reflect::set(&obj, &JsValue::from_str("pos"), &pos_obj).unwrap();
             js_sys::Reflect::set(&obj, &JsValue::from_str("velocity"), &vel_js).unwrap();
             arr.push(&obj);

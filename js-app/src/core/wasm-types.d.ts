@@ -43,8 +43,9 @@ declare module "open-entities-wasm" {
     constructor();
     spawn(x: number, y: number, vx: number, vy: number): void;
     tick(dt: number): void;
+    /** Entity id is string to preserve u64 precision (JS Number safe only to 2^53-1). */
     get_entities(): Array<{
-      id: number;
+      id: string;
       pos: { x: number; y: number };
       velocity: { vx: number; vy: number } | null;
     }>;
