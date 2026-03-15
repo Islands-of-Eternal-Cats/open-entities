@@ -10,9 +10,10 @@ export type WorkerInMessage =
 export type WorkerOutMessage =
   | { type: "ready" }
   | { type: "error"; message: string }
-  |     {
+  | {
       type: "entities";
       entities: Array<{
+        id: number;
         pos: { x: number; y: number };
         velocity: { vx: number; vy: number };
       }>;

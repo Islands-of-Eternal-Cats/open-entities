@@ -30,12 +30,13 @@ const requestQueue: QueuedRequest[] = [];
 
 function rawToSnapshots(
   raw: Array<{
+    id: number;
     pos: { x: number; y: number };
     velocity: { vx: number; vy: number };
   }>
 ): EntitySnapshot[] {
-  return raw.map((e, i) => ({
-    id: i,
+  return raw.map((e) => ({
+    id: e.id,
     pos: e.pos,
     velocity: e.velocity,
   }));

@@ -8,14 +8,22 @@ import type { WorkerInMessage, WorkerOutMessage } from "./worker-types";
 const OLD_WASM_HINT =
   "WASM returned old format (no pos/velocity). Run: cd js-app && ./build-wasm.sh then hard-reload (Ctrl+Shift+R).";
 
-function toEntity(
-  e: unknown
-): { pos: { x: number; y: number }; velocity: { vx: number; vy: number } } {
-  const o = e as { pos?: { x: number; y: number }; velocity?: { vx: number; vy: number } };
+function toEntity(e: unknown): {
+  id: number;
+  pos: { x: number; y: number };
+  velocity: { vx: number; vy: number };
+} {
+  const o = e as {
+    id?: number;
+    pos?: { x: number; y: number };
+    velocity?: { vx: number; vy: number };
+  };
   if (o.pos == null || o.velocity == null) {
     throw new Error(OLD_WASM_HINT);
   }
+  const id = typeof o.id === "number" ? o.id : 0;
   return {
+    id,
     pos: { x: o.pos.x, y: o.pos.y },
     velocity: { vx: o.velocity.vx, vy: o.velocity.vy },
   };

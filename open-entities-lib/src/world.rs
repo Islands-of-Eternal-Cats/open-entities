@@ -5,7 +5,7 @@ use crate::systems::{
     load_entities_from_yaml_system, move_system, print_position_system, setup_system,
     DeltaTime, EntityDefinitionsPath,
 };
-use bevy_ecs::prelude::World;
+use bevy_ecs::prelude::{Entity, World};
 use bevy_ecs::schedule::Schedule;
 use std::path::PathBuf;
 
@@ -55,8 +55,12 @@ pub fn run_tick(world: &mut World, schedule: &mut Schedule, dt: f32) {
 }
 
 /// Snapshot of all entities that have both Position and Velocity.
-/// Returns `(Position, Velocity)` per entity for use by WASM/JS.
-pub fn get_entities_position_velocity(world: &mut World) -> Vec<(Position, Velocity)> {
-    let mut query = world.query::<(&Position, &Velocity)>();
-    query.iter(world).map(|(p, v)| (*p, *v)).collect()
+/// Returns `(entity_id_bits, Position, Velocity)` per entity for use by WASM/JS.
+/// Entity id is from `Entity::to_bits()` so the same entity has a stable id across frames.
+pub fn get_entities_position_velocity(world: &mut World) -> Vec<(u64, Position, Velocity)> {
+    let mut query = world.query::<(Entity, &Position, &Velocity)>();
+    query
+        .iter(world)
+        .map(|(entity, p, v)| (entity.to_bits(), *p, *v))
+        .collect()
 }

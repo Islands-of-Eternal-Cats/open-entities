@@ -123,12 +123,13 @@ impl JsWorld {
         run_tick(&mut self.world, &mut self.schedule, dt);
     }
 
-    /// Snapshot of all entities as an array of `{ pos: { x, y }, velocity: { vx, vy } }` for rendering.
+    /// Snapshot of all entities as an array of `{ id, pos: { x, y }, velocity: { vx, vy } }` for rendering.
+    /// `id` is a stable entity identifier (Entity::to_bits) so the same entity keeps the same id across frames.
     #[wasm_bindgen]
     pub fn get_entities(&mut self) -> Array {
         let snapshot = get_entities_position_velocity(&mut self.world);
         let arr = Array::new();
-        for (pos, vel) in snapshot {
+        for (id_bits, pos, vel) in snapshot {
             let pos_obj = js_sys::Object::new();
             js_sys::Reflect::set(
                 &pos_obj,
@@ -156,6 +157,7 @@ impl JsWorld {
             )
             .unwrap();
             let obj = js_sys::Object::new();
+            js_sys::Reflect::set(&obj, &JsValue::from_str("id"), &JsValue::from_f64(id_bits as f64)).unwrap();
             js_sys::Reflect::set(&obj, &JsValue::from_str("pos"), &pos_obj).unwrap();
             js_sys::Reflect::set(&obj, &JsValue::from_str("velocity"), &vel_obj).unwrap();
             arr.push(&obj);
