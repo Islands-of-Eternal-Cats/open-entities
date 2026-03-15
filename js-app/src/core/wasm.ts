@@ -2,7 +2,7 @@
  * WASM core wrapper. Initializes ECS in a web worker and re-exports the game API.
  * Visualization layer depends only on this module and types from ./types.
  */
-import type { EntitySnapshot, Pos, Velocity } from "./types";
+import type { EntitySnapshot } from "./types";
 import type { WorkerInMessage, WorkerOutMessage } from "./worker-types";
 
 function flushQueue(): void {
@@ -107,15 +107,19 @@ export async function initWasm(): Promise<void> {
           ? window.location.origin
           : "http://localhost:5173";
       const wasmUrl = `${origin}/wasm_bindings_bg.wasm?t=${Date.now()}`;
-      const res = await fetch(wasmUrl, { cache: "no-store" });
-      if (!res.ok) throw new Error(`Failed to fetch WASM: ${res.status}`);
-      const wasmBuffer = await res.arrayBuffer();
+      const [wasmRes, yamlRes] = await Promise.all([
+        fetch(wasmUrl, { cache: "no-store" }),
+        fetch(`${origin}/assets/entities.yaml`, { cache: "no-store" }),
+      ]);
+      if (!wasmRes.ok) throw new Error(`Failed to fetch WASM: ${wasmRes.status}`);
+      const wasmBuffer = await wasmRes.arrayBuffer();
+      const entitiesYaml = yamlRes.ok ? await yamlRes.text() : undefined;
 
       await new Promise<void>((resolve, reject) => {
         initResolve = resolve;
         initReject = reject;
         worker!.postMessage(
-          { type: "init", wasmBuffer } satisfies WorkerInMessage,
+          { type: "init", wasmBuffer, entitiesYaml } satisfies WorkerInMessage,
           [wasmBuffer]
         );
       });
@@ -157,17 +161,14 @@ export function tick(dt: number): Promise<EntitySnapshot[]> {
 }
 
 /**
- * Spawn an entity in the worker. Returns current entity snapshots.
- * Pass velocity for a moving entity; pass null for a static entity (Position only).
+ * Spawn an entity in the worker by type name (from assets/entities.yaml).
+ * Returns current entity snapshots.
  */
-export function spawn(
-  pos: Pos,
-  velocity: Velocity | null
-): Promise<EntitySnapshot[]> {
+export function spawn(typeName: string): Promise<EntitySnapshot[]> {
   if (!worker || !initialized)
     return Promise.reject(new Error("WASM not initialized"));
   return new Promise((resolve, reject) => {
-    const message: WorkerInMessage = { type: "spawn", pos, velocity };
+    const message: WorkerInMessage = { type: "spawn", typeName };
     if (pending === null && requestQueue.length === 0) {
       pending = { resolve, reject };
       worker!.postMessage(message);

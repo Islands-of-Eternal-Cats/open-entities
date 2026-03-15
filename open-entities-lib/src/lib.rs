@@ -25,16 +25,16 @@ pub mod world;
 pub use bevy_ecs::prelude::{Schedule, World};
 pub use components::{Position, Velocity};
 pub use entity_loader::{
-    load_and_spawn_all_from_path, spawn_entity_by_type, EntityDefinitions, EntityDefinitionsFile,
-    EntityTemplate, LoadError,
+    load_and_spawn_all_from_path, spawn_entity_by_type, spawn_entity_by_type_in_world,
+    EntityDefinitions, EntityDefinitionsFile, EntityTemplate, LoadError,
 };
 pub use systems::{
     load_entities_from_yaml_system, move_system, print_position_system, DeltaTime,
     EntityDefinitionsPath,
 };
 pub use world::{
-    create_empty_world, get_entities_position_velocity, run_tick, setup_world,
-    setup_world_with_yaml,
+    create_empty_world, create_world_with_definitions, get_entities_position_velocity, run_tick,
+    setup_world, setup_world_with_yaml,
 };
 
 #[cfg(test)]

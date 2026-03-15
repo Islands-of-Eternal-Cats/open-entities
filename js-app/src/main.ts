@@ -10,6 +10,7 @@ const statusEl = document.getElementById("status");
 const entityListEl = document.getElementById("entity-list");
 const canvasContainer = document.getElementById("canvas-container");
 const addEntityBtn = document.getElementById("add-entity");
+const entityTypeSelect = document.getElementById("entity-type") as HTMLSelectElement | null;
 
 let updatePixiEntities: ((entities: EntitySnapshot[]) => void) | null = null;
 let lastFrameTime: number | null = null;
@@ -20,16 +21,15 @@ function render(entities: EntitySnapshot[]): void {
   if (updatePixiEntities) updatePixiEntities(entities);
 }
 
-async function createEntity(
-  x: number = Math.random() * 100,
-  y: number = Math.random() * 100
-): Promise<void> {
+const ENTITY_TYPES = ["mover", "another_mover", "static_obstacle"] as const;
+
+async function createEntity(typeName?: string): Promise<void> {
   if (!isWasmReady()) return;
+  const type =
+    typeName ??
+    ENTITY_TYPES[Math.floor(Math.random() * ENTITY_TYPES.length)];
   try {
-    const entities = await spawn(
-      { x, y },
-      { vx: Math.random() * 2 - 1, vy: Math.random() * 2 - 1 }
-    );
+    const entities = await spawn(type);
     render(entities);
   } catch (e) {
     console.error("spawn error:", e);
@@ -64,7 +64,13 @@ async function run(): Promise<void> {
     const entities = await tick(0);
     render(entities);
     requestAnimationFrame(gameLoop);
-    addEntityBtn?.addEventListener("click", () => createEntity());
+    addEntityBtn?.addEventListener("click", () => {
+      const type =
+        entityTypeSelect?.value && ENTITY_TYPES.includes(entityTypeSelect.value as (typeof ENTITY_TYPES)[number])
+          ? entityTypeSelect.value
+          : undefined;
+      createEntity(type);
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     statusEl.textContent = `Error loading WASM: ${message}`;

@@ -44,6 +44,21 @@ export default defineConfig({
             buildCommand: './build-wasm.sh'
         }),
         {
+            name: 'serve-assets-from-repo',
+            configureServer(server) {
+                const assetsDir = path.resolve(server.config.root, '../assets');
+                server.middlewares.use('/assets', (req, res, next) => {
+                    const raw = (req.url || '').replace(/^\//, '');
+                    const subPath = raw.startsWith('assets/') ? raw.slice(7) : raw;
+                    if (!subPath) return next();
+                    const file = path.join(assetsDir, subPath);
+                    if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return next();
+                    res.setHeader('Cache-Control', 'no-store');
+                    fs.createReadStream(file).pipe(res);
+                });
+            }
+        },
+        {
             name: 'serve-wasm-with-mime',
             configureServer(server) {
                 const publicDir = path.resolve(server.config.root, 'public');

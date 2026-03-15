@@ -22,7 +22,15 @@
         <h2>Entities</h2>
         <div id="entity-list"></div>
     </div>
-    <div><button id="add-entity">Add Entity</button></div>
+    <div>
+      <label for="entity-type">Type:</label>
+      <select id="entity-type">
+        <option value="mover">mover</option>
+        <option value="another_mover">another_mover</option>
+        <option value="static_obstacle">static_obstacle</option>
+      </select>
+      <button id="add-entity">Add Entity</button>
+    </div>
     <script type="module" src="./src/main.ts"></script>
 </body>
 </html>

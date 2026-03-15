@@ -1,6 +1,7 @@
 //! World and schedule setup: create ECS world and run startup/update schedules.
 
 use crate::components::{Position, Velocity};
+use crate::entity_loader::{EntityDefinitions, LoadError};
 use crate::systems::{
     load_entities_from_yaml_system, move_system, print_position_system, setup_system,
     DeltaTime, EntityDefinitionsPath,
@@ -45,6 +46,18 @@ pub fn create_empty_world() -> (World, Schedule) {
     let mut update = Schedule::default();
     update.add_systems(move_system);
     (world, update)
+}
+
+/// Empty world with entity definitions loaded from a YAML string (e.g. from assets).
+/// Inserts `EntityDefinitions` as a resource so `spawn_entity_by_type_in_world` can be used.
+/// Use from WASM when the host fetches `entities.yaml` and passes its content.
+pub fn create_world_with_definitions(yaml: &str) -> Result<(World, Schedule), LoadError> {
+    let definitions = EntityDefinitions::load_from_str(yaml)?;
+    let mut world = World::new();
+    world.insert_resource(definitions);
+    let mut update = Schedule::default();
+    update.add_systems(move_system);
+    Ok((world, update))
 }
 
 /// Run one simulation tick with the given delta time (seconds).

@@ -59,7 +59,15 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
         return;
       }
       await initWasmModule(msg.wasmBuffer);
-      world = new JsWorld();
+      try {
+        world = new JsWorld(msg.entitiesYaml ?? null);
+      } catch (e) {
+        post({
+          type: "error",
+          message: e instanceof Error ? e.message : String(e),
+        });
+        return;
+      }
       post({ type: "ready" });
       return;
     }
@@ -78,10 +86,12 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
     }
 
     if (msg.type === "spawn") {
-      if (msg.velocity != null) {
-        world.spawn(msg.pos.x, msg.pos.y, msg.velocity.vx, msg.velocity.vy);
-      } else {
-        world.spawn_static(msg.pos.x, msg.pos.y);
+      try {
+        world.spawn(msg.typeName);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        post({ type: "error", message });
+        return;
       }
       const raw = world.get_entities();
       const entities = Array.from(raw).map(toEntity);

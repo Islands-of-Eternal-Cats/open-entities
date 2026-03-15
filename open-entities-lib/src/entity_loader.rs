@@ -107,6 +107,24 @@ pub fn spawn_entity_by_type(
     Some(entity.id())
 }
 
+/// Создать одну сущность в ECS по имени типа, используя ресурс `EntityDefinitions` в мире.
+/// Возвращает `Some(Entity)` если тип найден и сущность создана, иначе `None`.
+pub fn spawn_entity_by_type_in_world(world: &mut World, type_name: &str) -> Option<Entity> {
+    let template = world
+        .get_resource::<EntityDefinitions>()
+        .and_then(|defs| defs.get(type_name))
+        .cloned()?;
+
+    let mut entity = world.spawn_empty();
+    if let Some(p) = template.position {
+        entity.insert(p);
+    }
+    if let Some(v) = template.velocity {
+        entity.insert(v);
+    }
+    Some(entity.id())
+}
+
 /// Загрузить определения из файла и создать по одной сущности каждого типа.
 /// Путь к YAML — относительно текущей рабочей директории.
 pub fn load_and_spawn_all_from_path(

@@ -5,8 +5,8 @@
 
 use js_sys::Array;
 use open_entities::{
-    create_empty_world, get_entities_position_velocity, run_tick, Position, Schedule, Velocity,
-    World,
+    create_empty_world, create_world_with_definitions, get_entities_position_velocity,
+    run_tick, spawn_entity_by_type_in_world, LoadError, Position, Schedule, Velocity, World,
 };
 use wasm_bindgen::prelude::*;
 
@@ -103,30 +103,37 @@ pub struct JsWorld {
 
 impl Default for JsWorld {
     fn default() -> Self {
-        Self::new()
+        Self::new(None).expect("empty world creation never fails")
     }
 }
 
 #[wasm_bindgen]
 impl JsWorld {
-    /// Create an empty world. Call `spawn` to add entities, then `tick(dt)` each frame.
+    /// Create a world. If `entities_yaml` is provided (e.g. content of assets/entities.yaml),
+    /// entity definitions are loaded and `spawn(type_name)` can be used. Otherwise the world
+    /// is empty and spawn by type will fail.
     #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
-        let (world, schedule) = create_empty_world();
-        Self { world, schedule }
+    pub fn new(entities_yaml: Option<String>) -> Result<JsWorld, JsValue> {
+        let (world, schedule) = match entities_yaml {
+            Some(yaml) => create_world_with_definitions(&yaml)
+                .map_err(|e: LoadError| JsValue::from_str(&e.to_string()))?,
+            None => create_empty_world(),
+        };
+        Ok(JsWorld { world, schedule })
     }
 
-    /// Spawn a moving entity with position and velocity.
+    /// Spawn an entity by type name from the loaded definitions (from assets/entities.yaml).
+    /// Returns error if definitions were not loaded or the type name is unknown.
     #[wasm_bindgen]
-    pub fn spawn(&mut self, x: f32, y: f32, vx: f32, vy: f32) {
-        self.world
-            .spawn((Position { x, y }, Velocity { vx, vy }));
-    }
-
-    /// Spawn a static entity with position only (no velocity). Use for obstacles, waypoints, etc.
-    #[wasm_bindgen]
-    pub fn spawn_static(&mut self, x: f32, y: f32) {
-        self.world.spawn(Position { x, y });
+    pub fn spawn(&mut self, type_name: &str) -> Result<(), JsValue> {
+        spawn_entity_by_type_in_world(&mut self.world, type_name)
+            .map(|_| ())
+            .ok_or_else(|| {
+                JsValue::from_str(&format!(
+                    "Unknown entity type or no definitions loaded: {:?}",
+                    type_name
+                ))
+            })
     }
 
     /// Run one simulation tick with the given delta time in seconds.

@@ -1,12 +1,12 @@
 /**
  * Message types for main thread ↔ ECS web worker.
  */
-import type { EntitySnapshot, Pos, Velocity } from "./types";
+import type { EntitySnapshot } from "./types";
 
 export type WorkerInMessage =
-  | { type: "init"; wasmBuffer?: ArrayBuffer }
+  | { type: "init"; wasmBuffer?: ArrayBuffer; entitiesYaml?: string }
   | { type: "tick"; dt: number }
-  | { type: "spawn"; pos: Pos; velocity: Velocity | null };
+  | { type: "spawn"; typeName: string };
 
 export type WorkerOutMessage =
   | { type: "ready" }

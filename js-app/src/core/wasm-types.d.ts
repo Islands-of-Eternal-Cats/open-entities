@@ -40,11 +40,10 @@ declare module "open-entities-wasm" {
 
   /** ECS world: run simulation with delta time and get entity snapshots. */
   export class JsWorld {
-    constructor();
-    /** Spawn a moving entity (Position + Velocity). */
-    spawn(x: number, y: number, vx: number, vy: number): void;
-    /** Spawn a static entity (Position only; no velocity). */
-    spawn_static(x: number, y: number): void;
+    /** Create world. Pass entities YAML string to enable spawn(typeName); otherwise spawn will fail. */
+    constructor(entitiesYaml?: string | null);
+    /** Spawn an entity by type name from loaded definitions (e.g. "mover", "static_obstacle"). */
+    spawn(typeName: string): void;
     tick(dt: number): void;
     /** Entity id is string to preserve u64 precision (JS Number safe only to 2^53-1). */
     get_entities(): Array<{
