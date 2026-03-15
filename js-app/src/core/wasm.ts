@@ -14,6 +14,8 @@ function flushQueue(): void {
 
 let worker: Worker | null = null;
 let initialized = false;
+/** Shared promise for init in progress; concurrent callers await this instead of creating new workers. */
+let initPromise: Promise<void> | null = null;
 let pending:
   | {
       resolve: (value: EntitySnapshot[]) => void;
@@ -65,40 +67,57 @@ function onMessage(event: MessageEvent<WorkerOutMessage>): void {
 
 export async function initWasm(): Promise<void> {
   if (initialized) return;
-  const workerUrl = new URL("./ecs-worker.ts", import.meta.url);
-  worker = new Worker(workerUrl, { type: "module" });
-  worker.onmessage = onMessage;
-  worker.onerror = (e) => {
-    if (pending) {
-      pending.reject(e);
-      pending = null;
+  if (initPromise !== null) return initPromise;
+
+  initPromise = (async () => {
+    try {
+      const workerUrl = new URL("./ecs-worker.ts", import.meta.url);
+      worker = new Worker(workerUrl, { type: "module" });
+      worker.onmessage = onMessage;
+      worker.onerror = (e) => {
+        if (pending) {
+          pending.reject(e);
+          pending = null;
+        }
+      };
+
+      const origin =
+        typeof window !== "undefined" && window.location
+          ? window.location.origin
+          : "http://localhost:5173";
+      const wasmUrl = `${origin}/wasm_bindings_bg.wasm?t=${Date.now()}`;
+      const res = await fetch(wasmUrl, { cache: "no-store" });
+      if (!res.ok) throw new Error(`Failed to fetch WASM: ${res.status}`);
+      const wasmBuffer = await res.arrayBuffer();
+
+      await new Promise<void>((resolve, reject) => {
+        const onReady = () => {
+          worker!.removeEventListener("message", handler);
+          resolve();
+        };
+        const handler = (event: MessageEvent<WorkerOutMessage>) => {
+          if (event.data.type === "ready") onReady();
+          if (event.data.type === "error")
+            reject(new Error((event.data as { message: string }).message));
+        };
+        worker!.addEventListener("message", handler);
+        worker!.postMessage(
+          { type: "init", wasmBuffer } satisfies WorkerInMessage,
+          [wasmBuffer]
+        );
+      });
+    } catch (e) {
+      if (worker) {
+        worker.terminate();
+        worker = null;
+      }
+      throw e;
+    } finally {
+      initPromise = null;
     }
-  };
+  })();
 
-  const origin =
-    typeof window !== "undefined" && window.location
-      ? window.location.origin
-      : "http://localhost:5173";
-  const wasmUrl = `${origin}/wasm_bindings_bg.wasm?t=${Date.now()}`;
-  const res = await fetch(wasmUrl, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Failed to fetch WASM: ${res.status}`);
-  const wasmBuffer = await res.arrayBuffer();
-
-  return new Promise<void>((resolve, reject) => {
-    const onReady = () => {
-      worker!.removeEventListener("message", handler);
-      resolve();
-    };
-    const handler = (event: MessageEvent<WorkerOutMessage>) => {
-      if (event.data.type === "ready") onReady();
-      if (event.data.type === "error")
-        reject(new Error((event.data as { message: string }).message));
-    };
-    worker!.addEventListener("message", handler);
-    worker!.postMessage({ type: "init", wasmBuffer } satisfies WorkerInMessage, [
-      wasmBuffer,
-    ]);
-  });
+  return initPromise;
 }
 
 export function isWasmReady(): boolean {
