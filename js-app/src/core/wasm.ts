@@ -97,8 +97,10 @@ export async function initWasm(): Promise<void> {
         };
         const handler = (event: MessageEvent<WorkerOutMessage>) => {
           if (event.data.type === "ready") onReady();
-          if (event.data.type === "error")
+          if (event.data.type === "error") {
+            worker!.removeEventListener("message", handler);
             reject(new Error((event.data as { message: string }).message));
+          }
         };
         worker!.addEventListener("message", handler);
         worker!.postMessage(
