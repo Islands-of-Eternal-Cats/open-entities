@@ -12,9 +12,6 @@ const WORLD_SIZE = 120;
 const ENTITY_RADIUS = 8;
 const COLORS = [0x3498db, 0xe74c3c, 0x2ecc71, 0xf39c12, 0x9b59b6, 0x1abc9c];
 
-let app: Application | null = null;
-const entityGraphics = new Map<string, Graphics>();
-
 /** Stable color index from entity id string (for consistent color per entity). */
 function colorIndex(id: string): number {
   let h = 0;
@@ -54,13 +51,11 @@ export async function initPixiCanvas(
     autoDensity: true,
   });
 
-  app = application;
+  const entityGraphics = new Map<string, Graphics>();
   container.appendChild(application.canvas as HTMLCanvasElement);
 
   function updateEntities(entities: EntitySnapshot[]): void {
-    if (!app) return;
-
-    const stage = app.stage;
+    const stage = application.stage;
     const ids = new Set(entities.map((e) => e.id));
 
     // Remove display objects for entities that no longer exist
