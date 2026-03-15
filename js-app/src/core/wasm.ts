@@ -16,6 +16,9 @@ let worker: Worker | null = null;
 let initialized = false;
 /** Shared promise for init in progress; concurrent callers await this instead of creating new workers. */
 let initPromise: Promise<void> | null = null;
+/** Resolve/reject for the init promise; only set while waiting for worker "ready" or "error". */
+let initResolve: (() => void) | null = null;
+let initReject: ((reason: unknown) => void) | null = null;
 let pending:
   | {
       resolve: (value: EntitySnapshot[]) => void;
@@ -48,9 +51,20 @@ function onMessage(event: MessageEvent<WorkerOutMessage>): void {
   const msg = event.data;
   if (msg.type === "ready") {
     initialized = true;
+    if (initResolve) {
+      initResolve();
+      initResolve = null;
+      initReject = null;
+    }
+    flushQueue();
     return;
   }
   if (msg.type === "error") {
+    if (initReject) {
+      initReject(new Error(msg.message));
+      initResolve = null;
+      initReject = null;
+    }
     if (pending) {
       pending.reject(new Error(msg.message));
       pending = null;
@@ -75,6 +89,11 @@ export async function initWasm(): Promise<void> {
       worker = new Worker(workerUrl, { type: "module" });
       worker.onmessage = onMessage;
       worker.onerror = (e) => {
+        if (initReject) {
+          initReject(e);
+          initResolve = null;
+          initReject = null;
+        }
         if (pending) {
           pending.reject(e);
           pending = null;
@@ -93,24 +112,16 @@ export async function initWasm(): Promise<void> {
       const wasmBuffer = await res.arrayBuffer();
 
       await new Promise<void>((resolve, reject) => {
-        const onReady = () => {
-          worker!.removeEventListener("message", handler);
-          resolve();
-        };
-        const handler = (event: MessageEvent<WorkerOutMessage>) => {
-          if (event.data.type === "ready") onReady();
-          if (event.data.type === "error") {
-            worker!.removeEventListener("message", handler);
-            reject(new Error((event.data as { message: string }).message));
-          }
-        };
-        worker!.addEventListener("message", handler);
+        initResolve = resolve;
+        initReject = reject;
         worker!.postMessage(
           { type: "init", wasmBuffer } satisfies WorkerInMessage,
           [wasmBuffer]
         );
       });
     } catch (e) {
+      initResolve = null;
+      initReject = null;
       if (worker) {
         worker.terminate();
         worker = null;
