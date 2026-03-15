@@ -5,6 +5,13 @@
 import type { EntitySnapshot } from "./types";
 import type { WorkerInMessage, WorkerOutMessage } from "./worker-types";
 
+function flushQueue(): void {
+  if (!worker || pending !== null || requestQueue.length === 0) return;
+  const next = requestQueue.shift()!;
+  pending = { resolve: next.resolve, reject: next.reject };
+  worker.postMessage(next.message);
+}
+
 let worker: Worker | null = null;
 let initialized = false;
 let pending:
@@ -13,6 +20,13 @@ let pending:
       reject: (reason: unknown) => void;
     }
   | null = null;
+
+type QueuedRequest = {
+  resolve: (value: EntitySnapshot[]) => void;
+  reject: (reason: unknown) => void;
+  message: WorkerInMessage;
+};
+const requestQueue: QueuedRequest[] = [];
 
 function rawToSnapshots(
   raw: Array<{
@@ -37,12 +51,14 @@ function onMessage(event: MessageEvent<WorkerOutMessage>): void {
     if (pending) {
       pending.reject(new Error(msg.message));
       pending = null;
+      flushQueue();
     }
     return;
   }
   if (msg.type === "entities" && pending) {
     pending.resolve(rawToSnapshots(msg.entities));
     pending = null;
+    flushQueue();
   }
 }
 
@@ -95,9 +111,13 @@ export function tick(dt: number): Promise<EntitySnapshot[]> {
   if (!worker || !initialized)
     return Promise.reject(new Error("WASM not initialized"));
   return new Promise((resolve, reject) => {
-    if (pending) pending.reject(new Error("Concurrent request"));
-    pending = { resolve, reject };
-    worker!.postMessage({ type: "tick", dt } satisfies WorkerInMessage);
+    const message: WorkerInMessage = { type: "tick", dt };
+    if (pending === null && requestQueue.length === 0) {
+      pending = { resolve, reject };
+      worker!.postMessage(message);
+    } else {
+      requestQueue.push({ resolve, reject, message });
+    }
   });
 }
 
@@ -113,14 +133,18 @@ export function spawn(
   if (!worker || !initialized)
     return Promise.reject(new Error("WASM not initialized"));
   return new Promise((resolve, reject) => {
-    if (pending) pending.reject(new Error("Concurrent request"));
-    pending = { resolve, reject };
-    worker!.postMessage({
+    const message: WorkerInMessage = {
       type: "spawn",
       x,
       y,
       vx,
       vy,
-    } satisfies WorkerInMessage);
+    };
+    if (pending === null && requestQueue.length === 0) {
+      pending = { resolve, reject };
+      worker!.postMessage(message);
+    } else {
+      requestQueue.push({ resolve, reject, message });
+    }
   });
 }
