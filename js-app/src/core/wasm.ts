@@ -79,6 +79,8 @@ export async function initWasm(): Promise<void> {
           pending.reject(e);
           pending = null;
         }
+        for (const q of requestQueue) q.reject(e);
+        requestQueue.length = 0;
       };
 
       const origin =

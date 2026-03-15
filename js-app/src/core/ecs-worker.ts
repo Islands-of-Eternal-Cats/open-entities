@@ -8,6 +8,9 @@ import type { WorkerInMessage, WorkerOutMessage } from "./worker-types";
 const OLD_WASM_HINT =
   "WASM returned old format (no pos/velocity). Run: cd js-app && ./build-wasm.sh then hard-reload (Ctrl+Shift+R).";
 
+/** Unique fallback when WASM sends an entity without id (avoids multiple entities sharing id "0"). */
+let fallbackIdCounter = 0;
+
 function toEntity(e: unknown): {
   id: string;
   pos: { x: number; y: number };
@@ -22,7 +25,11 @@ function toEntity(e: unknown): {
     throw new Error(OLD_WASM_HINT);
   }
   const id =
-    typeof o.id === "string" ? o.id : typeof o.id === "number" ? String(o.id) : "0";
+    typeof o.id === "string"
+      ? o.id
+      : typeof o.id === "number"
+        ? String(o.id)
+        : `fallback-${fallbackIdCounter++}`;
   const velocity =
     o.velocity != null
       ? { vx: o.velocity.vx, vy: o.velocity.vy }
