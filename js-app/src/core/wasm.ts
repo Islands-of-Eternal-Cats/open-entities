@@ -2,7 +2,7 @@
  * WASM core wrapper. Initializes ECS in a web worker and re-exports the game API.
  * Visualization layer depends only on this module and types from ./types.
  */
-import type { EntitySnapshot } from "./types";
+import type { EntitySnapshot, Pos, Velocity } from "./types";
 import type { WorkerInMessage, WorkerOutMessage } from "./worker-types";
 
 function flushQueue(): void {
@@ -158,23 +158,16 @@ export function tick(dt: number): Promise<EntitySnapshot[]> {
 
 /**
  * Spawn an entity in the worker. Returns current entity snapshots.
+ * Pass velocity for a moving entity; pass null for a static entity (Position only).
  */
 export function spawn(
-  x: number,
-  y: number,
-  vx: number,
-  vy: number
+  pos: Pos,
+  velocity: Velocity | null
 ): Promise<EntitySnapshot[]> {
   if (!worker || !initialized)
     return Promise.reject(new Error("WASM not initialized"));
   return new Promise((resolve, reject) => {
-    const message: WorkerInMessage = {
-      type: "spawn",
-      x,
-      y,
-      vx,
-      vy,
-    };
+    const message: WorkerInMessage = { type: "spawn", pos, velocity };
     if (pending === null && requestQueue.length === 0) {
       pending = { resolve, reject };
       worker!.postMessage(message);

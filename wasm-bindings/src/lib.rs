@@ -116,11 +116,17 @@ impl JsWorld {
         Self { world, schedule }
     }
 
-    /// Spawn an entity with position and velocity.
+    /// Spawn a moving entity with position and velocity.
     #[wasm_bindgen]
     pub fn spawn(&mut self, x: f32, y: f32, vx: f32, vy: f32) {
         self.world
             .spawn((Position { x, y }, Velocity { vx, vy }));
+    }
+
+    /// Spawn a static entity with position only (no velocity). Use for obstacles, waypoints, etc.
+    #[wasm_bindgen]
+    pub fn spawn_static(&mut self, x: f32, y: f32) {
+        self.world.spawn(Position { x, y });
     }
 
     /// Run one simulation tick with the given delta time in seconds.

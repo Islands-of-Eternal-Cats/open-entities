@@ -27,10 +27,8 @@ async function createEntity(
   if (!isWasmReady()) return;
   try {
     const entities = await spawn(
-      x,
-      y,
-      Math.random() * 2 - 1,
-      Math.random() * 2 - 1
+      { x, y },
+      { vx: Math.random() * 2 - 1, vy: Math.random() * 2 - 1 }
     );
     render(entities);
   } catch (e) {

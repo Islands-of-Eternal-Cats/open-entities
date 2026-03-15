@@ -78,7 +78,11 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
     }
 
     if (msg.type === "spawn") {
-      world.spawn(msg.x, msg.y, msg.vx, msg.vy);
+      if (msg.velocity != null) {
+        world.spawn(msg.pos.x, msg.pos.y, msg.velocity.vx, msg.velocity.vy);
+      } else {
+        world.spawn_static(msg.pos.x, msg.pos.y);
+      }
       const raw = world.get_entities();
       const entities = Array.from(raw).map(toEntity);
       post({ type: "entities", entities });
