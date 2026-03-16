@@ -5,7 +5,7 @@
 
 use js_sys::Array;
 use open_entities::{
-    create_empty_world, create_world_with_definitions, get_entities_position_velocity,
+    create_empty_world, create_world_with_definitions, get_entities,
     run_tick, spawn_entity_by_type_in_world, LoadError, Position, Schedule, Velocity, World,
 };
 use wasm_bindgen::prelude::*;
@@ -147,7 +147,7 @@ impl JsWorld {
     /// `id` is a stable entity identifier (Entity::to_bits) so the same entity keeps the same id across frames.
     #[wasm_bindgen]
     pub fn get_entities(&mut self) -> Array {
-        let snapshot = get_entities_position_velocity(&mut self.world);
+        let snapshot = get_entities(&mut self.world);
         let arr = Array::new();
         for (id_bits, pos, vel_opt) in snapshot {
             let pos_obj = js_sys::Object::new();

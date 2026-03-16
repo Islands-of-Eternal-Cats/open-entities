@@ -67,11 +67,11 @@ pub fn run_tick(world: &mut World, schedule: &mut Schedule, dt: f32) {
     schedule.run(world);
 }
 
-/// Snapshot of all entities that have at least a Position component.
-/// Returns `(entity_id_bits, Position, Option<Velocity>)` per entity for use by WASM/JS.
+/// Returns all entities of the world that have at least a Position component.
+/// Each item is `(entity_id_bits, Position, Option<Velocity>)` for use by WASM/JS.
 /// Entities with only Position (e.g. static obstacles) have `None` for velocity.
 /// Entity id is from `Entity::to_bits()` so the same entity has a stable id across frames.
-pub fn get_entities_position_velocity(world: &mut World) -> Vec<(u64, Position, Option<Velocity>)> {
+pub fn get_entities(world: &mut World) -> Vec<(u64, Position, Option<Velocity>)> {
     let mut query = world.query::<(Entity, &Position, Option<&Velocity>)>();
     query
         .iter(world)

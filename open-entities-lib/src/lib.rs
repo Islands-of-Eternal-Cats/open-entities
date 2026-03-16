@@ -33,7 +33,7 @@ pub use systems::{
     EntityDefinitionsPath,
 };
 pub use world::{
-    create_empty_world, create_world_with_definitions, get_entities_position_velocity, run_tick,
+    create_empty_world, create_world_with_definitions, get_entities, run_tick,
     setup_world, setup_world_with_yaml,
 };
 
