@@ -112,8 +112,13 @@ export async function initWasm(): Promise<void> {
         fetch(`${origin}/assets/entities.yaml`, { cache: "no-store" }),
       ]);
       if (!wasmRes.ok) throw new Error(`Failed to fetch WASM: ${wasmRes.status}`);
+      if (!yamlRes.ok) {
+        throw new Error(
+          `Failed to fetch entity definitions (assets/entities.yaml): HTTP ${yamlRes.status} ${yamlRes.statusText}`
+        );
+      }
       const wasmBuffer = await wasmRes.arrayBuffer();
-      const entitiesYaml = yamlRes.ok ? await yamlRes.text() : undefined;
+      const entitiesYaml = await yamlRes.text();
 
       await new Promise<void>((resolve, reject) => {
         initResolve = resolve;
