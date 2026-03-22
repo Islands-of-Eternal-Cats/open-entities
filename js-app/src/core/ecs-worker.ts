@@ -3,43 +3,8 @@
  * Listens for init, tick, spawn; posts back ready, entities, error.
  */
 import initWasmModule, { JsWorld } from "open-entities-wasm";
+import { toEntity } from "./to-entity";
 import type { WorkerInMessage, WorkerOutMessage } from "./worker-types";
-
-const OLD_WASM_HINT =
-  "WASM returned old format (no pos/velocity). Run: cd js-app && ./build-wasm.sh then hard-reload (Ctrl+Shift+R).";
-
-/** Unique fallback when WASM sends an entity without id (avoids multiple entities sharing id "0"). */
-let fallbackIdCounter = 0;
-
-function toEntity(e: unknown): {
-  id: string;
-  pos: { x: number; y: number };
-  velocity: { vx: number; vy: number } | null;
-} {
-  const o = e as {
-    id?: string | number;
-    pos?: { x: number; y: number };
-    velocity?: { vx: number; vy: number } | null;
-  };
-  if (o.pos == null) {
-    throw new Error(OLD_WASM_HINT);
-  }
-  const id =
-    typeof o.id === "string"
-      ? o.id
-      : typeof o.id === "number"
-        ? String(o.id)
-        : `fallback-${fallbackIdCounter++}`;
-  const velocity =
-    o.velocity != null
-      ? { vx: o.velocity.vx, vy: o.velocity.vy }
-      : null;
-  return {
-    id,
-    pos: { x: o.pos.x, y: o.pos.y },
-    velocity,
-  };
-}
 
 let world: JsWorld | null = null;
 

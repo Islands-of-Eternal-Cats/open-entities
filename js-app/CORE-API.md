@@ -26,6 +26,11 @@
 
 В worker живёт один экземпляр **`JsWorld`** (Rust/WASM): `world.tick(dt)`, `world.spawn(...)`, `world.get_entities()`. Delta time в Rust: ресурс `DeltaTime(dt)`, `move_system` делает `position += velocity * dt`.
 
+### 2. Стабильные ID сущностей и `toEntity`
+
+- **Стабильный id:** в Rust для каждой сущности в снапшот передаётся `Entity::to_bits()` как **десятичная строка** (`wasm-bindings`: поле `id` в объекте из `get_entities()`). Пока сущность жива, биты не меняются между кадрами; визуализация может ключевать спрайты/DOM по `EntitySnapshot.id`. Строка нужна, чтобы не терять точность u64 в JS `Number` (безопасны только целые до 2⁵³−1).
+- **`toEntity`:** в worker сырой элемент массива из WASM приводится к `EntitySnapshot` в `src/core/to-entity.ts` (`id` string, `pos`, `velocity | null`). При отсутствии `pos` — ошибка с подсказкой пересобрать WASM; при отсутствии `id` — уникальный `fallback-*` (на случай старых сборок).
+
 ### Legacy (по желанию)
 
 - **`JsPosition`** / **`JsVelocity`** — обёртки для компонентов.
@@ -38,6 +43,7 @@
 | `src/core/wasm-types.d.ts` | Объявления типов для модуля `open-entities-wasm`. |
 | `src/core/worker-types.ts` | Типы сообщений main ↔ worker (`WorkerInMessage`, `WorkerOutMessage`). |
 | `src/core/ecs-worker.ts` | Web worker: загрузка WASM, `JsWorld`, обработка `init`/`tick`/`spawn`. |
+| `src/core/to-entity.ts` | `toEntity`: WASM → `EntitySnapshot`, стабильный `id` как строка. |
 | `src/core/wasm.ts` | Обёртка главного потока: `initWasm()`, `isWasmReady()`, `tick(dt)`, `spawn(...)` (все вызовы уходят в worker). |
 | `src/core/types.ts` | Типы приложения (например, `EntitySnapshot`). |
 | `src/visualization/render.ts` | Отрисовка состояния в DOM (или в будущем Canvas/WebGL). |
