@@ -3,7 +3,7 @@
  * Listens for init, tick, spawn; posts back ready, entities, error.
  */
 import initWasmModule, { JsWorld } from "open-entities-wasm";
-import { toEntity } from "./to-entity";
+import type { EntitySnapshot } from "./types";
 import type { WorkerInMessage, WorkerOutMessage } from "./worker-types";
 
 let world: JsWorld | null = null;
@@ -44,8 +44,7 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
 
     if (msg.type === "tick") {
       world.tick(msg.dt);
-      const raw = world.get_entities();
-      const entities = Array.from(raw).map(toEntity);
+      const entities: EntitySnapshot[] = Array.from(world.get_entities());
       post({ type: "entities", entities });
       return;
     }
@@ -58,8 +57,7 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
         post({ type: "error", message });
         return;
       }
-      const raw = world.get_entities();
-      const entities = Array.from(raw).map(toEntity);
+      const entities: EntitySnapshot[] = Array.from(world.get_entities());
       post({ type: "entities", entities });
       return;
     }

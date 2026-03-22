@@ -8,7 +8,10 @@ export type Pos = { x: number; y: number };
 /** 2D velocity. */
 export type Velocity = { vx: number; vy: number };
 
-/** Entity snapshot from WASM world.get_entities() for rendering. */
+/**
+ * One row from `JsWorld.get_entities()` (WASM ↔ worker contract).
+ * Rust sets `id` to `Entity::to_bits()` as a decimal string; `velocity` is null for static entities.
+ */
 export interface EntitySnapshot {
   /** Stable entity id (string to preserve u64 precision; JS Number is only safe to 2^53-1). */
   id: string;
