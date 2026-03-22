@@ -9,7 +9,7 @@ OpenEntities is a Rust-based Entity Component System (ECS) library built on **be
 - ECS Framework: `bevy_ecs` (no `bevy_app`)
 - WASM Target: `wasm32-unknown-unknown`
 - Frontend: **TypeScript** + Vite 5
-- WASM build: автоматическая сборка при `npm run dev` и при изменении файлов Rust (vite-plugin-wasm-pack-watcher + watch-rust-dirs)
+- WASM build: автоматическая сборка при `npm run dev` и при изменении файлов Rust (плагин `watch-rust-dirs` в `vite.config.js`)
 
 ---
 
@@ -121,7 +121,7 @@ cd js-app && npm run build
 cd js-app && npm run preview
 ```
 
-js-app написан на **TypeScript**. WASM собирается автоматически: при запуске `npm run dev` и при изменении файлов в `open-entities-lib/` и `wasm-bindings/` (плагины `vite-plugin-wasm-pack-watcher` и watch-rust-dirs в `vite.config.js`). Отдельно запускать `make wasm` перед разработкой не обязательно. Граница между WASM-ядром и визуализацией описана в `js-app/CORE-API.md`.
+js-app написан на **TypeScript**. WASM собирается автоматически: при запуске `npm run dev` и при изменении файлов в `open-entities-lib/` и `wasm-bindings/` (плагин `watch-rust-dirs` в `vite.config.js`). Отдельно запускать `make wasm` перед разработкой не обязательно. Граница между WASM-ядром и визуализацией описана в `js-app/CORE-API.md`.
 
 ### Pre-requisites
 

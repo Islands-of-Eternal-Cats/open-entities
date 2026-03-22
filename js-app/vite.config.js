@@ -3,7 +3,6 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
 import { defineConfig } from 'vite';
-import wasmPackWatchPlugin from 'vite-plugin-wasm-pack-watcher';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -11,16 +10,6 @@ const rustDirs = [
     path.resolve(process.cwd(), '../open-entities-lib'),
     path.resolve(process.cwd(), '../wasm-bindings')
 ];
-
-function runWasmBuild() {
-    const script = path.resolve(process.cwd(), 'build-wasm.sh');
-    const child = spawn('sh', [script], { cwd: process.cwd(), stdio: 'inherit' });
-    child.on('close', (code) => {
-        if (code === 0) {
-            console.log('[watch-rust] WASM rebuild done. Reload the page to use the new build.');
-        }
-    });
-}
 
 export default defineConfig({
     resolve: {
@@ -40,9 +29,6 @@ export default defineConfig({
         sourcemap: true
     },
     plugins: [
-        wasmPackWatchPlugin({
-            buildCommand: './build-wasm.sh'
-        }),
         {
             name: 'serve-assets-from-repo',
             configureServer(server) {
@@ -79,6 +65,16 @@ export default defineConfig({
             name: 'watch-rust-dirs',
             configureServer(server) {
                 let buildTimeout = null;
+                const script = path.resolve(process.cwd(), 'build-wasm.sh');
+                const runWasmBuild = () => {
+                    const child = spawn('sh', [script], { cwd: process.cwd(), stdio: 'inherit' });
+                    child.on('close', (code) => {
+                        if (code === 0) {
+                            console.log('[watch-rust] WASM rebuild done. Reload the page to use the new build.');
+                            server.ws.send({ type: 'full-reload', path: '*' });
+                        }
+                    });
+                };
                 rustDirs.forEach(dir => server.watcher.add(dir));
                 server.watcher.on('change', (file) => {
                     if (!file.endsWith('.rs')) return;
