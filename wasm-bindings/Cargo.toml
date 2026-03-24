@@ -1,0 +1,22 @@
+[package]
+name = "wasm-bindings"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+
+[dependencies]
+open-entities-lib = { path = "../open-entities-lib" }
+wasm-bindgen = "0.2"
+console_error_panic_hook = "0.1"
+js-sys = "0.3"
+# Required for wasm32-unknown-unknown (0.4 aligns with uuid/bevy_reflect)
+getrandom = { version = "0.4", features = ["wasm_js"] }
+
+[lib]
+crate-type = ["cdylib"]
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false

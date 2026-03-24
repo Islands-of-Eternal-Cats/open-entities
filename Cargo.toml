@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "open-entities-lib",
+    "wasm-bindings",
+]
+resolver = "2"
