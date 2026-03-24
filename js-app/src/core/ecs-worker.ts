@@ -16,16 +16,9 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
   const msg = event.data;
   try {
     if (msg.type === "init") {
-      if (msg.wasmBuffer == null) {
-        post({
-          type: "error",
-          message: "init requires wasmBuffer from main thread",
-        });
-        return;
-      }
       await initWasmModule(msg.wasmBuffer);
       try {
-        world = new JsWorld(msg.entitiesYaml ?? null);
+        world = new JsWorld(msg.entitiesYaml);
       } catch (e) {
         post({
           type: "error",

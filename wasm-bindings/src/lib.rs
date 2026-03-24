@@ -5,8 +5,8 @@
 
 use js_sys::Array;
 use open_entities::{
-    create_empty_world, create_world_with_definitions, get_entities,
-    run_tick, spawn_entity_by_type_in_world, LoadError, Position, Schedule, Velocity, World,
+    create_world_with_definitions, get_entities, run_tick, spawn_entity_by_type_in_world,
+    LoadError, Position, Schedule, Velocity, World,
 };
 use wasm_bindgen::prelude::*;
 
@@ -101,24 +101,14 @@ pub struct JsWorld {
     schedule: Schedule,
 }
 
-impl Default for JsWorld {
-    fn default() -> Self {
-        Self::new(None).expect("empty world creation never fails")
-    }
-}
-
 #[wasm_bindgen]
 impl JsWorld {
-    /// Create a world. If `entities_yaml` is provided (e.g. content of assets/entities.yaml),
-    /// entity definitions are loaded and `spawn(type_name)` can be used. Otherwise the world
-    /// is empty and spawn by type will fail.
+    /// Create a world from required entity definitions YAML
+    /// (e.g. content of assets/entities.yaml).
     #[wasm_bindgen(constructor)]
-    pub fn new(entities_yaml: Option<String>) -> Result<JsWorld, JsValue> {
-        let (world, schedule) = match entities_yaml {
-            Some(yaml) => create_world_with_definitions(&yaml)
-                .map_err(|e: LoadError| JsValue::from_str(&e.to_string()))?,
-            None => create_empty_world(),
-        };
+    pub fn new(entities_yaml: String) -> Result<JsWorld, JsValue> {
+        let (world, schedule) = create_world_with_definitions(&entities_yaml)
+            .map_err(|e: LoadError| JsValue::from_str(&e.to_string()))?;
         Ok(JsWorld { world, schedule })
     }
 

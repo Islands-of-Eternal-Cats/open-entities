@@ -4,7 +4,7 @@
 import type { EntitySnapshot } from "./types";
 
 export type WorkerInMessage =
-  | { type: "init"; wasmBuffer?: ArrayBuffer; entitiesYaml?: string }
+  | { type: "init"; wasmBuffer: ArrayBuffer; entitiesYaml: string }
   | { type: "tick"; dt: number }
   | { type: "spawn"; typeName: string };
 

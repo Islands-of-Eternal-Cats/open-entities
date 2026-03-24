@@ -40,8 +40,8 @@ declare module "open-entities-wasm" {
 
   /** ECS world: run simulation with delta time and get entity snapshots. */
   export class JsWorld {
-    /** Create world. Pass entities YAML string to enable spawn(typeName); otherwise spawn will fail. */
-    constructor(entitiesYaml?: string | null);
+    /** Create world from required entity definitions YAML string. */
+    constructor(entitiesYaml: string);
     /** Spawn an entity by type name from loaded definitions (e.g. "mover", "static_obstacle"). */
     spawn(typeName: string): void;
     tick(dt: number): void;
