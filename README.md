@@ -102,6 +102,48 @@ fn main() {
 }
 ```
 
+### YAML Entity Definitions
+
+YAML root key must be `entities`. Each key inside `entities` is a type name.
+`position` and `velocity` are optional, so different types can have different component sets.
+
+```yaml
+entities:
+  mover:
+    position: { x: 0.0, y: 0.0 }
+    velocity: { vx: 1.0, vy: 2.0 }
+  static_obstacle:
+    position: { x: 10.0, y: 10.0 }
+```
+
+### Spawn by Type Name
+
+Rust API:
+
+```rust
+use open_entities::{EntityDefinitions, spawn_entity_by_type_in_world, SpawnError, World};
+
+fn spawn_example(world: &mut World) -> Result<(), SpawnError> {
+    // Assume EntityDefinitions resource was inserted earlier.
+    let _entity = spawn_entity_by_type_in_world(world, "mover")?;
+    Ok(())
+}
+```
+
+WASM/TypeScript API (through `JsWorld`):
+
+```typescript
+const world = new JsWorld(entitiesYaml);
+await world.spawn("mover"); // throws JS Error if type is unknown
+```
+
+### Common YAML/Spawn Errors
+
+- `YAML parse error during load_from_str`: invalid YAML syntax or missing required `entities` root.
+- `IO error during load_from_path`: bad path or read permissions issue for YAML file.
+- `spawn failed: Unknown entity type: '...'`: requested type name is not in `entities`.
+- `spawn failed: Entity definitions resource is not loaded`: world does not contain `EntityDefinitions` resource.
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) file for details.

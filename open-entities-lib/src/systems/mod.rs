@@ -36,6 +36,6 @@ pub fn load_entities_from_yaml_system(
     let Some(res) = path else { return };
     let Some(ref p) = res.0 else { return };
     if let Err(e) = load_and_spawn_all_from_path(&mut commands, p) {
-        eprintln!("Failed to load entities from YAML: {}", e);
+        eprintln!("Failed to load entities from YAML '{}': {}", p.display(), e);
     }
 }

@@ -5,10 +5,18 @@
 
 use js_sys::Array;
 use open_entities::{
-    create_world_with_definitions, get_entities, run_tick, spawn_entity_by_type_in_world,
-    LoadError, Position, Schedule, Velocity, World,
+    LoadError, Position, Schedule, SpawnError, Velocity, World, create_world_with_definitions,
+    get_entities, run_tick, spawn_entity_by_type_in_world,
 };
 use wasm_bindgen::prelude::*;
+
+fn format_init_error(err: &LoadError) -> String {
+    format!("init_world failed: {}", err)
+}
+
+fn format_spawn_error(err: &SpawnError) -> String {
+    format!("spawn failed: {}", err)
+}
 
 /// Initialize the WASM environment
 #[wasm_bindgen(start)]
@@ -108,7 +116,7 @@ impl JsWorld {
     #[wasm_bindgen(constructor)]
     pub fn new(entities_yaml: String) -> Result<JsWorld, JsValue> {
         let (world, schedule) = create_world_with_definitions(&entities_yaml)
-            .map_err(|e: LoadError| JsValue::from_str(&e.to_string()))?;
+            .map_err(|e: LoadError| JsValue::from_str(&format_init_error(&e)))?;
         Ok(JsWorld { world, schedule })
     }
 
@@ -118,12 +126,7 @@ impl JsWorld {
     pub fn spawn(&mut self, type_name: &str) -> Result<(), JsValue> {
         spawn_entity_by_type_in_world(&mut self.world, type_name)
             .map(|_| ())
-            .ok_or_else(|| {
-                JsValue::from_str(&format!(
-                    "Unknown entity type or no definitions loaded: {:?}",
-                    type_name
-                ))
-            })
+            .map_err(|e| JsValue::from_str(&format_spawn_error(&e)))
     }
 
     /// Run one simulation tick with the given delta time in seconds.
@@ -185,5 +188,29 @@ impl JsWorld {
             arr.push(&obj);
         }
         arr
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn init_error_message_is_stable_and_readable() {
+        let message = format_init_error(&LoadError::Yaml {
+            op: "load_from_str",
+            source: "expected key".to_string(),
+        });
+        assert!(message.contains("init_world failed"));
+        assert!(message.contains("YAML parse error"));
+    }
+
+    #[test]
+    fn spawn_error_message_is_stable_and_readable() {
+        let message = format_spawn_error(&SpawnError::UnknownEntityType {
+            type_name: "ghost".to_string(),
+        });
+        assert!(message.contains("spawn failed"));
+        assert!(message.contains("ghost"));
     }
 }

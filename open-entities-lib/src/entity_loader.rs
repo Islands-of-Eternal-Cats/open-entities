@@ -7,7 +7,7 @@ use crate::components::{Position, Velocity};
 use bevy_ecs::prelude::*;
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Шаблон одной сущности: какие компоненты и с какими значениями.
 /// Отсутствующие поля означают отсутствие компонента у этого типа.
@@ -39,14 +39,21 @@ impl EntityDefinitions {
 
     /// Загрузить определения из YAML-файла.
     pub fn load_from_path<P: AsRef<Path>>(path: P) -> Result<Self, LoadError> {
-        let s = std::fs::read_to_string(path.as_ref()).map_err(|e| LoadError::Io(e.to_string()))?;
+        let path_ref = path.as_ref();
+        let s = std::fs::read_to_string(path_ref).map_err(|e| LoadError::Io {
+            op: "load_from_path",
+            path: Some(path_ref.to_path_buf()),
+            source: e.to_string(),
+        })?;
         Self::load_from_str(&s)
     }
 
     /// Загрузить определения из YAML-строки.
     pub fn load_from_str(s: &str) -> Result<Self, LoadError> {
-        let file: EntityDefinitionsFile =
-            yaml_serde::from_str(s).map_err(|e| LoadError::Yaml(e.to_string()))?;
+        let file: EntityDefinitionsFile = yaml_serde::from_str(s).map_err(|e| LoadError::Yaml {
+            op: "load_from_str",
+            source: e.to_string(),
+        })?;
         Ok(Self {
             definitions: file.entities,
         })
@@ -71,29 +78,76 @@ impl EntityDefinitions {
 /// Ошибки загрузки
 #[derive(Debug, Clone)]
 pub enum LoadError {
-    Io(String),
-    Yaml(String),
+    Io {
+        op: &'static str,
+        path: Option<PathBuf>,
+        source: String,
+    },
+    Yaml {
+        op: &'static str,
+        source: String,
+    },
 }
 
 impl std::fmt::Display for LoadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LoadError::Io(s) => write!(f, "IO: {}", s),
-            LoadError::Yaml(s) => write!(f, "YAML: {}", s),
+            LoadError::Io { op, path, source } => {
+                if let Some(path) = path {
+                    write!(
+                        f,
+                        "IO error during {} for '{}': {}",
+                        op,
+                        path.display(),
+                        source
+                    )
+                } else {
+                    write!(f, "IO error during {}: {}", op, source)
+                }
+            }
+            LoadError::Yaml { op, source } => {
+                write!(f, "YAML parse error during {}: {}", op, source)
+            }
         }
     }
 }
 
 impl std::error::Error for LoadError {}
 
+/// Ошибки спавна сущности по имени типа.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SpawnError {
+    UnknownEntityType { type_name: String },
+    DefinitionsNotLoaded,
+}
+
+impl std::fmt::Display for SpawnError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SpawnError::UnknownEntityType { type_name } => {
+                write!(f, "Unknown entity type: '{}'", type_name)
+            }
+            SpawnError::DefinitionsNotLoaded => {
+                write!(f, "Entity definitions resource is not loaded")
+            }
+        }
+    }
+}
+
+impl std::error::Error for SpawnError {}
+
 /// Создать одну сущность в ECS по имени типа из загруженных определений.
-/// Возвращает `Some(Entity)` если тип найден и сущность создана, иначе `None`.
+/// Возвращает `Ok(Entity)` если тип найден и сущность создана, иначе ошибку.
 pub fn spawn_entity_by_type(
     commands: &mut Commands,
     definitions: &EntityDefinitions,
     type_name: &str,
-) -> Option<Entity> {
-    let template = definitions.get(type_name)?;
+) -> Result<Entity, SpawnError> {
+    let template = definitions
+        .get(type_name)
+        .ok_or_else(|| SpawnError::UnknownEntityType {
+            type_name: type_name.to_string(),
+        })?;
 
     let mut entity = commands.spawn_empty();
 
@@ -104,16 +158,23 @@ pub fn spawn_entity_by_type(
         entity.insert(*v);
     }
 
-    Some(entity.id())
+    Ok(entity.id())
 }
 
 /// Создать одну сущность в ECS по имени типа, используя ресурс `EntityDefinitions` в мире.
-/// Возвращает `Some(Entity)` если тип найден и сущность создана, иначе `None`.
-pub fn spawn_entity_by_type_in_world(world: &mut World, type_name: &str) -> Option<Entity> {
+/// Возвращает `Ok(Entity)` если тип найден и сущность создана, иначе ошибку.
+pub fn spawn_entity_by_type_in_world(
+    world: &mut World,
+    type_name: &str,
+) -> Result<Entity, SpawnError> {
     let template = world
         .get_resource::<EntityDefinitions>()
-        .and_then(|defs| defs.get(type_name))
-        .cloned()?;
+        .ok_or(SpawnError::DefinitionsNotLoaded)?
+        .get(type_name)
+        .cloned()
+        .ok_or_else(|| SpawnError::UnknownEntityType {
+            type_name: type_name.to_string(),
+        })?;
 
     let mut entity = world.spawn_empty();
     if let Some(p) = template.position {
@@ -122,7 +183,7 @@ pub fn spawn_entity_by_type_in_world(world: &mut World, type_name: &str) -> Opti
     if let Some(v) = template.velocity {
         entity.insert(v);
     }
-    Some(entity.id())
+    Ok(entity.id())
 }
 
 /// Загрузить определения из файла и создать по одной сущности каждого типа.
@@ -135,9 +196,13 @@ pub fn load_and_spawn_all_from_path(
     let names: Vec<String> = definitions.type_names().cloned().collect();
     let mut entities = Vec::with_capacity(names.len());
     for name in &names {
-        if let Some(e) = spawn_entity_by_type(commands, &definitions, name) {
-            entities.push(e);
-        }
+        // Names are collected from definitions; unknown-type error is unreachable here.
+        let e =
+            spawn_entity_by_type(commands, &definitions, name).map_err(|err| LoadError::Yaml {
+                op: "load_and_spawn_all_from_path",
+                source: err.to_string(),
+            })?;
+        entities.push(e);
     }
     Ok(entities)
 }

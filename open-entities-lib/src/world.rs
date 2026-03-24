@@ -3,8 +3,8 @@
 use crate::components::{Position, Velocity};
 use crate::entity_loader::{EntityDefinitions, LoadError};
 use crate::systems::{
-    load_entities_from_yaml_system, move_system, print_position_system, setup_system,
-    DeltaTime, EntityDefinitionsPath,
+    DeltaTime, EntityDefinitionsPath, load_entities_from_yaml_system, move_system,
+    print_position_system, setup_system,
 };
 use bevy_ecs::prelude::{Entity, World};
 use bevy_ecs::schedule::Schedule;
