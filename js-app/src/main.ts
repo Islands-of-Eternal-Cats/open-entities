@@ -1,7 +1,7 @@
 /**
  * Entry point: init WASM core in worker, wire UI and visualization.
  */
-import { initWasm, isWasmReady, tick, spawn } from "./core/wasm";
+import { initWasm, isWasmReady, tick, spawnRandomAt } from "./core/wasm";
 import type { EntitySnapshot } from "./core/types";
 import { renderEntities } from "./visualization/render";
 import { initPixiCanvas } from "./visualization/pixi-canvas";
@@ -29,10 +29,10 @@ async function createEntity(typeName?: string): Promise<void> {
     typeName ??
     ENTITY_TYPES[Math.floor(Math.random() * ENTITY_TYPES.length)];
   try {
-    const entities = await spawn(type);
+    const entities = await spawnRandomAt(type);
     render(entities);
   } catch (e) {
-    console.error("spawn error:", e);
+    console.error("spawnRandomAt error:", e);
   }
 }
 

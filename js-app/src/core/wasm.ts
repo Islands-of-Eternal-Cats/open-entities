@@ -166,10 +166,11 @@ export function tick(dt: number): Promise<EntitySnapshot[]> {
 }
 
 /**
- * Spawn an entity in the worker by type name (from assets/entities.yaml).
+ * Spawn an entity in the worker by type name from `assets/entities.yaml`
+ * using random coordinates.
  * Returns current entity snapshots.
  */
-export function spawn(typeName: string): Promise<EntitySnapshot[]> {
+export function spawnRandomAt(typeName: string): Promise<EntitySnapshot[]> {
   if (!worker || !initialized)
     return Promise.reject(new Error("WASM not initialized"));
   return new Promise((resolve, reject) => {
