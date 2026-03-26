@@ -136,6 +136,33 @@ impl std::fmt::Display for SpawnError {
 
 impl std::error::Error for SpawnError {}
 
+fn spawn_from_template_in_world(
+    world: &mut World,
+    template: EntityTemplate,
+    position_override: Option<Position>,
+    include_velocity: bool,
+) -> Entity {
+    let mut entity = world.spawn_empty();
+
+    // Position: override wins; otherwise use the template.
+    if let Some(p) = position_override.or(template.position) {
+        entity.insert(p);
+    }
+
+    // Velocity: optional and can be suppressed by caller.
+    if include_velocity {
+        if let Some(v) = template.velocity {
+            entity.insert(v);
+        }
+    }
+
+    // IMPORTANT:
+    // When new YAML-mapped components are added to EntityTemplate in the future,
+    // insert them here so all spawn variants pick them up automatically.
+
+    entity.id()
+}
+
 /// Создать одну сущность в ECS по имени типа из загруженных определений.
 /// Возвращает `Ok(Entity)` если тип найден и сущность создана, иначе ошибку.
 pub fn spawn_entity_by_type(
@@ -176,14 +203,7 @@ pub fn spawn_entity_by_type_in_world(
             type_name: type_name.to_string(),
         })?;
 
-    let mut entity = world.spawn_empty();
-    if let Some(p) = template.position {
-        entity.insert(p);
-    }
-    if let Some(v) = template.velocity {
-        entity.insert(v);
-    }
-    Ok(entity.id())
+    Ok(spawn_from_template_in_world(world, template, None, true))
 }
 
 /// Create one entity by type name at the given position, using `EntityDefinitions` resource in the world.
@@ -201,15 +221,19 @@ pub fn spawn_entity_by_type_at_in_world(
         .get_resource::<EntityDefinitions>()
         .ok_or(SpawnError::DefinitionsNotLoaded)?;
 
-    if defs.get(type_name).is_none() {
-        return Err(SpawnError::UnknownEntityType {
+    let template = defs
+        .get(type_name)
+        .cloned()
+        .ok_or_else(|| SpawnError::UnknownEntityType {
             type_name: type_name.to_string(),
-        });
-    }
+        })?;
 
-    let mut entity = world.spawn_empty();
-    entity.insert(Position { x, y });
-    Ok(entity.id())
+    Ok(spawn_from_template_in_world(
+        world,
+        template,
+        Some(Position { x, y }),
+        false,
+    ))
 }
 
 /// Загрузить определения из файла и создать по одной сущности каждого типа.
