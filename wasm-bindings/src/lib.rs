@@ -6,7 +6,7 @@
 use js_sys::Array;
 use open_entities::{
     LoadError, Position, Schedule, SpawnError, Velocity, World, create_world_with_definitions,
-    get_entities, run_tick, spawn_entity_by_type_in_world,
+    get_entities, run_tick, spawn_entity_by_type_at_in_world, spawn_entity_by_type_in_world,
 };
 use wasm_bindgen::prelude::*;
 
@@ -125,6 +125,15 @@ impl JsWorld {
     #[wasm_bindgen]
     pub fn spawn(&mut self, type_name: &str) -> Result<(), JsValue> {
         spawn_entity_by_type_in_world(&mut self.world, type_name)
+            .map(|_| ())
+            .map_err(|e| JsValue::from_str(&format_spawn_error(&e)))
+    }
+
+    /// Spawn an entity by type name at the given position.
+    /// Per requirement, this spawn variant does not create a Velocity component for the spawned entity.
+    #[wasm_bindgen]
+    pub fn spawn_at(&mut self, type_name: &str, x: f32, y: f32) -> Result<(), JsValue> {
+        spawn_entity_by_type_at_in_world(&mut self.world, type_name, x, y)
             .map(|_| ())
             .map_err(|e| JsValue::from_str(&format_spawn_error(&e)))
     }

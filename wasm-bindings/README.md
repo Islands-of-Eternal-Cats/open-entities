@@ -28,6 +28,9 @@ const world = new JsWorld(entitiesYaml);
 // 3) Спавн по имени типа из YAML
 world.spawn("mover");
 
+// 3b) Спавн по имени типа, но в заданных координатах (без Velocity)
+world.spawn_at("mover", 100.0, 200.0);
+
 // 4) Тик симуляции (dt в секундах)
 world.tick(1 / 60);
 
@@ -64,6 +67,9 @@ const entities = Array.from(world.get_entities());
 - `spawn(typeName: string): void`
   - Создаёт одну сущность по имени типа из загруженных `entities` YAML.
   - Если `typeName` неизвестен — бросает исключение.
+- `spawn_at(typeName: string, x: number, y: number): void`
+  - Создаёт сущность по имени типа, но с `Position = {x, y}` из аргументов.
+  - Компонент `Velocity` **не создаётся** (даже если он есть в YAML для этого типа).
 - `tick(dt: number): void`
   - Запускает один тик симуляции с delta time в секундах.
 - `get_entities(): Array<{ id, pos, velocity }>`

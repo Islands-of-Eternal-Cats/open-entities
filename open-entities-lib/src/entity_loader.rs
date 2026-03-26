@@ -186,6 +186,32 @@ pub fn spawn_entity_by_type_in_world(
     Ok(entity.id())
 }
 
+/// Create one entity by type name at the given position, using `EntityDefinitions` resource in the world.
+///
+/// This is intended for host-controlled spawning (e.g. from WASM/JS) where the caller wants to choose
+/// the spawn coordinates. Per requirement, this spawn variant does **not** create a `Velocity`
+/// component for the spawned entity (even if the YAML template defines one).
+pub fn spawn_entity_by_type_at_in_world(
+    world: &mut World,
+    type_name: &str,
+    x: f32,
+    y: f32,
+) -> Result<Entity, SpawnError> {
+    let defs = world
+        .get_resource::<EntityDefinitions>()
+        .ok_or(SpawnError::DefinitionsNotLoaded)?;
+
+    if defs.get(type_name).is_none() {
+        return Err(SpawnError::UnknownEntityType {
+            type_name: type_name.to_string(),
+        });
+    }
+
+    let mut entity = world.spawn_empty();
+    entity.insert(Position { x, y });
+    Ok(entity.id())
+}
+
 /// Загрузить определения из файла и создать по одной сущности каждого типа.
 /// Путь к YAML — относительно текущей рабочей директории.
 pub fn load_and_spawn_all_from_path(

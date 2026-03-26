@@ -26,7 +26,8 @@ pub use bevy_ecs::prelude::{Schedule, World};
 pub use components::{Position, Velocity};
 pub use entity_loader::{
     EntityDefinitions, EntityDefinitionsFile, EntityTemplate, LoadError, SpawnError,
-    load_and_spawn_all_from_path, spawn_entity_by_type, spawn_entity_by_type_in_world,
+    load_and_spawn_all_from_path, spawn_entity_by_type, spawn_entity_by_type_at_in_world,
+    spawn_entity_by_type_in_world,
 };
 pub use systems::{
     DeltaTime, EntityDefinitionsPath, load_entities_from_yaml_system, move_system,
@@ -261,5 +262,34 @@ entities:
             .expect("spawned static_only should have Position");
         assert_eq!(pos.x, 7.0);
         assert_eq!(pos.y, 9.0);
+    }
+
+    #[test]
+    fn test_spawn_at_overrides_position_and_does_not_create_velocity() {
+        let yaml = r#"
+entities:
+  mover:
+    position: { x: 1.0, y: 2.0 }
+    velocity: { vx: 0.5, vy: 0.5 }
+"#;
+        let (mut world, mut schedule) = create_world_with_definitions(yaml).unwrap();
+        let spawned = spawn_entity_by_type_at_in_world(&mut world, "mover", 123.0, 456.0).unwrap();
+
+        let pos = world
+            .get::<Position>(spawned)
+            .expect("spawned mover should have Position");
+        assert_eq!(pos.x, 123.0);
+        assert_eq!(pos.y, 456.0);
+        assert!(
+            world.get::<Velocity>(spawned).is_none(),
+            "spawn_at must not create Velocity"
+        );
+
+        run_tick(&mut world, &mut schedule, 0.016);
+        let pos_after = world
+            .get::<Position>(spawned)
+            .expect("spawned mover should still have Position after tick");
+        assert_eq!(pos_after.x, 123.0);
+        assert_eq!(pos_after.y, 456.0);
     }
 }
