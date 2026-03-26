@@ -54,6 +54,19 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
       post({ type: "entities", entities });
       return;
     }
+
+    if (msg.type === "spawn_at") {
+      try {
+        world.spawn_at(msg.typeName, msg.x, msg.y);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        post({ type: "error", message });
+        return;
+      }
+      const entities: EntitySnapshot[] = Array.from(world.get_entities());
+      post({ type: "entities", entities });
+      return;
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     post({ type: "error", message });

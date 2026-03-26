@@ -173,7 +173,10 @@ export function spawn(typeName: string): Promise<EntitySnapshot[]> {
   if (!worker || !initialized)
     return Promise.reject(new Error("WASM not initialized"));
   return new Promise((resolve, reject) => {
-    const message: WorkerInMessage = { type: "spawn", typeName };
+    // Spawn in random world coordinates (roughly matching visualization WORLD_SIZE).
+    const x = Math.random() * 100;
+    const y = Math.random() * 100;
+    const message: WorkerInMessage = { type: "spawn_at", typeName, x, y };
     if (pending === null && requestQueue.length === 0) {
       pending = { resolve, reject };
       worker!.postMessage(message);
