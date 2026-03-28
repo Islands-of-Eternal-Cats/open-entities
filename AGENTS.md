@@ -253,6 +253,17 @@ const velocity = new JsVelocity(vx, vy);
 const newPos = move_position(position, velocity);
 ```
 
+### Selection & move (target UX)
+
+Intended behavior for the js-app canvas (selection + orders), including touch without keyboard modifiers:
+
+| Situation | Action |
+|-----------|--------|
+| A group is selected and the user taps/clicks **empty ground** (no unit under the point) | **Move order**: selected units go to that world position. |
+| **Esc** or a **UI control** shown while selection is non-empty | **Clear selection** only (no move). |
+
+Rationale: one tap on empty space cannot mean both “deselect” and “move”; with an active selection, **move is the primary action**; deselect is explicit (keyboard or HUD). Aligns with common mobile RTS patterns.
+
 ---
 
 ## Testing
