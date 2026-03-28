@@ -80,12 +80,12 @@ async function run(): Promise<void> {
             clearSelectionBtn.disabled = ids.size === 0;
           }
         },
-        onMoveOrder: async (wx, wy) => {
+        onMoveOrder: async (world) => {
           if (!isWasmReady()) return;
           const ids = [...pixi.getSelectedIds()];
           if (ids.length === 0) return;
           try {
-            const entities = await moveSelectedTo(ids, wx, wy);
+            const entities = await moveSelectedTo(ids, world);
             render(entities);
           } catch (e) {
             console.error("moveSelectedTo error:", e);

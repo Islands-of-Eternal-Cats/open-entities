@@ -23,7 +23,7 @@
 
 - **`tick(dt): Promise<EntitySnapshot[]>`** — отправить в worker один тик симуляции; `dt` в секундах. Резолвится снапшотом сущностей для отрисовки.
 - **`spawn(x, y, vx, vy): Promise<EntitySnapshot[]>`** — создать сущность в worker; резолвится актуальным снапшотом сущностей.
-- **`moveSelectedTo(entityIds, wx, wy): Promise<EntitySnapshot[]>`** — приказ «идти в точку мира» для списка id из снапшота; в worker вызывается `JsWorld::order_move_to` без `tick`. Пустой `entityIds` — ошибка. Сообщение worker: `{ type: "move_to", entityIds, wx, wy }`.
+- **`moveSelectedTo(entityIds, point): Promise<EntitySnapshot[]>`** — приказ «идти в точку мира» для списка id из снапшота; `point` — `{ x, y }` в мировых координатах (тот же смысл, что у `Position` / `JsPosition`). В worker вызывается `JsWorld::order_move_to(entityIds, new JsPosition(...))` без `tick`. Пустой `entityIds` — ошибка. Сообщение worker: `{ type: "move_to", entityIds, point }`.
 
 В worker живёт один экземпляр **`JsWorld`** (Rust/WASM): `world.tick(dt)`, `world.spawn(...)`, `world.get_entities()`. Delta time в Rust: ресурс `DeltaTime(dt)`, `move_system` делает `position += velocity * dt`.
 

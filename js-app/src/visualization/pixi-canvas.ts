@@ -5,7 +5,7 @@
  * Tap empty ground with selection issues a move order; Esc / clear button clears selection.
  */
 import { Application, Container, Graphics } from "pixi.js";
-import type { EntitySnapshot } from "../core/types";
+import type { EntitySnapshot, Pos } from "../core/types";
 import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
@@ -39,7 +39,7 @@ export type PixiCanvasOptions = {
    * Tap/click on empty ground while at least one unit is selected: world-space move order.
    * Selection is not cleared; use Esc / UI to deselect.
    */
-  onMoveOrder?: (worldX: number, worldY: number) => void | Promise<void>;
+  onMoveOrder?: (world: Pos) => void | Promise<void>;
 };
 
 /**
@@ -167,8 +167,7 @@ export async function initPixiCanvas(
     const hit = entityIdAtScreenPoint(lastEntities, sx, sy);
     if (hit === null) {
       if (selectedIds.size > 0) {
-        const { x: wx, y: wy } = screenToWorld(sx, sy);
-        void Promise.resolve(onMoveOrder?.(wx, wy));
+        void Promise.resolve(onMoveOrder?.(screenToWorld(sx, sy)));
       }
       return;
     }

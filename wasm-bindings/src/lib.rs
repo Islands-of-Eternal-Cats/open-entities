@@ -146,8 +146,13 @@ impl JsWorld {
     }
 
     /// Move-to order for entities identified by snapshot id strings (`Entity::to_bits()` decimal).
+    /// Target uses the same [`Position`] shape as entity placement (`JsPosition`).
     #[wasm_bindgen]
-    pub fn order_move_to(&mut self, entity_ids: Vec<String>, tx: f32, ty: f32) -> Result<(), JsValue> {
+    pub fn order_move_to(
+        &mut self,
+        entity_ids: Vec<String>,
+        target: &JsPosition,
+    ) -> Result<(), JsValue> {
         let mut bits = Vec::with_capacity(entity_ids.len());
         for s in entity_ids {
             let b: u64 = s
@@ -155,7 +160,7 @@ impl JsWorld {
                 .map_err(|_| JsValue::from_str("invalid entity id"))?;
             bits.push(b);
         }
-        order_move_entities_to(&mut self.world, &bits, tx, ty);
+        order_move_entities_to(&mut self.world, &bits, target.position);
         Ok(())
     }
 

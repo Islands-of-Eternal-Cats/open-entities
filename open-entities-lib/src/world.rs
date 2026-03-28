@@ -67,7 +67,7 @@ pub fn create_world_with_definitions(yaml: &str) -> Result<(World, Schedule), Lo
 /// Issue a move-to-world-point order for entities identified by `Entity::to_bits()` (as in snapshots).
 /// Skips unknown ids, invalid bits, or entities without [`Position`].
 /// Entities without [`Velocity`] receive zero velocity so seek + integration can run.
-pub fn order_move_entities_to(world: &mut World, id_bits: &[u64], tx: f32, ty: f32) {
+pub fn order_move_entities_to(world: &mut World, id_bits: &[u64], target: Position) {
     for bits in id_bits {
         let Some(entity) = Entity::try_from_bits(*bits) else {
             continue;
@@ -80,7 +80,7 @@ pub fn order_move_entities_to(world: &mut World, id_bits: &[u64], tx: f32, ty: f
                 .entity_mut(entity)
                 .insert(Velocity { vx: 0.0, vy: 0.0 });
         }
-        world.entity_mut(entity).insert(MoveTarget { x: tx, y: ty });
+        world.entity_mut(entity).insert(MoveTarget { at: target });
     }
 }
 

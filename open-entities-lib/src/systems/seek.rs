@@ -10,8 +10,8 @@ pub fn seek_move_target_system(
     mut query: Query<(Entity, &Position, &mut Velocity, &MoveTarget)>,
 ) {
     for (entity, pos, mut vel, target) in &mut query {
-        let dx = target.x - pos.x;
-        let dy = target.y - pos.y;
+        let dx = target.at.x - pos.x;
+        let dy = target.at.y - pos.y;
         let dist_sq = dx * dx + dy * dy;
         if dist_sq <= STOP_DIST * STOP_DIST {
             vel.vx = 0.0;

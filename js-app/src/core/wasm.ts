@@ -175,8 +175,7 @@ export function tick(dt: number): Promise<EntitySnapshot[]> {
  */
 export function moveSelectedTo(
   entityIds: string[],
-  wx: number,
-  wy: number
+  point: { x: number; y: number }
 ): Promise<EntitySnapshot[]> {
   if (!worker || !initialized)
     return Promise.reject(new Error("WASM not initialized"));
@@ -187,8 +186,7 @@ export function moveSelectedTo(
     const message: WorkerInMessage = {
       type: "move_to",
       entityIds,
-      wx,
-      wy,
+      point,
     };
     if (pending === null && requestQueue.length === 0) {
       pending = { resolve, reject };

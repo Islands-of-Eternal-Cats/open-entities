@@ -274,7 +274,7 @@ entities:
         let (mut world, mut schedule) = create_world_with_definitions(yaml).unwrap();
         let spawned = spawn_entity_by_type_in_world(&mut world, "static_only").unwrap();
         let bits = spawned.to_bits();
-        order_move_entities_to(&mut world, &[bits], 100.0, 0.0);
+        order_move_entities_to(&mut world, &[bits], Position { x: 100.0, y: 0.0 });
         assert!(world.get::<Velocity>(spawned).is_some());
         assert!(world.get::<MoveTarget>(spawned).is_some());
         run_tick(&mut world, &mut schedule, 0.05);

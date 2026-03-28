@@ -2,7 +2,7 @@
  * ECS web worker: loads WASM and runs simulation.
  * Listens for init, tick, spawn; posts back ready, entities, error.
  */
-import initWasmModule, { JsWorld } from "open-entities-wasm";
+import initWasmModule, { JsPosition, JsWorld } from "open-entities-wasm";
 import type { EntitySnapshot } from "./types";
 import type { WorkerInMessage, WorkerOutMessage } from "./worker-types";
 
@@ -57,7 +57,10 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
 
     if (msg.type === "move_to") {
       try {
-        world.order_move_to(msg.entityIds, msg.wx, msg.wy);
+        world.order_move_to(
+          msg.entityIds,
+          new JsPosition(msg.point.x, msg.point.y)
+        );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         post({ type: "error", message });
