@@ -1,15 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-/** Mock fetch so initWasm gets a wasm buffer without hitting the network. */
+/** Mock fetch so initWasm gets wasm + yaml without hitting the network. */
 function installMockFetch(): void {
   vi.stubGlobal(
     "fetch",
-    vi.fn(() =>
-      Promise.resolve({
+    vi.fn((url: string | URL) => {
+      const s = String(url);
+      const yaml = "entities: {}";
+      return Promise.resolve({
         ok: true,
-        arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
-      } as Response)
-    )
+        status: 200,
+        statusText: "OK",
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
+        text: () =>
+          s.includes("entities.yaml") ? Promise.resolve(yaml) : Promise.resolve(""),
+      } as Response);
+    })
   );
 }
 
@@ -40,6 +46,10 @@ function installMockWorker(): void {
           this.listeners.forEach((fn) => fn(e));
         }, 0);
       }
+    }
+
+    terminate(): void {
+      /* jsdom Worker has no terminate; real wasm.ts cleans up on init failure */
     }
   }
   vi.stubGlobal("Worker", MockWorker);

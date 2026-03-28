@@ -7,6 +7,7 @@ import { renderEntities } from "./visualization/render";
 import { initPixiCanvas } from "./visualization/pixi-canvas";
 
 const statusEl = document.getElementById("status");
+const selectionStatusEl = document.getElementById("selection-status");
 const entityListEl = document.getElementById("entity-list");
 const canvasContainer = document.getElementById("canvas-container");
 const addEntityBtn = document.getElementById("add-entity");
@@ -57,7 +58,16 @@ async function run(): Promise<void> {
     await initWasm();
     statusEl.textContent = "WASM loaded (worker)!";
     if (canvasContainer) {
-      const pixi = await initPixiCanvas(canvasContainer);
+      const pixi = await initPixiCanvas(canvasContainer, {
+        onSelectionChange: (ids) => {
+          if (selectionStatusEl) {
+            selectionStatusEl.textContent =
+              ids.size === 0
+                ? "Selection: none"
+                : `Selection: ${ids.size} unit(s)`;
+          }
+        },
+      });
       updatePixiEntities = pixi.updateEntities;
     }
     await createEntity();
