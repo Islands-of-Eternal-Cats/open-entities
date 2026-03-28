@@ -6,7 +6,8 @@
 use js_sys::Array;
 use open_entities::{
     LoadError, Position, Schedule, SpawnError, Velocity, World, create_world_with_definitions,
-    get_entities, run_tick, spawn_entity_by_type_at_in_world, spawn_entity_by_type_in_world,
+    get_entities, order_move_entities_to, run_tick, spawn_entity_by_type_at_in_world,
+    spawn_entity_by_type_in_world,
 };
 use wasm_bindgen::prelude::*;
 
@@ -142,6 +143,20 @@ impl JsWorld {
     #[wasm_bindgen]
     pub fn tick(&mut self, dt: f32) {
         run_tick(&mut self.world, &mut self.schedule, dt);
+    }
+
+    /// Move-to order for entities identified by snapshot id strings (`Entity::to_bits()` decimal).
+    #[wasm_bindgen]
+    pub fn order_move_to(&mut self, entity_ids: Vec<String>, tx: f32, ty: f32) -> Result<(), JsValue> {
+        let mut bits = Vec::with_capacity(entity_ids.len());
+        for s in entity_ids {
+            let b: u64 = s
+                .parse()
+                .map_err(|_| JsValue::from_str("invalid entity id"))?;
+            bits.push(b);
+        }
+        order_move_entities_to(&mut self.world, &bits, tx, ty);
+        Ok(())
     }
 
     /// Snapshot of all entities as an array of `{ id, pos: { x, y }, velocity: { vx, vy } | null }` for rendering.

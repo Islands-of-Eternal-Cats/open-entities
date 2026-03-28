@@ -4,8 +4,10 @@ use bevy_ecs::prelude::*;
 use std::path::PathBuf;
 
 pub mod movement;
+pub mod seek;
 pub mod time;
 pub use movement::move_system;
+pub use seek::seek_move_target_system;
 pub use time::DeltaTime;
 
 /// System: Print positions of all entities

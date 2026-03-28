@@ -1,12 +1,12 @@
 //! World and schedule setup: create ECS world and run startup/update schedules.
 
-use crate::components::{Position, Velocity};
+use crate::components::{MoveTarget, Position, Velocity};
 use crate::entity_loader::{EntityDefinitions, LoadError};
 use crate::systems::{
     DeltaTime, EntityDefinitionsPath, load_entities_from_yaml_system, move_system,
-    print_position_system, setup_system,
+    print_position_system, seek_move_target_system, setup_system,
 };
-use bevy_ecs::prelude::{Entity, World};
+use bevy_ecs::prelude::{Entity, IntoScheduleConfigs, World};
 use bevy_ecs::schedule::Schedule;
 use std::path::PathBuf;
 
@@ -19,7 +19,9 @@ pub fn setup_world() -> (World, Schedule) {
     startup.run(&mut world);
 
     let mut update = Schedule::default();
-    update.add_systems((move_system, print_position_system));
+    update.add_systems(
+        (seek_move_target_system, move_system, print_position_system).chain(),
+    );
     (world, update)
 }
 
@@ -35,7 +37,9 @@ pub fn setup_world_with_yaml(path: impl Into<PathBuf>) -> (World, Schedule) {
     startup.run(&mut world);
 
     let mut update = Schedule::default();
-    update.add_systems((move_system, print_position_system));
+    update.add_systems(
+        (seek_move_target_system, move_system, print_position_system).chain(),
+    );
     (world, update)
 }
 
@@ -44,7 +48,7 @@ pub fn setup_world_with_yaml(path: impl Into<PathBuf>) -> (World, Schedule) {
 pub fn create_empty_world() -> (World, Schedule) {
     let world = World::new();
     let mut update = Schedule::default();
-    update.add_systems(move_system);
+    update.add_systems((seek_move_target_system, move_system).chain());
     (world, update)
 }
 
@@ -56,8 +60,28 @@ pub fn create_world_with_definitions(yaml: &str) -> Result<(World, Schedule), Lo
     let mut world = World::new();
     world.insert_resource(definitions);
     let mut update = Schedule::default();
-    update.add_systems(move_system);
+    update.add_systems((seek_move_target_system, move_system).chain());
     Ok((world, update))
+}
+
+/// Issue a move-to-world-point order for entities identified by `Entity::to_bits()` (as in snapshots).
+/// Skips unknown ids, invalid bits, or entities without [`Position`].
+/// Entities without [`Velocity`] receive zero velocity so seek + integration can run.
+pub fn order_move_entities_to(world: &mut World, id_bits: &[u64], tx: f32, ty: f32) {
+    for bits in id_bits {
+        let Some(entity) = Entity::try_from_bits(*bits) else {
+            continue;
+        };
+        if world.get::<Position>(entity).is_none() {
+            continue;
+        }
+        if world.get::<Velocity>(entity).is_none() {
+            world
+                .entity_mut(entity)
+                .insert(Velocity { vx: 0.0, vy: 0.0 });
+        }
+        world.entity_mut(entity).insert(MoveTarget { x: tx, y: ty });
+    }
 }
 
 /// Run one simulation tick with the given delta time (seconds).

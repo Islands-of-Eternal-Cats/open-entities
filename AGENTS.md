@@ -264,6 +264,8 @@ Intended behavior for the js-app canvas (selection + orders), including touch wi
 
 Rationale: one tap on empty space cannot mean both “deselect” and “move”; with an active selection, **move is the primary action**; deselect is explicit (keyboard or HUD). Aligns with common mobile RTS patterns.
 
+**Implementation:** `js-app` — `onMoveOrder` in `pixi-canvas.ts` → `moveSelectedTo` in `core/wasm.ts` → worker `move_to` → `JsWorld::order_move_to`. ECS: `MoveTarget` + `seek_move_target_system` (chained before `move_system`).
+
 ---
 
 ## Testing

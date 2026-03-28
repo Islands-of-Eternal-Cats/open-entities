@@ -50,6 +50,8 @@ declare module "open-entities-wasm" {
      */
     spawn_at(typeName: string, x: number, y: number): void;
     tick(dt: number): void;
+    /** Move-to order for snapshot id strings (decimal `Entity::to_bits()`). */
+    order_move_to(entityIds: string[], tx: number, ty: number): void;
     /** Entity id is string to preserve u64 precision (JS Number safe only to 2^53-1). */
     get_entities(): Array<{
       id: string;

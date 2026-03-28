@@ -1,7 +1,8 @@
 /**
  * PixiJS canvas visualization: renders entities as circles on a 2D canvas.
  * World coordinates (from WASM) are scaled to canvas size.
- * Drag a rectangle to select multiple units (temporary selection group); Shift adds to selection.
+ * Drag a rectangle to select multiple units; Shift adds to selection.
+ * Tap empty ground with selection issues a move order; Esc / clear button clears selection.
  */
 import { Application, Container, Graphics } from "pixi.js";
 import type { EntitySnapshot } from "../core/types";
@@ -10,6 +11,7 @@ import {
   CANVAS_WIDTH,
   ENTITY_RADIUS_PX,
   clientToCanvas,
+  screenToWorld,
   worldToScreen,
 } from "./coords";
 import { entityIdAtScreenPoint, entityIdsInScreenMarquee } from "./selection-logic";
@@ -33,6 +35,11 @@ function makeCircle(g: Graphics, color: number): void {
 export type PixiCanvasOptions = {
   /** Called when the temporary selection set changes (marquee or click). */
   onSelectionChange?: (selectedIds: ReadonlySet<string>) => void;
+  /**
+   * Tap/click on empty ground while at least one unit is selected: world-space move order.
+   * Selection is not cleared; use Esc / UI to deselect.
+   */
+  onMoveOrder?: (worldX: number, worldY: number) => void | Promise<void>;
 };
 
 /**
@@ -47,6 +54,7 @@ export async function initPixiCanvas(
   clearSelection: () => void;
 }> {
   const onSelectionChange = options?.onSelectionChange;
+  const onMoveOrder = options?.onMoveOrder;
 
   const application = new Application();
   await application.init({
@@ -158,9 +166,9 @@ export async function initPixiCanvas(
   ): void {
     const hit = entityIdAtScreenPoint(lastEntities, sx, sy);
     if (hit === null) {
-      if (!shiftKey) {
-        selectedIds.clear();
-        notifySelection();
+      if (selectedIds.size > 0) {
+        const { x: wx, y: wy } = screenToWorld(sx, sy);
+        void Promise.resolve(onMoveOrder?.(wx, wy));
       }
       return;
     }

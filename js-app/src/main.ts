@@ -1,7 +1,13 @@
 /**
  * Entry point: init WASM core in worker, wire UI and visualization.
  */
-import { initWasm, isWasmReady, tick, spawnRandomAt } from "./core/wasm";
+import {
+  initWasm,
+  isWasmReady,
+  moveSelectedTo,
+  tick,
+  spawnRandomAt,
+} from "./core/wasm";
 import type { EntitySnapshot } from "./core/types";
 import { renderEntities } from "./visualization/render";
 import { initPixiCanvas } from "./visualization/pixi-canvas";
@@ -11,6 +17,9 @@ const selectionStatusEl = document.getElementById("selection-status");
 const entityListEl = document.getElementById("entity-list");
 const canvasContainer = document.getElementById("canvas-container");
 const addEntityBtn = document.getElementById("add-entity");
+const clearSelectionBtn = document.getElementById(
+  "clear-selection"
+) as HTMLButtonElement | null;
 const entityTypeSelect = document.getElementById("entity-type") as HTMLSelectElement | null;
 
 let updatePixiEntities: ((entities: EntitySnapshot[]) => void) | null = null;
@@ -66,9 +75,32 @@ async function run(): Promise<void> {
                 ? "Selection: none"
                 : `Selection: ${ids.size} unit(s)`;
           }
+          if (clearSelectionBtn) {
+            clearSelectionBtn.hidden = ids.size === 0;
+            clearSelectionBtn.disabled = ids.size === 0;
+          }
+        },
+        onMoveOrder: async (wx, wy) => {
+          if (!isWasmReady()) return;
+          const ids = [...pixi.getSelectedIds()];
+          if (ids.length === 0) return;
+          try {
+            const entities = await moveSelectedTo(ids, wx, wy);
+            render(entities);
+          } catch (e) {
+            console.error("moveSelectedTo error:", e);
+          }
         },
       });
       updatePixiEntities = pixi.updateEntities;
+
+      const clearSelection = (): void => {
+        pixi.clearSelection();
+      };
+      window.addEventListener("keydown", (ev) => {
+        if (ev.key === "Escape") clearSelection();
+      });
+      clearSelectionBtn?.addEventListener("click", clearSelection);
     }
     await createEntity();
     const entities = await tick(0);

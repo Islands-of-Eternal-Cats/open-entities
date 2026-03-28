@@ -54,6 +54,19 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
       post({ type: "entities", entities });
       return;
     }
+
+    if (msg.type === "move_to") {
+      try {
+        world.order_move_to(msg.entityIds, msg.wx, msg.wy);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        post({ type: "error", message });
+        return;
+      }
+      const entities: EntitySnapshot[] = Array.from(world.get_entities());
+      post({ type: "entities", entities });
+      return;
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     post({ type: "error", message });

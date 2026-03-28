@@ -23,7 +23,7 @@ pub mod systems;
 pub mod world;
 
 pub use bevy_ecs::prelude::{Schedule, World};
-pub use components::{Position, Velocity};
+pub use components::{MoveTarget, Position, Velocity};
 pub use entity_loader::{
     EntityDefinitions, EntityDefinitionsFile, EntityTemplate, LoadError, SpawnError,
     load_and_spawn_all_from_path, spawn_entity_by_type, spawn_entity_by_type_at_in_world,
@@ -34,8 +34,8 @@ pub use systems::{
     print_position_system,
 };
 pub use world::{
-    create_empty_world, create_world_with_definitions, get_entities, run_tick, setup_world,
-    setup_world_with_yaml,
+    create_empty_world, create_world_with_definitions, get_entities, order_move_entities_to,
+    run_tick, setup_world, setup_world_with_yaml,
 };
 
 #[cfg(test)]
@@ -262,6 +262,24 @@ entities:
             .expect("spawned static_only should have Position");
         assert_eq!(pos.x, 7.0);
         assert_eq!(pos.y, 9.0);
+    }
+
+    #[test]
+    fn test_order_move_entities_to_adds_velocity_and_seeks_target() {
+        let yaml = r#"
+entities:
+  static_only:
+    position: { x: 0.0, y: 0.0 }
+"#;
+        let (mut world, mut schedule) = create_world_with_definitions(yaml).unwrap();
+        let spawned = spawn_entity_by_type_in_world(&mut world, "static_only").unwrap();
+        let bits = spawned.to_bits();
+        order_move_entities_to(&mut world, &[bits], 100.0, 0.0);
+        assert!(world.get::<Velocity>(spawned).is_some());
+        assert!(world.get::<MoveTarget>(spawned).is_some());
+        run_tick(&mut world, &mut schedule, 0.05);
+        let pos = world.get::<Position>(spawned).unwrap();
+        assert!(pos.x > 0.0, "expected movement toward x=100, got {:?}", pos);
     }
 
     #[test]
