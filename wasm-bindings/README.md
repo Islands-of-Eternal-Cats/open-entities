@@ -19,7 +19,7 @@ const entitiesYaml = `
 entities:
   mover:
     position: { x: 0.0, y: 0.0 }
-    velocity: { vx: 1.0, vy: 2.0 }
+    max_speed: 45.0
   static_obstacle:
     position: { x: 10.0, y: 10.0 }
 `;
@@ -69,7 +69,7 @@ const entities = Array.from(world.get_entities());
   - Если `typeName` неизвестен — бросает исключение.
 - `spawn_at(typeName: string, x: number, y: number): void`
   - Создаёт сущность по имени типа, но с `Position = {x, y}` из аргументов.
-  - Компонент `Velocity` **не создаётся** (даже если он есть в YAML для этого типа).
+  - Компонент `Velocity` **не создаётся** (появится при приказе движения); для подвижных типов (`max_speed` > 0) лимит `MaxSpeed` из YAML всё равно задаётся.
 - `tick(dt: number): void`
   - Запускает один тик симуляции с delta time в секундах.
 - `get_entities(): Array<{ id, pos, velocity }>`
@@ -114,10 +114,10 @@ const entities = Array.from(world.get_entities());
 entities:
   mover:
     position: { x: 0.0, y: 0.0 }
-    velocity: { vx: 1.0, vy: 2.0 }
+    max_speed: 45.0
   static_obstacle:
     position: { x: 10.0, y: 10.0 }
 ```
 
-`position` и `velocity` опциональны, поэтому типы могут иметь разный набор компонентов.
+`max_speed` > 0 помечает подвижный тип; без поля или 0 — статика (только позиция).
 

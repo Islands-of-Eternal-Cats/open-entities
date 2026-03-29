@@ -186,16 +186,15 @@ schedule.run(&mut world);
 
 Сущности можно загружать из YAML по имени типа.
 
-**Формат** (`assets/entities.yaml`): корневой ключ `entities`, внутри — именованные типы; у каждого типа опционально `position` и `velocity`. Отсутствие поля = у сущности нет этого компонента.
+**Формат** (`assets/entities.yaml`): корневой ключ `entities`, внутри — именованные типы; у каждого типа опционально `position` и **`max_speed`**. Подвижность: только `max_speed` > 0 (юнит/с); иначе — статика без `Velocity`/`MaxSpeed` в ECS.
 
 ```yaml
 entities:
   mover:
     position: { x: 0.0, y: 0.0 }
-    velocity: { vx: 1.0, vy: 2.0 }
+    max_speed: 45.0
   static_obstacle:
     position: { x: 10.0, y: 10.0 }
-    # без velocity — только Position
 ```
 
 **API:**

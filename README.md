@@ -98,13 +98,13 @@ fn main() {
 ### YAML Entity Definitions
 
 YAML root key must be `entities`. Each key inside `entities` is a type name.
-`position` and `velocity` are optional, so different types can have different component sets.
+`position` is usually set. **`max_speed`** (units per second) defines whether the type can move: value `> 0` means a movable unit (starts with zero velocity; cap used for seek / move orders). Omitted, zero, or negative means a static entity (position only).
 
 ```yaml
 entities:
   mover:
     position: { x: 0.0, y: 0.0 }
-    velocity: { vx: 1.0, vy: 2.0 }
+    max_speed: 45.0
   static_obstacle:
     position: { x: 10.0, y: 10.0 }
 ```

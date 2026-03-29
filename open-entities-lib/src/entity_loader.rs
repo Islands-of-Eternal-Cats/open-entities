@@ -1,20 +1,29 @@
 //! Загрузка описаний сущностей из YAML и создание сущностей в ECS по имени типа.
 //!
-//! Компоненты заданы заранее (Position, Velocity); поля YAML маппятся на них.
-//! У каждого типа сущности может быть свой набор компонентов.
+//! Подвижность типа задаётся только полем **`max_speed`**: значение `> 0` — юнит может двигаться
+//! ([`Velocity`] при спавне — нулевая, лимит скорости — [`MaxSpeed`]); иначе сущность статична
+//! (только [`Position`], без [`Velocity`]/[`MaxSpeed`]). [`EntityTemplate`] с `#[serde(default)]`:
+//! допустима пустая карта `{}`.
 
-use crate::components::{Position, Velocity};
+use crate::components::{MaxSpeed, Position, Velocity};
 use bevy_ecs::prelude::*;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-/// Шаблон одной сущности: какие компоненты и с какими значениями.
-/// Отсутствующие поля означают отсутствие компонента у этого типа.
-#[derive(Debug, Clone, Deserialize)]
+/// Шаблон одной сущности: позиция и лимит скорости.
+/// `max_speed` отсутствует, ноль или `≤ 0` — тип неподвижен; `> 0` — подвижный тип.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
 pub struct EntityTemplate {
     pub position: Option<Position>,
-    pub velocity: Option<Velocity>,
+    /// Скорость движения (юнит/с). `> 0` — юнит подвижен и получает [`MaxSpeed`]; иначе статика.
+    pub max_speed: Option<f32>,
+}
+
+/// `true`, если в YAML задан положительный `max_speed` (тип может двигаться).
+pub fn is_movable(template: &EntityTemplate) -> bool {
+    matches!(template.max_speed, Some(s) if s > 0.0)
 }
 
 /// Корневая структура YAML-файла: именованные типы сущностей.
@@ -140,7 +149,7 @@ fn spawn_from_template_in_world(
     world: &mut World,
     template: EntityTemplate,
     position_override: Option<Position>,
-    include_velocity: bool,
+    include_initial_velocity: bool,
 ) -> Entity {
     let mut entity = world.spawn_empty();
 
@@ -149,16 +158,15 @@ fn spawn_from_template_in_world(
         entity.insert(p);
     }
 
-    // Velocity: optional and can be suppressed by caller.
-    if include_velocity {
-        if let Some(v) = template.velocity {
-            entity.insert(v);
+    if is_movable(&template) {
+        let cap = template
+            .max_speed
+            .expect("is_movable implies positive max_speed");
+        entity.insert(MaxSpeed(cap));
+        if include_initial_velocity {
+            entity.insert(Velocity { vx: 0.0, vy: 0.0 });
         }
     }
-
-    // IMPORTANT:
-    // When new YAML-mapped components are added to EntityTemplate in the future,
-    // insert them here so all spawn variants pick them up automatically.
 
     entity.id()
 }
@@ -181,8 +189,12 @@ pub fn spawn_entity_by_type(
     if let Some(p) = &template.position {
         entity.insert(*p);
     }
-    if let Some(v) = &template.velocity {
-        entity.insert(*v);
+    if is_movable(template) {
+        let cap = template
+            .max_speed
+            .expect("is_movable implies positive max_speed");
+        entity.insert(MaxSpeed(cap));
+        entity.insert(Velocity { vx: 0.0, vy: 0.0 });
     }
 
     Ok(entity.id())
@@ -208,9 +220,8 @@ pub fn spawn_entity_by_type_in_world(
 
 /// Create one entity by type name at the given position, using `EntityDefinitions` resource in the world.
 ///
-/// This is intended for host-controlled spawning (e.g. from WASM/JS) where the caller wants to choose
-/// the spawn coordinates. Per requirement, this spawn variant does **not** create a `Velocity`
-/// component for the spawned entity (even if the YAML template defines one).
+/// Host-controlled spawn (e.g. WASM/JS). Подвижные типы (`max_speed` > 0) получают [`MaxSpeed`],
+/// но без начальной [`Velocity`] — она появится при приказе движения.
 pub fn spawn_entity_by_type_at_in_world(
     world: &mut World,
     type_name: &str,

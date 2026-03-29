@@ -2,7 +2,7 @@
 //!
 //! A library for working with entities using the **bevy_ecs** framework (no bevy_app).
 //!
-//! - **Components**: Data attached to entities (Position, Velocity)
+//! - **Components**: Data attached to entities (Position, Velocity, MaxSpeed, …)
 //! - **Systems**: Functions that operate on components
 //! - **Entities**: Unique objects in the world
 //!
@@ -23,9 +23,9 @@ pub mod systems;
 pub mod world;
 
 pub use bevy_ecs::prelude::{Schedule, World};
-pub use components::{MoveTarget, Position, Velocity};
+pub use components::{DEFAULT_MAX_SPEED, MaxSpeed, MoveTarget, Position, Velocity};
 pub use entity_loader::{
-    EntityDefinitions, EntityDefinitionsFile, EntityTemplate, LoadError, SpawnError,
+    EntityDefinitions, EntityDefinitionsFile, EntityTemplate, LoadError, SpawnError, is_movable,
     load_and_spawn_all_from_path, spawn_entity_by_type, spawn_entity_by_type_at_in_world,
     spawn_entity_by_type_in_world,
 };
@@ -57,7 +57,7 @@ mod tests {
 entities:
   mobile:
     position: { x: 5.0, y: 5.0 }
-    velocity: { vx: 2.0, vy: 3.0 }
+    max_speed: 12.0
 "#;
         let definitions = EntityDefinitions::load_from_str(yaml).unwrap();
         let mut world = World::new();
@@ -96,6 +96,10 @@ entities:
             assert_eq!(pos.x, 5.0);
             assert_eq!(pos.y, 5.0);
         }
+        let vel = world.get::<Velocity>(entity).unwrap();
+        assert_eq!(vel.vx, 0.0);
+        assert_eq!(vel.vy, 0.0);
+        assert_eq!(world.get::<MaxSpeed>(entity).unwrap().0, 12.0);
     }
 
     #[test]
@@ -104,7 +108,7 @@ entities:
 entities:
   mover:
     position: { x: 1.0, y: 2.0 }
-    velocity: { vx: 0.5, vy: 0.5 }
+    max_speed: 1.0
   static:
     position: { x: 10.0, y: 10.0 }
 "#;
@@ -137,8 +141,8 @@ entities:
         assert_eq!(without_vel.len(), 1);
 
         let (pos, _) = with_vel[0];
-        assert_eq!(pos.x, 1.5); // 1.0 + 0.5 after one move_system tick
-        assert_eq!(pos.y, 2.5);
+        assert_eq!(pos.x, 1.0);
+        assert_eq!(pos.y, 2.0);
     }
 
     #[test]
@@ -149,10 +153,10 @@ entities:
 entities:
   mover:
     position: { x: 0.0, y: 0.0 }
-    velocity: { vx: 1.0, vy: 2.0 }
+    max_speed: 45.0
   another_mover:
     position: { x: 5.0, y: 5.0 }
-    velocity: { vx: -0.5, vy: 0.5 }
+    max_speed: 30.0
   static_obstacle:
     position: { x: 10.0, y: 10.0 }
 "#;
@@ -171,19 +175,19 @@ entities:
             "YAML defines mover, another_mover, static_obstacle"
         );
 
-        update.run(&mut world); // one tick: movers move
+        update.run(&mut world); // one tick: zero initial velocity, positions unchanged
         let _ = std::fs::remove_file(&path);
         let positions: Vec<_> = query.iter(&world).collect();
         assert_eq!(positions.len(), 3);
         let pairs: Vec<(f32, f32)> = positions.iter().map(|p| (p.x, p.y)).collect();
         assert!(
-            pairs.contains(&(1.0, 2.0)),
-            "mover should be at (1.0, 2.0) after one tick, got pairs: {:?}",
+            pairs.contains(&(0.0, 0.0)),
+            "mover should stay at (0,0) with zero initial velocity, got pairs: {:?}",
             pairs
         );
         assert!(
-            pairs.contains(&(4.5, 5.5)),
-            "another_mover should be at (4.5, 5.5) after one tick, got pairs: {:?}",
+            pairs.contains(&(5.0, 5.0)),
+            "another_mover should stay at (5,5), got pairs: {:?}",
             pairs
         );
         assert!(
@@ -221,6 +225,23 @@ not_entities:
     fn test_empty_entities_map_is_valid_and_empty() {
         let defs = EntityDefinitions::load_from_str("entities: {}").unwrap();
         assert_eq!(defs.type_names().count(), 0);
+    }
+
+    #[test]
+    fn test_static_type_without_positive_max_speed_has_no_velocity() {
+        let yaml = r#"
+entities:
+  wall:
+    position: { x: 3.0, y: 4.0 }
+"#;
+        let defs = EntityDefinitions::load_from_str(yaml).unwrap();
+        assert!(!is_movable(defs.get("wall").unwrap()));
+        let mut world = World::new();
+        world.insert_resource(defs);
+        let e = spawn_entity_by_type_in_world(&mut world, "wall").unwrap();
+        assert!(world.get::<Velocity>(e).is_none());
+        assert!(world.get::<Position>(e).is_some());
+        assert!(world.get::<MaxSpeed>(e).is_none());
     }
 
     #[test]
@@ -301,8 +322,10 @@ entities:
 entities:
   u1:
     position: { x: 0.0, y: 0.0 }
+    max_speed: 10.0
   u2:
     position: { x: 0.0, y: 0.0 }
+    max_speed: 10.0
 "#;
         let (mut world, _schedule) = create_world_with_definitions(yaml).unwrap();
         let e1 = spawn_entity_by_type_in_world(&mut world, "u1").unwrap();
@@ -319,12 +342,29 @@ entities:
     }
 
     #[test]
+    fn test_max_speed_from_yaml_on_spawn() {
+        let yaml = r#"
+entities:
+  fast:
+    position: { x: 0.0, y: 0.0 }
+    max_speed: 100.0
+  default_speed:
+    position: { x: 1.0, y: 1.0 }
+"#;
+        let (mut world, _) = create_world_with_definitions(yaml).unwrap();
+        let fast = spawn_entity_by_type_in_world(&mut world, "fast").unwrap();
+        let default_speed = spawn_entity_by_type_in_world(&mut world, "default_speed").unwrap();
+        assert_eq!(world.get::<MaxSpeed>(fast).unwrap().0, 100.0);
+        assert!(world.get::<MaxSpeed>(default_speed).is_none());
+    }
+
+    #[test]
     fn test_spawn_at_overrides_position_and_does_not_create_velocity() {
         let yaml = r#"
 entities:
   mover:
     position: { x: 1.0, y: 2.0 }
-    velocity: { vx: 0.5, vy: 0.5 }
+    max_speed: 40.0
 "#;
         let (mut world, mut schedule) = create_world_with_definitions(yaml).unwrap();
         let spawned = spawn_entity_by_type_at_in_world(&mut world, "mover", 123.0, 456.0).unwrap();
@@ -338,6 +378,7 @@ entities:
             world.get::<Velocity>(spawned).is_none(),
             "spawn_at must not create Velocity"
         );
+        assert_eq!(world.get::<MaxSpeed>(spawned).unwrap().0, 40.0);
 
         run_tick(&mut world, &mut schedule, 0.016);
         let pos_after = world

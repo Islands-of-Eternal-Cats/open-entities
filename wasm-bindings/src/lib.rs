@@ -131,7 +131,7 @@ impl JsWorld {
     }
 
     /// Spawn an entity by type name at the given position.
-    /// Per requirement, this spawn variant does not create a Velocity component for the spawned entity.
+    /// Does not create Velocity until a move order; movable types still get MaxSpeed from YAML when max_speed > 0.
     #[wasm_bindgen]
     pub fn spawn_at(&mut self, type_name: &str, x: f32, y: f32) -> Result<(), JsValue> {
         spawn_entity_by_type_at_in_world(&mut self.world, type_name, x, y)
