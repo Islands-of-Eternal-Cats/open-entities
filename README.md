@@ -91,7 +91,9 @@ fn main() {
 }
 ```
 
-`setup_world()` returns an empty world with the same update systems (no initial entities). Prefer loading definitions from YAML and spawning by type so every unit type stays data-driven.
+**Spawn policy:** YAML is the source of truth for unit types. Every gameplay entity should be created from a type listed under `entities:`—for example via `setup_world_with_yaml`, `create_world_with_definitions`, or `spawn_entity_by_type` / `spawn_entity_by_type_in_world` after loading definitions. Do not add ad-hoc `world.spawn(...)` for units in shared library setup; keep types and defaults in YAML so balance and composition stay data-driven.
+
+`setup_world()` returns an empty world with the same update systems (no initial entities). Use it together with loaded `EntityDefinitions` and spawn-by-type when you build the world yourself.
 
 ### YAML Entity Definitions
 
