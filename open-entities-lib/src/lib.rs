@@ -2,7 +2,7 @@
 //!
 //! A library for working with entities using the **bevy_ecs** framework (no bevy_app).
 //!
-//! - **Components**: Data attached to entities (Position, Velocity, MaxSpeed, …)
+//! - **Components**: Data attached to entities (Position, Velocity, BaseMoveSpeed, …)
 //! - **Systems**: Functions that operate on components
 //! - **Entities**: Unique objects in the world
 //!
@@ -23,7 +23,7 @@ pub mod systems;
 pub mod world;
 
 pub use bevy_ecs::prelude::{Schedule, World};
-pub use components::{DEFAULT_MAX_SPEED, MaxSpeed, MoveTarget, Position, Velocity};
+pub use components::{BaseMoveSpeed, MoveTarget, Position, Velocity};
 pub use entity_loader::{
     EntityDefinitions, EntityDefinitionsFile, EntityTemplate, LoadError, SpawnError, is_movable,
     load_and_spawn_all_from_path, spawn_entity_by_type, spawn_entity_by_type_at_in_world,
@@ -57,7 +57,7 @@ mod tests {
 entities:
   mobile:
     position: { x: 5.0, y: 5.0 }
-    max_speed: 12.0
+    base_move_speed: 12.0
 "#;
         let definitions = EntityDefinitions::load_from_str(yaml).unwrap();
         let mut world = World::new();
@@ -99,7 +99,7 @@ entities:
         let vel = world.get::<Velocity>(entity).unwrap();
         assert_eq!(vel.vx, 0.0);
         assert_eq!(vel.vy, 0.0);
-        assert_eq!(world.get::<MaxSpeed>(entity).unwrap().0, 12.0);
+        assert_eq!(world.get::<BaseMoveSpeed>(entity).unwrap().0, 12.0);
     }
 
     #[test]
@@ -108,7 +108,7 @@ entities:
 entities:
   mover:
     position: { x: 1.0, y: 2.0 }
-    max_speed: 1.0
+    base_move_speed: 1.0
   static:
     position: { x: 10.0, y: 10.0 }
 "#;
@@ -153,10 +153,10 @@ entities:
 entities:
   mover:
     position: { x: 0.0, y: 0.0 }
-    max_speed: 45.0
+    base_move_speed: 45.0
   another_mover:
     position: { x: 5.0, y: 5.0 }
-    max_speed: 30.0
+    base_move_speed: 30.0
   static_obstacle:
     position: { x: 10.0, y: 10.0 }
 "#;
@@ -228,7 +228,7 @@ not_entities:
     }
 
     #[test]
-    fn test_static_type_without_positive_max_speed_has_no_velocity() {
+    fn test_static_type_without_positive_base_move_speed_has_no_velocity() {
         let yaml = r#"
 entities:
   wall:
@@ -241,7 +241,7 @@ entities:
         let e = spawn_entity_by_type_in_world(&mut world, "wall").unwrap();
         assert!(world.get::<Velocity>(e).is_none());
         assert!(world.get::<Position>(e).is_some());
-        assert!(world.get::<MaxSpeed>(e).is_none());
+        assert!(world.get::<BaseMoveSpeed>(e).is_none());
     }
 
     #[test]
@@ -302,11 +302,12 @@ entities:
     fn test_order_move_entities_to_adds_velocity_and_seeks_target() {
         let yaml = r#"
 entities:
-  static_only:
+  unit:
     position: { x: 0.0, y: 0.0 }
+    base_move_speed: 45.0
 "#;
         let (mut world, mut schedule) = create_world_with_definitions(yaml).unwrap();
-        let spawned = spawn_entity_by_type_in_world(&mut world, "static_only").unwrap();
+        let spawned = spawn_entity_by_type_in_world(&mut world, "unit").unwrap();
         let bits = spawned.to_bits();
         order_move_entities_to(&mut world, &[bits], Position { x: 100.0, y: 0.0 });
         assert!(world.get::<Velocity>(spawned).is_some());
@@ -317,15 +318,29 @@ entities:
     }
 
     #[test]
+    fn test_order_move_skips_entities_without_base_move_speed() {
+        let yaml = r#"
+entities:
+  wall:
+    position: { x: 0.0, y: 0.0 }
+"#;
+        let (mut world, _schedule) = create_world_with_definitions(yaml).unwrap();
+        let wall = spawn_entity_by_type_in_world(&mut world, "wall").unwrap();
+        order_move_entities_to(&mut world, &[wall.to_bits()], Position { x: 100.0, y: 0.0 });
+        assert!(world.get::<Velocity>(wall).is_none());
+        assert!(world.get::<MoveTarget>(wall).is_none());
+    }
+
+    #[test]
     fn test_order_move_entities_to_spreads_two_targets_on_grid() {
         let yaml = r#"
 entities:
   u1:
     position: { x: 0.0, y: 0.0 }
-    max_speed: 10.0
+    base_move_speed: 10.0
   u2:
     position: { x: 0.0, y: 0.0 }
-    max_speed: 10.0
+    base_move_speed: 10.0
 "#;
         let (mut world, _schedule) = create_world_with_definitions(yaml).unwrap();
         let e1 = spawn_entity_by_type_in_world(&mut world, "u1").unwrap();
@@ -342,20 +357,20 @@ entities:
     }
 
     #[test]
-    fn test_max_speed_from_yaml_on_spawn() {
+    fn test_base_move_speed_from_yaml_on_spawn() {
         let yaml = r#"
 entities:
   fast:
     position: { x: 0.0, y: 0.0 }
-    max_speed: 100.0
+    base_move_speed: 100.0
   default_speed:
     position: { x: 1.0, y: 1.0 }
 "#;
         let (mut world, _) = create_world_with_definitions(yaml).unwrap();
         let fast = spawn_entity_by_type_in_world(&mut world, "fast").unwrap();
         let default_speed = spawn_entity_by_type_in_world(&mut world, "default_speed").unwrap();
-        assert_eq!(world.get::<MaxSpeed>(fast).unwrap().0, 100.0);
-        assert!(world.get::<MaxSpeed>(default_speed).is_none());
+        assert_eq!(world.get::<BaseMoveSpeed>(fast).unwrap().0, 100.0);
+        assert!(world.get::<BaseMoveSpeed>(default_speed).is_none());
     }
 
     #[test]
@@ -364,7 +379,7 @@ entities:
 entities:
   mover:
     position: { x: 1.0, y: 2.0 }
-    max_speed: 40.0
+    base_move_speed: 40.0
 "#;
         let (mut world, mut schedule) = create_world_with_definitions(yaml).unwrap();
         let spawned = spawn_entity_by_type_at_in_world(&mut world, "mover", 123.0, 456.0).unwrap();
@@ -378,7 +393,7 @@ entities:
             world.get::<Velocity>(spawned).is_none(),
             "spawn_at must not create Velocity"
         );
-        assert_eq!(world.get::<MaxSpeed>(spawned).unwrap().0, 40.0);
+        assert_eq!(world.get::<BaseMoveSpeed>(spawned).unwrap().0, 40.0);
 
         run_tick(&mut world, &mut schedule, 0.016);
         let pos_after = world

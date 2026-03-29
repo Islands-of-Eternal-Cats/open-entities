@@ -1,15 +1,15 @@
 # Описания типов сущностей для загрузки в ECS.
 # Имя типа (mover, static_obstacle) используется для создания сущности по имени.
-# Подвижность: только max_speed > 0 (юнит/с). Без поля или 0 — статика (только position).
+# Подвижность: только base_move_speed > 0 (юнит/с). Без поля или 0 — статика (только position).
 
 entities:
   mover:
     position: { x: 0.0, y: 0.0 }
-    max_speed: 45.0
+    base_move_speed: 45.0
 
   another_mover:
     position: { x: 5.0, y: 5.0 }
-    max_speed: 30.0
+    base_move_speed: 30.0
 
   static_obstacle:
     position: { x: 10.0, y: 10.0 }

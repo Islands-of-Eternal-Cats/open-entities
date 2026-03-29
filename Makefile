@@ -1,6 +1,6 @@
 # Makefile for open-entities Rust Workspace
 
-.PHONY: all build test clippy fmt run-wasm-todo clean check docs js-app
+.PHONY: all build test full-check clippy fmt run-wasm-todo clean check docs js-app
 
 # По умолчанию - сборка всего
 all: build
@@ -16,6 +16,11 @@ release:
 # Запуск тестов
 test:
 	cargo test
+
+# Rust-тесты + проверка TypeScript (tsc) + vitest (нужны зависимости: cd js-app && npm ci)
+full-check: test
+	cd js-app && npm run typecheck
+	cd js-app && npm run test:run
 
 # Статический анализ с Clippy
 clippy:

@@ -1,6 +1,6 @@
 //! World and schedule setup: create ECS world and run startup/update schedules.
 
-use crate::components::{MoveTarget, Position, Velocity};
+use crate::components::{BaseMoveSpeed, MoveTarget, Position, Velocity};
 use crate::entity_loader::{EntityDefinitions, LoadError};
 use crate::systems::{
     DeltaTime, EntityDefinitionsPath, load_entities_from_yaml_system, move_system,
@@ -82,8 +82,10 @@ fn move_target_for_group_index(center: Position, index: usize, count: usize) -> 
 }
 
 /// Issue a move-to-world-point order for entities identified by `Entity::to_bits()` (as in snapshots).
-/// Skips unknown ids, invalid bits, or entities without [`Position`].
-/// Entities without [`Velocity`] receive zero velocity so seek + integration can run.
+/// Skips unknown ids, invalid bits, entities without [`Position`], or without [`BaseMoveSpeed`]
+/// (immobile entities cannot receive a move order).
+///
+/// Entities that pass the filter but lack [`Velocity`] get zero velocity so seek + integration can run.
 ///
 /// For more than one valid id, destinations are placed on a **grid** around `target` so units do not
 /// share the same [`MoveTarget`] point.
@@ -94,6 +96,9 @@ pub fn order_move_entities_to(world: &mut World, id_bits: &[u64], target: Positi
             continue;
         };
         if world.get::<Position>(entity).is_none() {
+            continue;
+        }
+        if world.get::<BaseMoveSpeed>(entity).is_none() {
             continue;
         }
         entities.push(entity);

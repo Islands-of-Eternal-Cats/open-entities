@@ -5,8 +5,8 @@ A library for working with entities using the **bevy_ecs** framework, with WebAs
 ## Features
 
 - Entity-Component-System (ECS) architecture based on `bevy_ecs`
-- Components: `Position`, `Velocity`
-- Systems: `move_system`, `print_position_system`
+- Components: `Position`, `Velocity`, `BaseMoveSpeed`, `MoveTarget`, …
+- Systems: `seek_move_target_system`, `move_system`, `print_position_system`, …
 - WebAssembly support via `wasm-bindings`
 
 ## Project Structure
@@ -98,13 +98,13 @@ fn main() {
 ### YAML Entity Definitions
 
 YAML root key must be `entities`. Each key inside `entities` is a type name.
-`position` is usually set. **`max_speed`** (units per second) defines whether the type can move: value `> 0` means a movable unit (starts with zero velocity; cap used for seek / move orders). Omitted, zero, or negative means a static entity (position only).
+`position` is usually set. **`base_move_speed`** (units per second) defines whether the type can move: value `> 0` means a movable unit (starts with zero velocity; used for seek / move orders). Omitted, zero, or negative means a static entity (position only).
 
 ```yaml
 entities:
   mover:
     position: { x: 0.0, y: 0.0 }
-    max_speed: 45.0
+    base_move_speed: 45.0
   static_obstacle:
     position: { x: 10.0, y: 10.0 }
 ```

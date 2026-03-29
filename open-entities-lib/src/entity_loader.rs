@@ -1,29 +1,29 @@
 //! Загрузка описаний сущностей из YAML и создание сущностей в ECS по имени типа.
 //!
-//! Подвижность типа задаётся только полем **`max_speed`**: значение `> 0` — юнит может двигаться
-//! ([`Velocity`] при спавне — нулевая, лимит скорости — [`MaxSpeed`]); иначе сущность статична
-//! (только [`Position`], без [`Velocity`]/[`MaxSpeed`]). [`EntityTemplate`] с `#[serde(default)]`:
+//! Подвижность типа задаётся только полем **`base_move_speed`**: значение `> 0` — юнит может двигаться
+//! ([`Velocity`] при спавне — нулевая, [`BaseMoveSpeed`] — из шаблона); иначе сущность статична
+//! (только [`Position`], без [`Velocity`]/[`BaseMoveSpeed`]). [`EntityTemplate`] с `#[serde(default)]`:
 //! допустима пустая карта `{}`.
 
-use crate::components::{MaxSpeed, Position, Velocity};
+use crate::components::{BaseMoveSpeed, Position, Velocity};
 use bevy_ecs::prelude::*;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-/// Шаблон одной сущности: позиция и лимит скорости.
-/// `max_speed` отсутствует, ноль или `≤ 0` — тип неподвижен; `> 0` — подвижный тип.
+/// Шаблон одной сущности: позиция и базовая скорость движения.
+/// `base_move_speed` отсутствует, ноль или `≤ 0` — тип неподвижен; `> 0` — подвижный тип.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct EntityTemplate {
     pub position: Option<Position>,
-    /// Скорость движения (юнит/с). `> 0` — юнит подвижен и получает [`MaxSpeed`]; иначе статика.
-    pub max_speed: Option<f32>,
+    /// Базовая скорость движения (юнит/с). `> 0` — юнит подвижен и получает [`BaseMoveSpeed`]; иначе статика.
+    pub base_move_speed: Option<f32>,
 }
 
-/// `true`, если в YAML задан положительный `max_speed` (тип может двигаться).
+/// `true`, если в YAML задан положительный `base_move_speed` (тип может двигаться).
 pub fn is_movable(template: &EntityTemplate) -> bool {
-    matches!(template.max_speed, Some(s) if s > 0.0)
+    matches!(template.base_move_speed, Some(s) if s > 0.0)
 }
 
 /// Корневая структура YAML-файла: именованные типы сущностей.
@@ -160,9 +160,9 @@ fn spawn_from_template_in_world(
 
     if is_movable(&template) {
         let cap = template
-            .max_speed
-            .expect("is_movable implies positive max_speed");
-        entity.insert(MaxSpeed(cap));
+            .base_move_speed
+            .expect("is_movable implies positive base_move_speed");
+        entity.insert(BaseMoveSpeed(cap));
         if include_initial_velocity {
             entity.insert(Velocity { vx: 0.0, vy: 0.0 });
         }
@@ -191,9 +191,9 @@ pub fn spawn_entity_by_type(
     }
     if is_movable(template) {
         let cap = template
-            .max_speed
-            .expect("is_movable implies positive max_speed");
-        entity.insert(MaxSpeed(cap));
+            .base_move_speed
+            .expect("is_movable implies positive base_move_speed");
+        entity.insert(BaseMoveSpeed(cap));
         entity.insert(Velocity { vx: 0.0, vy: 0.0 });
     }
 
@@ -220,7 +220,7 @@ pub fn spawn_entity_by_type_in_world(
 
 /// Create one entity by type name at the given position, using `EntityDefinitions` resource in the world.
 ///
-/// Host-controlled spawn (e.g. WASM/JS). Подвижные типы (`max_speed` > 0) получают [`MaxSpeed`],
+/// Host-controlled spawn (e.g. WASM/JS). Подвижные типы (`base_move_speed` > 0) получают [`BaseMoveSpeed`],
 /// но без начальной [`Velocity`] — она появится при приказе движения.
 pub fn spawn_entity_by_type_at_in_world(
     world: &mut World,

@@ -1,21 +1,16 @@
-use crate::components::{DEFAULT_MAX_SPEED, MaxSpeed, MoveTarget, Position, Velocity};
+use crate::components::{BaseMoveSpeed, MoveTarget, Position, Velocity};
 use bevy_ecs::prelude::*;
 
 const STOP_DIST: f32 = 0.75;
 
 /// Steer velocity toward [`MoveTarget`], stop and remove target when close.
+/// Only entities with [`BaseMoveSpeed`] participate (required component).
 pub fn seek_move_target_system(
     mut commands: Commands,
-    mut query: Query<(
-        Entity,
-        &Position,
-        &mut Velocity,
-        &MoveTarget,
-        Option<&MaxSpeed>,
-    )>,
+    mut query: Query<(Entity, &Position, &mut Velocity, &MoveTarget, &BaseMoveSpeed)>,
 ) {
-    for (entity, pos, mut vel, target, max_speed) in &mut query {
-        let speed = max_speed.map(|m| m.0).unwrap_or(DEFAULT_MAX_SPEED);
+    for (entity, pos, mut vel, target, base_move_speed) in &mut query {
+        let speed = base_move_speed.0;
         let dx = target.at.x - pos.x;
         let dy = target.at.y - pos.y;
         let dist_sq = dx * dx + dy * dy;
