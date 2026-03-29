@@ -14,7 +14,7 @@
 
 ## Нативный бинарник (example run_ecs)
 
-Доступен только на ветке ecs-only (пример использует `setup_world()`).
+Доступен только на ветке ecs-only (пример использует `setup_world_with_yaml` с `assets/entities.yaml`).
 
 - **run_ecs:** 936 816 bytes (~914 KB), release.
 

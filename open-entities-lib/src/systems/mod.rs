@@ -1,4 +1,4 @@
-use crate::components::{Position, Velocity};
+use crate::components::Position;
 use crate::entity_loader::load_and_spawn_all_from_path;
 use bevy_ecs::prelude::*;
 use std::path::PathBuf;
@@ -15,14 +15,6 @@ pub fn print_position_system(query: Query<&Position>) {
     for (i, position) in query.iter().enumerate() {
         println!("Entity {}: position = ({}, {})", i, position.x, position.y);
     }
-}
-/// Setup system: spawn some entities
-pub(crate) fn setup_system(mut commands: Commands) {
-    // Spawn first entity with position and velocity
-    commands.spawn((Position { x: 0.0, y: 0.0 }, Velocity { vx: 1.0, vy: 2.0 }));
-
-    // Spawn second entity with only position
-    commands.spawn(Position { x: 10.0, y: 10.0 });
 }
 
 /// Resource: path to YAML file with entity definitions.

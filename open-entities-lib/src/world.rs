@@ -4,27 +4,25 @@ use crate::components::{MoveTarget, Position, Velocity};
 use crate::entity_loader::{EntityDefinitions, LoadError};
 use crate::systems::{
     DeltaTime, EntityDefinitionsPath, load_entities_from_yaml_system, move_system,
-    print_position_system, seek_move_target_system, setup_system,
+    print_position_system, seek_move_target_system,
 };
 use bevy_ecs::prelude::{Entity, IntoScheduleConfigs, World};
 use bevy_ecs::schedule::Schedule;
 use std::path::PathBuf;
 
-/// Initialize the ECS world (hardcoded entities).
+/// Initialize the ECS world with no entities.
+/// Spawn units via [`setup_world_with_yaml`] or [`create_world_with_definitions`] so every unit type
+/// is defined in YAML.
 /// Returns `(World, Schedule)` — run `schedule.run(&mut world)` each tick.
 pub fn setup_world() -> (World, Schedule) {
-    let mut world = World::new();
-    let mut startup = Schedule::default();
-    startup.add_systems(setup_system);
-    startup.run(&mut world);
-
+    let world = World::new();
     let mut update = Schedule::default();
     update.add_systems((seek_move_target_system, move_system, print_position_system).chain());
     (world, update)
 }
 
 /// Initialize the ECS world with entities loaded from a YAML file.
-/// Spawns one entity per type defined in the file; does not run the hardcoded setup_system.
+/// Spawns one entity per type defined in the file.
 /// Returns `(World, Schedule)` — run `schedule.run(&mut world)` each tick.
 pub fn setup_world_with_yaml(path: impl Into<PathBuf>) -> (World, Schedule) {
     let mut world = World::new();

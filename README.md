@@ -80,18 +80,7 @@ make docs
 
 ## Usage Example
 
-The library uses `bevy_ecs` only (no `bevy_app`). You get a `World` and `Schedule` and run the schedule each tick:
-
-```rust
-use open_entities::setup_world;
-
-fn main() {
-    let (mut world, mut schedule) = setup_world();
-    schedule.run(&mut world); // one tick
-}
-```
-
-To load entities from a YAML file instead of hardcoded ones:
+The library uses `bevy_ecs` only (no `bevy_app`). You get a `World` and `Schedule` and run the schedule each tick. Entity types are defined in YAML; `setup_world_with_yaml` loads the file and spawns one entity per type:
 
 ```rust
 use open_entities::setup_world_with_yaml;
@@ -101,6 +90,8 @@ fn main() {
     schedule.run(&mut world);
 }
 ```
+
+`setup_world()` returns an empty world with the same update systems (no initial entities). Prefer loading definitions from YAML and spawning by type so every unit type stays data-driven.
 
 ### YAML Entity Definitions
 

@@ -8,11 +8,11 @@
 //!
 //! # Examples
 //!
-//! ```rust
-//! use open_entities::setup_world;
+//! ```rust,no_run
+//! use open_entities::setup_world_with_yaml;
 //!
 //! fn main() {
-//!     let (mut world, mut schedule) = setup_world();
+//!     let (mut world, mut schedule) = setup_world_with_yaml("assets/entities.yaml");
 //!     schedule.run(&mut world); // one tick
 //! }
 //! ```
@@ -53,31 +53,44 @@ mod tests {
 
     #[test]
     fn test_spawn_entity_and_query() {
+        let yaml = r#"
+entities:
+  mobile:
+    position: { x: 5.0, y: 5.0 }
+    velocity: { vx: 2.0, vy: 3.0 }
+"#;
+        let definitions = EntityDefinitions::load_from_str(yaml).unwrap();
         let mut world = World::new();
+        world.insert_resource(definitions);
 
-        // Spawn an entity with both Position and Velocity
+        let mut startup = Schedule::default();
+        startup.add_systems(|mut commands: Commands, defs: Res<EntityDefinitions>| {
+            let _ = spawn_entity_by_type(&mut commands, &defs, "mobile");
+        });
+        startup.run(&mut world);
+
         let entity = world
-            .spawn((Position { x: 5.0, y: 5.0 }, Velocity { vx: 2.0, vy: 3.0 }))
-            .id();
+            .query::<(Entity, &Velocity)>()
+            .iter(&world)
+            .map(|(e, _)| e)
+            .next()
+            .expect("spawned mobile");
 
-        // Query for entities with Velocity
         {
             let mut query = world.query::<&Velocity>();
             let velocities: Vec<_> = query.iter(&world).collect();
             assert_eq!(velocities.len(), 1);
         }
 
-        // Query for entities with Position but without Velocity
         {
             let mut query = world.query::<(&Position, Entity)>();
             let positions: Vec<_> = query
                 .iter(&world)
-                .filter(|(_, entity)| world.get::<Velocity>(*entity).is_none())
+                .filter(|(_, e)| world.get::<Velocity>(*e).is_none())
                 .collect();
             assert_eq!(positions.len(), 0);
         }
 
-        // Query for specific entity by ID
         {
             let pos = world.get::<Position>(entity).unwrap();
             assert_eq!(pos.x, 5.0);
