@@ -19,9 +19,7 @@ pub fn setup_world() -> (World, Schedule) {
     startup.run(&mut world);
 
     let mut update = Schedule::default();
-    update.add_systems(
-        (seek_move_target_system, move_system, print_position_system).chain(),
-    );
+    update.add_systems((seek_move_target_system, move_system, print_position_system).chain());
     (world, update)
 }
 
@@ -37,9 +35,7 @@ pub fn setup_world_with_yaml(path: impl Into<PathBuf>) -> (World, Schedule) {
     startup.run(&mut world);
 
     let mut update = Schedule::default();
-    update.add_systems(
-        (seek_move_target_system, move_system, print_position_system).chain(),
-    );
+    update.add_systems((seek_move_target_system, move_system, print_position_system).chain());
     (world, update)
 }
 
@@ -64,10 +60,37 @@ pub fn create_world_with_definitions(yaml: &str) -> Result<(World, Schedule), Lo
     Ok((world, update))
 }
 
+/// Cell spacing for the move-destination grid (world units between adjacent slots).
+const MOVE_GROUP_GRID_SPACING: f32 = 5.0;
+
+/// Compute a per-unit destination around `center` so the group does not stack on one point.
+/// Uses a rectangle grid (~`ceil(sqrt(n))` columns) centered on `target`, so extent from the
+/// click grows about **√n** instead of linearly with `n` (as with a single ring).
+fn move_target_for_group_index(center: Position, index: usize, count: usize) -> Position {
+    if count <= 1 {
+        return center;
+    }
+    let cols = (count as f32).sqrt().ceil() as usize;
+    let cols = cols.max(1);
+    let rows = count.div_ceil(cols);
+    let row = index / cols;
+    let col = index % cols;
+    let ox = (col as f32 - (cols.saturating_sub(1) as f32) / 2.0) * MOVE_GROUP_GRID_SPACING;
+    let oy = (row as f32 - (rows.saturating_sub(1) as f32) / 2.0) * MOVE_GROUP_GRID_SPACING;
+    Position {
+        x: center.x + ox,
+        y: center.y + oy,
+    }
+}
+
 /// Issue a move-to-world-point order for entities identified by `Entity::to_bits()` (as in snapshots).
 /// Skips unknown ids, invalid bits, or entities without [`Position`].
 /// Entities without [`Velocity`] receive zero velocity so seek + integration can run.
+///
+/// For more than one valid id, destinations are placed on a **grid** around `target` so units do not
+/// share the same [`MoveTarget`] point.
 pub fn order_move_entities_to(world: &mut World, id_bits: &[u64], target: Position) {
+    let mut entities = Vec::new();
     for bits in id_bits {
         let Some(entity) = Entity::try_from_bits(*bits) else {
             continue;
@@ -75,12 +98,17 @@ pub fn order_move_entities_to(world: &mut World, id_bits: &[u64], target: Positi
         if world.get::<Position>(entity).is_none() {
             continue;
         }
+        entities.push(entity);
+    }
+    let count = entities.len();
+    for (i, entity) in entities.into_iter().enumerate() {
         if world.get::<Velocity>(entity).is_none() {
             world
                 .entity_mut(entity)
                 .insert(Velocity { vx: 0.0, vy: 0.0 });
         }
-        world.entity_mut(entity).insert(MoveTarget { at: target });
+        let at = move_target_for_group_index(target, i, count);
+        world.entity_mut(entity).insert(MoveTarget { at });
     }
 }
 

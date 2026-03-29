@@ -283,6 +283,29 @@ entities:
     }
 
     #[test]
+    fn test_order_move_entities_to_spreads_two_targets_on_grid() {
+        let yaml = r#"
+entities:
+  u1:
+    position: { x: 0.0, y: 0.0 }
+  u2:
+    position: { x: 0.0, y: 0.0 }
+"#;
+        let (mut world, _schedule) = create_world_with_definitions(yaml).unwrap();
+        let e1 = spawn_entity_by_type_in_world(&mut world, "u1").unwrap();
+        let e2 = spawn_entity_by_type_in_world(&mut world, "u2").unwrap();
+        let center = Position { x: 50.0, y: 50.0 };
+        order_move_entities_to(&mut world, &[e1.to_bits(), e2.to_bits()], center);
+        let t1 = world.get::<MoveTarget>(e1).unwrap().at;
+        let t2 = world.get::<MoveTarget>(e2).unwrap().at;
+        assert_ne!(
+            (t1.x, t1.y),
+            (t2.x, t2.y),
+            "two units ordered together should get distinct destinations"
+        );
+    }
+
+    #[test]
     fn test_spawn_at_overrides_position_and_does_not_create_velocity() {
         let yaml = r#"
 entities:
