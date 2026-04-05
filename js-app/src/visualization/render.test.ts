@@ -24,7 +24,8 @@ describe("renderEntities", () => {
 
   it("renders empty list with count 0", () => {
     renderEntities([], container);
-    expect(container.innerHTML).toContain("Count: 0");
+    expect(container.innerHTML).toContain("Forces:");
+    expect(container.innerHTML).toContain(">0<");
     expect(container.querySelectorAll(".entity").length).toBe(0);
   });
 
@@ -41,7 +42,7 @@ describe("renderEntities", () => {
     expect(container.innerHTML).toContain("1.50");
     expect(container.innerHTML).toContain("2.25");
     expect(container.innerHTML).toContain("-0.50");
-    expect(container.innerHTML).toContain("Type: mover");
+    expect(container.innerHTML).toContain("mover ·");
     expect(container.querySelectorAll(".entity").length).toBe(1);
   });
 

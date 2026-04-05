@@ -1,22 +1,31 @@
 /**
  * Shared world ↔ canvas mapping for Pixi visualization.
- * Must stay in sync with canvas dimensions used by the Pixi Application.
+ * Logical size is synced from the Pixi view via `setLogicalCanvasSize` when using `resizeTo`.
  */
 
-export const CANVAS_WIDTH = 640;
-export const CANVAS_HEIGHT = 480;
-/** World extent used for scaling (entities typically live in ~0..100). */
 export const WORLD_SIZE = 120;
 export const ENTITY_RADIUS_PX = 8;
+
+let logicalWidth = 640;
+let logicalHeight = 480;
+
+export function setLogicalCanvasSize(width: number, height: number): void {
+  logicalWidth = Math.max(1, Math.floor(width));
+  logicalHeight = Math.max(1, Math.floor(height));
+}
+
+export function getLogicalCanvasSize(): { width: number; height: number } {
+  return { width: logicalWidth, height: logicalHeight };
+}
 
 export function getScaleAndOffset(): {
   scale: number;
   offsetX: number;
   offsetY: number;
 } {
-  const scale = Math.min(CANVAS_WIDTH, CANVAS_HEIGHT) / WORLD_SIZE;
-  const offsetX = (CANVAS_WIDTH - WORLD_SIZE * scale) / 2;
-  const offsetY = (CANVAS_HEIGHT - WORLD_SIZE * scale) / 2;
+  const scale = Math.min(logicalWidth, logicalHeight) / WORLD_SIZE;
+  const offsetX = (logicalWidth - WORLD_SIZE * scale) / 2;
+  const offsetY = (logicalHeight - WORLD_SIZE * scale) / 2;
   return { scale, offsetX, offsetY };
 }
 
@@ -71,8 +80,7 @@ export function worldPosInAabb(
  * DOM client coordinates → Pixi **screen** space (same as `worldToScreen` / DisplayObject x,y).
  *
  * With `resolution` + `autoDensity`, `canvas.width` is buffer pixels (× DPR), but the stage uses
- * logical size `CANVAS_WIDTH` × `CANVAS_HEIGHT`. Mapping via buffer pixels would be wrong; use the
- * visible rect normalized to logical dimensions.
+ * logical size. Map via the visible rect normalized to logical dimensions.
  */
 export function clientToCanvas(
   canvas: HTMLCanvasElement,
@@ -80,8 +88,9 @@ export function clientToCanvas(
   clientY: number
 ): { x: number; y: number } {
   const rect = canvas.getBoundingClientRect();
+  const { width, height } = getLogicalCanvasSize();
   return {
-    x: ((clientX - rect.left) / rect.width) * CANVAS_WIDTH,
-    y: ((clientY - rect.top) / rect.height) * CANVAS_HEIGHT,
+    x: ((clientX - rect.left) / rect.width) * width,
+    y: ((clientY - rect.top) / rect.height) * height,
   };
 }

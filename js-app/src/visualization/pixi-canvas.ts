@@ -7,11 +7,10 @@
 import { Application, Container, Graphics } from "pixi.js";
 import type { EntitySnapshot, Pos } from "../core/types";
 import {
-  CANVAS_HEIGHT,
-  CANVAS_WIDTH,
   ENTITY_RADIUS_PX,
   clientToCanvas,
   screenToWorld,
+  setLogicalCanvasSize,
   worldToScreen,
 } from "./coords";
 import { entityIdAtScreenPoint, entityIdsInScreenMarquee } from "./selection-logic";
@@ -19,6 +18,8 @@ import { entityIdAtScreenPoint, entityIdsInScreenMarquee } from "./selection-log
 const COLORS = [0x3498db, 0xe74c3c, 0x2ecc71, 0xf39c12, 0x9b59b6, 0x1abc9c];
 
 const DRAG_THRESHOLD_PX = 5;
+
+const MOVE_TARGET_MS = 2000;
 
 /** Stable color index from entity id string (for consistent color per entity). */
 function colorIndex(id: string): number {
@@ -52,37 +53,44 @@ export async function initPixiCanvas(
   updateEntities: (entities: EntitySnapshot[]) => void;
   getSelectedIds: () => ReadonlySet<string>;
   clearSelection: () => void;
+  setSelectedIds: (ids: readonly string[]) => void;
+  showMoveTarget: (world: Pos) => void;
 }> {
   const onSelectionChange = options?.onSelectionChange;
   const onMoveOrder = options?.onMoveOrder;
 
   const application = new Application();
   await application.init({
-    width: CANVAS_WIDTH,
-    height: CANVAS_HEIGHT,
+    resizeTo: container,
     backgroundColor: 0x1a1a2e,
     antialias: true,
     resolution: window.devicePixelRatio ?? 1,
     autoDensity: true,
   });
 
+  setLogicalCanvasSize(application.screen.width, application.screen.height);
+
   const canvas = application.canvas as HTMLCanvasElement;
   canvas.style.touchAction = "none";
 
   const entityLayer = new Container();
+  const hoverGraphics = new Graphics();
   const selectionRings = new Graphics();
+  const moveTargetGraphics = new Graphics();
   const marqueeGraphics = new Graphics();
 
   application.stage.addChild(entityLayer);
+  application.stage.addChild(hoverGraphics);
   application.stage.addChild(selectionRings);
+  application.stage.addChild(moveTargetGraphics);
   application.stage.addChild(marqueeGraphics);
 
   const entityGraphics = new Map<string, Graphics>();
 
-  /** Last snapshot from ECS (for hit-testing while dragging). */
   let lastEntities: EntitySnapshot[] = [];
-  /** Temporary selection group (UI only until wired to ECS commands). */
   const selectedIds = new Set<string>();
+  let hoveredId: string | null = null;
+  let moveTargetFlash: { x: number; y: number; until: number } | null = null;
 
   function notifySelection(): void {
     onSelectionChange?.(selectedIds);
@@ -106,10 +114,61 @@ export async function initPixiCanvas(
       if (!entity) continue;
       const { x, y } = worldToScreen(entity.pos.x, entity.pos.y);
       selectionRings
-        .circle(x, y, ENTITY_RADIUS_PX + 4)
-        .stroke({ width: 2, color: 0xf1c40f, alpha: 0.95 });
+        .circle(x, y, ENTITY_RADIUS_PX + 5)
+        .stroke({ width: 2, color: 0xf1c40f, alpha: 0.45 });
+      selectionRings
+        .circle(x, y, ENTITY_RADIUS_PX + 2)
+        .stroke({ width: 2, color: 0xf39c12, alpha: 0.98 });
     }
   }
+
+  function redrawHoverRing(): void {
+    hoverGraphics.clear();
+    if (hoveredId === null) return;
+    const entity = lastEntities.find((e) => e.id === hoveredId);
+    if (!entity) return;
+    const { x, y } = worldToScreen(entity.pos.x, entity.pos.y);
+    hoverGraphics
+      .circle(x, y, ENTITY_RADIUS_PX + 3)
+      .stroke({ width: 1.5, color: 0xffffff, alpha: 0.8 });
+  }
+
+  function drawMoveTarget(): void {
+    moveTargetGraphics.clear();
+    if (moveTargetFlash === null) return;
+    const now = performance.now();
+    if (now >= moveTargetFlash.until) {
+      moveTargetFlash = null;
+      return;
+    }
+    const t = Math.min(1, (moveTargetFlash.until - now) / 450);
+    const alpha = 0.35 + t * 0.55;
+    const { x, y } = worldToScreen(moveTargetFlash.x, moveTargetFlash.y);
+    moveTargetGraphics
+      .circle(x, y, 14)
+      .stroke({ width: 2, color: 0x2ecc71, alpha: alpha * 0.95 });
+    moveTargetGraphics
+      .circle(x, y, 5)
+      .fill({ color: 0x2ecc71, alpha: alpha * 0.5 });
+  }
+
+  function repositionAllGraphics(): void {
+    for (const entity of lastEntities) {
+      const g = entityGraphics.get(entity.id);
+      if (!g) continue;
+      const { x, y } = worldToScreen(entity.pos.x, entity.pos.y);
+      g.x = x;
+      g.y = y;
+    }
+    redrawSelectionRings();
+    redrawHoverRing();
+    drawMoveTarget();
+  }
+
+  application.renderer.on("resize", () => {
+    setLogicalCanvasSize(application.screen.width, application.screen.height);
+    repositionAllGraphics();
+  });
 
   function redrawMarquee(
     x0: number,
@@ -181,6 +240,16 @@ export async function initPixiCanvas(
     notifySelection();
   }
 
+  function updateHoverFromClient(clientX: number, clientY: number): void {
+    if (isDragging) return;
+    const p = clientToCanvas(canvas, clientX, clientY);
+    const hit = entityIdAtScreenPoint(lastEntities, p.x, p.y);
+    if (hit !== hoveredId) {
+      hoveredId = hit;
+      redrawHoverRing();
+    }
+  }
+
   canvas.addEventListener("pointerdown", (ev) => {
     dragStart = clientToCanvas(canvas, ev.clientX, ev.clientY);
     dragCurrent = { ...dragStart };
@@ -193,13 +262,16 @@ export async function initPixiCanvas(
   });
 
   canvas.addEventListener("pointermove", (ev) => {
-    if (!isDragging || dragStart === null) return;
-    dragCurrent = clientToCanvas(canvas, ev.clientX, ev.clientY);
-    const dx = dragCurrent.x - dragStart.x;
-    const dy = dragCurrent.y - dragStart.y;
-    if (Math.hypot(dx, dy) >= DRAG_THRESHOLD_PX) {
-      redrawMarquee(dragStart.x, dragStart.y, dragCurrent.x, dragCurrent.y);
+    if (isDragging && dragStart !== null) {
+      dragCurrent = clientToCanvas(canvas, ev.clientX, ev.clientY);
+      const dx = dragCurrent.x - dragStart.x;
+      const dy = dragCurrent.y - dragStart.y;
+      if (Math.hypot(dx, dy) >= DRAG_THRESHOLD_PX) {
+        redrawMarquee(dragStart.x, dragStart.y, dragCurrent.x, dragCurrent.y);
+      }
+      return;
     }
+    updateHoverFromClient(ev.clientX, ev.clientY);
   });
 
   canvas.addEventListener("pointerup", (ev) => {
@@ -247,6 +319,13 @@ export async function initPixiCanvas(
     }
   });
 
+  canvas.addEventListener("pointerleave", () => {
+    if (hoveredId !== null) {
+      hoveredId = null;
+      redrawHoverRing();
+    }
+  });
+
   container.appendChild(canvas);
 
   function updateEntities(entities: EntitySnapshot[]): void {
@@ -278,6 +357,8 @@ export async function initPixiCanvas(
     });
 
     redrawSelectionRings();
+    redrawHoverRing();
+    drawMoveTarget();
   }
 
   function getSelectedIds(): ReadonlySet<string> {
@@ -290,5 +371,30 @@ export async function initPixiCanvas(
     redrawSelectionRings();
   }
 
-  return { updateEntities, getSelectedIds, clearSelection };
+  function setSelectedIds(ids: readonly string[]): void {
+    const valid = new Set(lastEntities.map((e) => e.id));
+    selectedIds.clear();
+    for (const id of ids) {
+      if (valid.has(id)) selectedIds.add(id);
+    }
+    notifySelection();
+    redrawSelectionRings();
+  }
+
+  function showMoveTarget(world: Pos): void {
+    moveTargetFlash = {
+      x: world.x,
+      y: world.y,
+      until: performance.now() + MOVE_TARGET_MS,
+    };
+    drawMoveTarget();
+  }
+
+  return {
+    updateEntities,
+    getSelectedIds,
+    clearSelection,
+    setSelectedIds,
+    showMoveTarget,
+  };
 }
