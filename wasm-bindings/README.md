@@ -41,7 +41,7 @@ const entities = Array.from(world.get_entities());
 Если вы используете web worker (рекомендуется для UI), посмотрите готовую интеграцию в `js-app`:
 
 - `js-app/src/core/ecs-worker.ts` — загрузка WASM внутри воркера и вызовы `JsWorld`
-- `js-app/src/core/wasm.ts` — API главного потока: `initWasm()`, `tick(dt)`, `spawn(typeName)`
+- `js-app/src/core/wasm.ts` — API главного потока: `initWasm()`, `tick(dt)`, `spawnRandomAt(typeName)`, `moveSelectedTo(...)`
 - `js-app/CORE-API.md` — контракт WASM ↔ TS
 
 ## Публичный API
@@ -64,15 +64,19 @@ const entities = Array.from(world.get_entities());
 - `new JsWorld(entitiesYaml: string)`
   - Парсит YAML и создаёт `World + Schedule`.
   - При ошибке парсинга/формата бросает исключение (как `JsValue`).
-- `spawn(typeName: string): void`
-  - Создаёт одну сущность по имени типа из загруженных `entities` YAML.
+- `spawn(typeName: string, faction?: number | null): void`
+  - Создаёт одну сущность по имени типа из загруженных `entities` YAML (позиция из YAML).
+  - Опциональный `faction`: при передаче вешает компонент `Faction` с этим id.
   - Если `typeName` неизвестен — бросает исключение.
-- `spawn_at(typeName: string, x: number, y: number): void`
+- `spawn_at(typeName: string, x: number, y: number, faction?: number | null): void`
   - Создаёт сущность по имени типа, но с `Position = {x, y}` из аргументов.
   - Компонент `Velocity` **не создаётся** (появится при приказе движения); для подвижных типов (`base_move_speed` > 0) `BaseMoveSpeed` из YAML всё равно задаётся.
+  - Опциональный `faction` — как у `spawn`.
 - `tick(dt: number): void`
   - Запускает один тик симуляции с delta time в секундах.
-- `get_entities(): Array<{ id, pos, velocity }>`
+- `order_move_to(entityIds: string[], target: JsPosition): void`
+  - Приказ движения в точку для списка id (`Entity::to_bits()` в виде десятичных строк). Сам тик не выполняет.
+- `get_entities(): Array<{ id, entityType, pos, velocity, faction }>`
   - Возвращает снапшот для рендера.
 
 #### Формат снапшота `get_entities()`
@@ -82,15 +86,19 @@ const entities = Array.from(world.get_entities());
 ```ts
 {
   id: string,
+  entityType: string,
   pos: { x: number, y: number },
-  velocity: { vx: number, vy: number } | null
+  velocity: { vx: number, vy: number } | null,
+  faction: number | null
 }
 ```
 
 Примечания:
 
 - `id` — **строка** (это `Entity::to_bits()` в виде десятичной строки), чтобы не терять точность u64 в JS (в `Number` безопасны целые только до \(2^{53}-1\)).
+- `entityType` — ключ типа из YAML (`entities:`).
 - `velocity: null` у статичных сущностей (которые имеют `Position`, но не имеют `Velocity`).
+- `faction: null`, если компонента `Faction` нет.
 
 ### Legacy API (опционально)
 

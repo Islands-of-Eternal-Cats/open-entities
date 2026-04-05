@@ -54,7 +54,10 @@ open-entities/
         │   ├── wasm.ts
         │   └── types.ts
         └── visualization/
-            └── render.ts    # Render state to DOM (or future Canvas/WebGL)
+            ├── pixi-canvas.ts   # PixiJS canvas, selection, move orders
+            ├── coords.ts        # Screen ↔ world coordinates
+            ├── selection-logic.ts
+            └── render.ts        # DOM entity list (alongside canvas)
 ```
 
 ---
@@ -141,7 +144,7 @@ js-app написан на **TypeScript**. WASM собирается автом�
 
 | Module | Purpose |
 |--------|---------|
-| `open-entities-lib/src/components/` | ECS Component definitions (Position, Velocity, BaseMoveSpeed, …) |
+| `open-entities-lib/src/components/` | ECS components: `Position`, `Velocity`, `BaseMoveSpeed`, `MoveTarget`, `Faction`, `EntityTypeName`, … |
 | `open-entities-lib/src/entity_loader.rs` | Load entity definitions from YAML, spawn by type name |
 | `open-entities-lib/src/systems/` | ECS systems (`seek_move_target_system`, `move_system`, …) and schedule helpers |
 | `wasm-bindings/src/lib.rs` | TypeScript/JavaScript wrappers via wasm-bindgen |
@@ -221,10 +224,22 @@ entities:
 
 | Export | Type | Description |
 |--------|------|-------------|
-| `wasm_init()` | Function | Initialize panic hook |
-| `JsPosition` | Class | JavaScript wrapper for Position |
-| `JsVelocity` | Class | JavaScript wrapper for Velocity |
-| `move_position(pos, vel)` | Function | Calculate new position |
+| `wasm_init()` | Function | Panic hook (`#[wasm_bindgen(start)]`; usually automatic) |
+| `JsWorld` | Class | ECS world from YAML string: `tick(dt)`, `spawn` / `spawn_at`, `order_move_to`, `get_entities` |
+| `JsPosition` | Class | Wrapper for `Position` (used by `order_move_to` and legacy helpers) |
+| `JsVelocity` | Class | Wrapper for `Velocity` |
+| `move_position(pos, vel)` | Function | One step without `dt` (legacy; prefer `JsWorld.tick`) |
+
+### JsWorld API (primary for games)
+
+```javascript
+const world = new JsWorld(entitiesYamlString);
+world.spawn("mover", optionalFactionU32);           // position from YAML
+world.spawn_at("mover", x, y, optionalFactionU32); // position override
+world.tick(dtSeconds);
+world.order_move_to(["123", ...], new JsPosition(tx, ty));
+const rows = Array.from(world.get_entities());    // { id, entityType, pos, velocity, faction }
+```
 
 ### JsPosition API
 ```javascript
@@ -244,20 +259,22 @@ vel.vy() -> f32
 vel.set_vy(vy: f32)
 ```
 
-### TypeScript Usage Pattern (`js-app/src/main.ts`)
+### TypeScript Usage Pattern
+
+**js-app (worker):** главный поток вызывает `initWasm()` из `core/wasm.ts` (см. `js-app/CORE-API.md`); симуляция в `ecs-worker.ts` через `JsWorld`.
+
+**Прямой импорт пакета (без worker):**
 
 ```typescript
-import init, { JsPosition, JsVelocity, move_position } from "open-entities-wasm";
+import init, { JsWorld } from "open-entities-wasm";
 
-await init();  // Required before using WASM
-
-// Create entities
-const position = new JsPosition(x, y);
-const velocity = new JsVelocity(vx, vy);
-
-// Move entities
-const newPos = move_position(position, velocity);
+await init();
+const world = new JsWorld(entitiesYaml);
+world.spawn_at("mover", 10, 20);
+world.tick(1 / 60);
 ```
+
+**Legacy helpers:** `JsPosition`, `JsVelocity`, `move_position` — как раньше, для простых примеров без полного тика.
 
 ### Selection & move (target UX)
 
@@ -318,7 +335,7 @@ cargo test -p wasm-bindings
 |---------|----------|
 | Components | `Position`, `Velocity` (PascalCase) |
 | Systems | `move_system`, `print_position_system` (snake_case + _system) |
-| JS Wrappers | `JsPosition`, `JsVelocity` (PascalCase with Js prefix) |
+| JS Wrappers | `JsWorld`, `JsPosition`, `JsVelocity` (PascalCase with Js prefix) |
 | JS Functions | `move_position` (snake_case) |
 | Modules | `components`, `systems` (snake_case) |
 
@@ -396,8 +413,8 @@ cargo test -p wasm-bindings
 Предпочтительный способ: **главный поток сам качает WASM** (с обходом кэша), затем передаёт буфер воркеру.
 
 - Главный поток: `fetch(wasmUrl, { cache: 'no-store' })` с cache-bust в URL (`?t=...` или `?v=...`), получает `ArrayBuffer`.
-- Передача воркеру: `worker.postMessage({ type: 'init', wasmBuffer }, [wasmBuffer])` (transferable).
-- Воркер инстанциирует WASM из переданного буфера, создаёт мир, шлёт `ready`.
+- Передача воркеру: `worker.postMessage({ type: 'init', wasmBuffer, entitiesYaml }, [wasmBuffer])` (transferable только буфер).
+- Воркер вызывает `init(wasmBuffer)`, затем `new JsWorld(entitiesYaml)` и шлёт `ready`.
 
 ---
 
@@ -482,4 +499,4 @@ cargo test -p wasm-bindings
 - **Target Use**: Educational example or lightweight ECS base
 - **Platform**: Desktop (Rust) + Web (WASM + TypeScript)
 - **License**: MIT (per README)
-- **Status**: Minimal prototype with Position/Velocity components
+- **Status**: ECS prototype with YAML-driven types, move orders, WASM worker integration, PixiJS canvas
