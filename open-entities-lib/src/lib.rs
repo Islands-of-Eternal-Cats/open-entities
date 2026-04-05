@@ -266,12 +266,14 @@ entities:
     #[test]
     fn test_spawn_in_world_reports_missing_defs_and_unknown_type() {
         let mut world = World::new();
-        let missing_defs_err = spawn_entity_by_type_in_world(&mut world, "mover", None).unwrap_err();
+        let missing_defs_err =
+            spawn_entity_by_type_in_world(&mut world, "mover", None).unwrap_err();
         assert_eq!(missing_defs_err, SpawnError::DefinitionsNotLoaded);
 
         let defs = EntityDefinitions::load_from_str("entities: {}").unwrap();
         world.insert_resource(defs);
-        let unknown_type_err = spawn_entity_by_type_in_world(&mut world, "ghost", None).unwrap_err();
+        let unknown_type_err =
+            spawn_entity_by_type_in_world(&mut world, "ghost", None).unwrap_err();
         assert_eq!(
             unknown_type_err,
             SpawnError::UnknownEntityType {
@@ -368,7 +370,8 @@ entities:
 "#;
         let (mut world, _) = create_world_with_definitions(yaml).unwrap();
         let fast = spawn_entity_by_type_in_world(&mut world, "fast", None).unwrap();
-        let default_speed = spawn_entity_by_type_in_world(&mut world, "default_speed", None).unwrap();
+        let default_speed =
+            spawn_entity_by_type_in_world(&mut world, "default_speed", None).unwrap();
         assert_eq!(world.get::<BaseMoveSpeed>(fast).unwrap().0, 100.0);
         assert!(world.get::<BaseMoveSpeed>(default_speed).is_none());
     }
@@ -405,8 +408,8 @@ entities:
     base_move_speed: 40.0
 "#;
         let (mut world, mut schedule) = create_world_with_definitions(yaml).unwrap();
-        let spawned = spawn_entity_by_type_at_in_world(&mut world, "mover", 123.0, 456.0, None)
-            .unwrap();
+        let spawned =
+            spawn_entity_by_type_at_in_world(&mut world, "mover", 123.0, 456.0, None).unwrap();
 
         let pos = world
             .get::<Position>(spawned)

@@ -230,11 +230,7 @@ pub fn spawn_entity_by_type_in_world(
         })?;
 
     Ok(spawn_from_template_in_world(
-        world,
-        template,
-        None,
-        true,
-        faction,
+        world, template, None, true, faction,
     ))
 }
 

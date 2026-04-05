@@ -7,7 +7,13 @@ const STOP_DIST: f32 = 0.75;
 /// Only entities with [`BaseMoveSpeed`] participate (required component).
 pub fn seek_move_target_system(
     mut commands: Commands,
-    mut query: Query<(Entity, &Position, &mut Velocity, &MoveTarget, &BaseMoveSpeed)>,
+    mut query: Query<(
+        Entity,
+        &Position,
+        &mut Velocity,
+        &MoveTarget,
+        &BaseMoveSpeed,
+    )>,
 ) {
     for (entity, pos, mut vel, target, base_move_speed) in &mut query {
         let speed = base_move_speed.0;
