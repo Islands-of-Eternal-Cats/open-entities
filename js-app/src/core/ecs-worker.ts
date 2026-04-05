@@ -44,7 +44,7 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
 
     if (msg.type === "spawn_at") {
       try {
-        world.spawn_at(msg.typeName, msg.x, msg.y);
+        world.spawn_at(msg.typeName, msg.x, msg.y, msg.faction);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         post({ type: "error", message });

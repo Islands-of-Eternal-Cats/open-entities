@@ -1,6 +1,6 @@
 //! World and schedule setup: create ECS world and run startup/update schedules.
 
-use crate::components::{BaseMoveSpeed, MoveTarget, Position, Velocity};
+use crate::components::{BaseMoveSpeed, Faction, MoveTarget, Position, Velocity};
 use crate::entity_loader::{EntityDefinitions, LoadError};
 use crate::systems::{
     DeltaTime, EntityDefinitionsPath, load_entities_from_yaml_system, move_system,
@@ -123,13 +123,14 @@ pub fn run_tick(world: &mut World, schedule: &mut Schedule, dt: f32) {
 }
 
 /// Returns all entities of the world that have at least a Position component.
-/// Each item is `(entity_id_bits, Position, Option<Velocity>)` for use by WASM/JS.
+/// Each item is `(entity_id_bits, Position, Option<Velocity>, Option<Faction>)` for use by WASM/JS.
 /// Entities with only Position (e.g. static obstacles) have `None` for velocity.
+/// `Faction` is `None` if the entity has no [`Faction`] component.
 /// Entity id is from `Entity::to_bits()` so the same entity has a stable id across frames.
-pub fn get_entities(world: &mut World) -> Vec<(u64, Position, Option<Velocity>)> {
-    let mut query = world.query::<(Entity, &Position, Option<&Velocity>)>();
+pub fn get_entities(world: &mut World) -> Vec<(u64, Position, Option<Velocity>, Option<Faction>)> {
+    let mut query = world.query::<(Entity, &Position, Option<&Velocity>, Option<&Faction>)>();
     query
         .iter(world)
-        .map(|(entity, p, v)| (entity.to_bits(), *p, v.copied()))
+        .map(|(entity, p, v, f)| (entity.to_bits(), *p, v.copied(), f.copied()))
         .collect()
 }

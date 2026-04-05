@@ -18,4 +18,6 @@ export interface EntitySnapshot {
   pos: Pos;
   /** null for static entities (Position only); present for moving entities. */
   velocity: Velocity | null;
+  /** ECS `Faction` id when present; null if the entity has no faction component. */
+  faction: number | null;
 }

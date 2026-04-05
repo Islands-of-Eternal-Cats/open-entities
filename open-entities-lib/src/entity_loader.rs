@@ -2,10 +2,11 @@
 //!
 //! Подвижность типа задаётся только полем **`base_move_speed`**: значение `> 0` — юнит может двигаться
 //! ([`Velocity`] при спавне — нулевая, [`BaseMoveSpeed`] — из шаблона); иначе сущность статична
-//! (только [`Position`], без [`Velocity`]/[`BaseMoveSpeed`]). [`EntityTemplate`] с `#[serde(default)]`:
-//! допустима пустая карта `{}`.
+//! (только [`Position`], без [`Velocity`]/[`BaseMoveSpeed`]). Компонент [`Faction`] задаётся только при спавне
+//! ([`spawn_entity_by_type`], [`spawn_entity_by_type_in_world`], [`spawn_entity_by_type_at_in_world`]), не из YAML.
+//! [`EntityTemplate`] с `#[serde(default)]`: допустима пустая карта `{}`.
 
-use crate::components::{BaseMoveSpeed, Position, Velocity};
+use crate::components::{BaseMoveSpeed, Faction, Position, Velocity};
 use bevy_ecs::prelude::*;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -150,6 +151,7 @@ fn spawn_from_template_in_world(
     template: EntityTemplate,
     position_override: Option<Position>,
     include_initial_velocity: bool,
+    faction: Option<u32>,
 ) -> Entity {
     let mut entity = world.spawn_empty();
 
@@ -168,15 +170,21 @@ fn spawn_from_template_in_world(
         }
     }
 
+    if let Some(id) = faction {
+        entity.insert(Faction(id));
+    }
+
     entity.id()
 }
 
 /// Создать одну сущность в ECS по имени типа из загруженных определений.
+/// `faction`: при `Some(id)` вешается компонент [`Faction`].
 /// Возвращает `Ok(Entity)` если тип найден и сущность создана, иначе ошибку.
 pub fn spawn_entity_by_type(
     commands: &mut Commands,
     definitions: &EntityDefinitions,
     type_name: &str,
+    faction: Option<u32>,
 ) -> Result<Entity, SpawnError> {
     let template = definitions
         .get(type_name)
@@ -197,14 +205,20 @@ pub fn spawn_entity_by_type(
         entity.insert(Velocity { vx: 0.0, vy: 0.0 });
     }
 
+    if let Some(id) = faction {
+        entity.insert(Faction(id));
+    }
+
     Ok(entity.id())
 }
 
 /// Создать одну сущность в ECS по имени типа, используя ресурс `EntityDefinitions` в мире.
+/// `faction`: при `Some(id)` вешается компонент [`Faction`].
 /// Возвращает `Ok(Entity)` если тип найден и сущность создана, иначе ошибку.
 pub fn spawn_entity_by_type_in_world(
     world: &mut World,
     type_name: &str,
+    faction: Option<u32>,
 ) -> Result<Entity, SpawnError> {
     let template = world
         .get_resource::<EntityDefinitions>()
@@ -215,18 +229,26 @@ pub fn spawn_entity_by_type_in_world(
             type_name: type_name.to_string(),
         })?;
 
-    Ok(spawn_from_template_in_world(world, template, None, true))
+    Ok(spawn_from_template_in_world(
+        world,
+        template,
+        None,
+        true,
+        faction,
+    ))
 }
 
 /// Create one entity by type name at the given position, using `EntityDefinitions` resource in the world.
 ///
 /// Host-controlled spawn (e.g. WASM/JS). Подвижные типы (`base_move_speed` > 0) получают [`BaseMoveSpeed`],
 /// но без начальной [`Velocity`] — она появится при приказе движения.
+/// `faction`: при `Some(id)` вешается компонент [`Faction`].
 pub fn spawn_entity_by_type_at_in_world(
     world: &mut World,
     type_name: &str,
     x: f32,
     y: f32,
+    faction: Option<u32>,
 ) -> Result<Entity, SpawnError> {
     let defs = world
         .get_resource::<EntityDefinitions>()
@@ -244,6 +266,7 @@ pub fn spawn_entity_by_type_at_in_world(
         template,
         Some(Position { x, y }),
         false,
+        faction,
     ))
 }
 
@@ -258,11 +281,12 @@ pub fn load_and_spawn_all_from_path(
     let mut entities = Vec::with_capacity(names.len());
     for name in &names {
         // Names are collected from definitions; unknown-type error is unreachable here.
-        let e =
-            spawn_entity_by_type(commands, &definitions, name).map_err(|err| LoadError::Yaml {
+        let e = spawn_entity_by_type(commands, &definitions, name, None).map_err(|err| {
+            LoadError::Yaml {
                 op: "load_and_spawn_all_from_path",
                 source: err.to_string(),
-            })?;
+            }
+        })?;
         entities.push(e);
     }
     Ok(entities)

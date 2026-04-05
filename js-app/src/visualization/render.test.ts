@@ -9,6 +9,7 @@ function mockEntity(
     id: "0",
     pos: { x: 0, y: 0 },
     velocity: { vx: 0, vy: 0 },
+    faction: null,
     ...overrides,
   };
 }

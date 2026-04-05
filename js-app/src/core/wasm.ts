@@ -38,12 +38,14 @@ function rawToSnapshots(
     id: string;
     pos: { x: number; y: number };
     velocity: { vx: number; vy: number } | null;
+    faction?: number | null;
   }>
 ): EntitySnapshot[] {
   return raw.map((e) => ({
     id: e.id,
     pos: e.pos,
     velocity: e.velocity,
+    faction: e.faction ?? null,
   }));
 }
 
@@ -197,14 +199,26 @@ export function moveSelectedTo(
   });
 }
 
-export function spawnRandomAt(typeName: string): Promise<EntitySnapshot[]> {
+/**
+ * Spawn by type at random coordinates. Optional `faction` sets ECS `Faction` id.
+ */
+export function spawnRandomAt(
+  typeName: string,
+  faction?: number
+): Promise<EntitySnapshot[]> {
   if (!worker || !initialized)
     return Promise.reject(new Error("WASM not initialized"));
   return new Promise((resolve, reject) => {
     // Spawn in random world coordinates (roughly matching visualization WORLD_SIZE).
     const x = Math.random() * 100;
     const y = Math.random() * 100;
-    const message: WorkerInMessage = { type: "spawn_at", typeName, x, y };
+    const message: WorkerInMessage = {
+      type: "spawn_at",
+      typeName,
+      x,
+      y,
+      ...(faction !== undefined ? { faction } : {}),
+    };
     if (pending === null && requestQueue.length === 0) {
       pending = { resolve, reject };
       worker!.postMessage(message);

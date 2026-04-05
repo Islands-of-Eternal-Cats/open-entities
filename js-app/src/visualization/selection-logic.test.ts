@@ -8,11 +8,13 @@ describe("selection-logic", () => {
     id: "1",
     pos: { x: 5, y: 5 },
     velocity: null,
+    faction: null,
   };
   const b: EntitySnapshot = {
     id: "2",
     pos: { x: 90, y: 90 },
     velocity: null,
+    faction: null,
   };
 
   it("marquee includes only entities inside world AABB", () => {

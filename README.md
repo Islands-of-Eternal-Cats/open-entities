@@ -118,7 +118,7 @@ use open_entities::{EntityDefinitions, spawn_entity_by_type_in_world, SpawnError
 
 fn spawn_example(world: &mut World) -> Result<(), SpawnError> {
     // Assume EntityDefinitions resource was inserted earlier.
-    let _entity = spawn_entity_by_type_in_world(world, "mover")?;
+    let _entity = spawn_entity_by_type_in_world(world, "mover", None)?;
     Ok(())
 }
 ```
@@ -127,7 +127,7 @@ WASM/TypeScript API (through `JsWorld`):
 
 ```typescript
 const world = new JsWorld(entitiesYaml);
-await world.spawn("mover"); // throws JS Error if type is unknown
+await world.spawn("mover"); // optional second arg: faction id (number)
 ```
 
 ### Common YAML/Spawn Errors

@@ -207,7 +207,7 @@ entities:
 
 **API:**
 - `EntityDefinitions::load_from_path(path)` / `load_from_str(s)` — загрузка определений
-- `spawn_entity_by_type(commands, &definitions, "mover")` — создать одну сущность по имени типа
+- `spawn_entity_by_type(commands, &definitions, "mover", None)` — создать одну сущность по имени типа; последний аргумент — опциональная фракция `Option<u32>`
 - `load_and_spawn_all_from_path(commands, path)` — загрузить файл и заспавнить по одной сущности каждого типа
 - `setup_world_with_yaml(path)` — инициализация: возвращает `(World, Schedule)`; при первом запуске schedule стартовая система загружает YAML и спавнит по одной сущности каждого типа
 

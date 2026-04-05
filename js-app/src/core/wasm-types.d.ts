@@ -42,13 +42,17 @@ declare module "open-entities-wasm" {
   export class JsWorld {
     /** Create world from required entity definitions YAML string. */
     constructor(entitiesYaml: string);
-    /** Spawn an entity by type name from loaded definitions (e.g. "mover", "static_obstacle"). */
-    spawn(typeName: string): void;
+    /**
+     * Spawn an entity by type name from loaded definitions (e.g. "mover", "static_obstacle").
+     * Optional faction id attaches the `Faction` component.
+     */
+    spawn(typeName: string, faction?: number): void;
     /**
      * Spawn by type name at the given position.
      * Velocity component is not created for this spawn variant.
+     * Optional faction id attaches the `Faction` component.
      */
-    spawn_at(typeName: string, x: number, y: number): void;
+    spawn_at(typeName: string, x: number, y: number, faction?: number): void;
     tick(dt: number): void;
     /** Move-to order for snapshot id strings (decimal `Entity::to_bits()`). Target: same `JsPosition` as world coords. */
     order_move_to(entityIds: string[], target: JsPosition): void;
@@ -57,6 +61,7 @@ declare module "open-entities-wasm" {
       id: string;
       pos: { x: number; y: number };
       velocity: { vx: number; vy: number } | null;
+      faction: number | null;
     }>;
   }
 }
