@@ -9,6 +9,10 @@ export const ENTITY_RADIUS_PX = 8;
 let logicalWidth = 640;
 let logicalHeight = 480;
 
+/** Pixel pan of the tactical view (applied after base fit of world into canvas). */
+let viewPanX = 0;
+let viewPanY = 0;
+
 export function setLogicalCanvasSize(width: number, height: number): void {
   logicalWidth = Math.max(1, Math.floor(width));
   logicalHeight = Math.max(1, Math.floor(height));
@@ -35,8 +39,8 @@ export function worldToScreen(
 ): { x: number; y: number } {
   const { scale, offsetX, offsetY } = getScaleAndOffset();
   return {
-    x: offsetX + x * scale,
-    y: offsetY + y * scale,
+    x: offsetX + x * scale + viewPanX,
+    y: offsetY + y * scale + viewPanY,
   };
 }
 
@@ -46,9 +50,24 @@ export function screenToWorld(
 ): { x: number; y: number } {
   const { scale, offsetX, offsetY } = getScaleAndOffset();
   return {
-    x: (sx - offsetX) / scale,
-    y: (sy - offsetY) / scale,
+    x: (sx - offsetX - viewPanX) / scale,
+    y: (sy - offsetY - viewPanY) / scale,
   };
+}
+
+/** Place the given world point at the center of the logical canvas. */
+export function centerViewOnWorld(wx: number, wy: number): void {
+  const { scale, offsetX, offsetY } = getScaleAndOffset();
+  const cx = logicalWidth / 2;
+  const cy = logicalHeight / 2;
+  viewPanX = cx - offsetX - wx * scale;
+  viewPanY = cy - offsetY - wy * scale;
+}
+
+/** Reset tactical view pan (full map centered as before). */
+export function resetViewPan(): void {
+  viewPanX = 0;
+  viewPanY = 0;
 }
 
 /** Axis-aligned world bounds from two canvas-space corners of a selection rectangle. */

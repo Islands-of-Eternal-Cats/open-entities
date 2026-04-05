@@ -339,3 +339,10 @@ body {
   color: var(--rts-muted);
   font-weight: 400;
 }
+
+
+.entity-row--selected {
+  border-color: rgba(201, 162, 39, 0.85);
+  background: rgba(201, 162, 39, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(201, 162, 39, 0.25);
+}

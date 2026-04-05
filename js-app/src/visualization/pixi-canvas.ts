@@ -8,7 +8,10 @@ import { Application, Container, Graphics } from "pixi.js";
 import type { EntitySnapshot, Pos } from "../core/types";
 import {
   ENTITY_RADIUS_PX,
+  WORLD_SIZE,
+  centerViewOnWorld,
   clientToCanvas,
+  getLogicalCanvasSize,
   screenToWorld,
   setLogicalCanvasSize,
   worldToScreen,
@@ -20,6 +23,11 @@ const COLORS = [0x3498db, 0xe74c3c, 0x2ecc71, 0xf39c12, 0x9b59b6, 0x1abc9c];
 const DRAG_THRESHOLD_PX = 5;
 
 const MOVE_TARGET_MS = 2000;
+
+const MINIMAP_W = 108;
+const MINIMAP_H = 82;
+const MINIMAP_PAD = 7;
+const MINIMAP_MARGIN = 10;
 
 /** Stable color index from entity id string (for consistent color per entity). */
 function colorIndex(id: string): number {
@@ -83,6 +91,15 @@ export async function initPixiCanvas(
   application.stage.addChild(hoverGraphics);
   application.stage.addChild(selectionRings);
   application.stage.addChild(moveTargetGraphics);
+
+  const minimapRoot = new Container();
+  const minimapFrame = new Graphics();
+  const minimapViewport = new Graphics();
+  const minimapDots = new Graphics();
+  minimapRoot.addChild(minimapFrame);
+  minimapRoot.addChild(minimapViewport);
+  minimapRoot.addChild(minimapDots);
+  application.stage.addChild(minimapRoot);
   application.stage.addChild(marqueeGraphics);
 
   const entityGraphics = new Map<string, Graphics>();
@@ -92,8 +109,121 @@ export async function initPixiCanvas(
   let hoveredId: string | null = null;
   let moveTargetFlash: { x: number; y: number; until: number } | null = null;
 
+  function layoutMinimap(): void {
+    minimapRoot.x = MINIMAP_MARGIN;
+    minimapRoot.y = application.screen.height - MINIMAP_H - MINIMAP_MARGIN;
+  }
+
+  function canvasPointInMinimap(sx: number, sy: number): boolean {
+    return (
+      sx >= minimapRoot.x &&
+      sy >= minimapRoot.y &&
+      sx <= minimapRoot.x + MINIMAP_W &&
+      sy <= minimapRoot.y + MINIMAP_H
+    );
+  }
+
+  function minimapCanvasToWorld(sx: number, sy: number): Pos {
+    const lx = sx - minimapRoot.x;
+    const ly = sy - minimapRoot.y;
+    const iw = MINIMAP_W - 2 * MINIMAP_PAD;
+    const ih = MINIMAP_H - 2 * MINIMAP_PAD;
+    const nx = ((lx - MINIMAP_PAD) / iw) * WORLD_SIZE;
+    const ny = ((ly - MINIMAP_PAD) / ih) * WORLD_SIZE;
+    return {
+      x: Math.max(0, Math.min(WORLD_SIZE, nx)),
+      y: Math.max(0, Math.min(WORLD_SIZE, ny)),
+    };
+  }
+
+  function handleMinimapTap(sx: number, sy: number): void {
+    if (!canvasPointInMinimap(sx, sy)) return;
+    const world = minimapCanvasToWorld(sx, sy);
+    if (selectedIds.size > 0) {
+      void Promise.resolve(onMoveOrder?.(world));
+    } else {
+      centerViewOnWorld(world.x, world.y);
+      repositionAllGraphics();
+    }
+  }
+
+  function redrawMinimapViewport(): void {
+    minimapViewport.clear();
+    const { width: W, height: H } = getLogicalCanvasSize();
+    const corners = [
+      screenToWorld(0, 0),
+      screenToWorld(W, 0),
+      screenToWorld(W, H),
+      screenToWorld(0, H),
+    ];
+    let minX = WORLD_SIZE;
+    let maxX = 0;
+    let minY = WORLD_SIZE;
+    let maxY = 0;
+    for (const c of corners) {
+      minX = Math.min(minX, c.x);
+      maxX = Math.max(maxX, c.x);
+      minY = Math.min(minY, c.y);
+      maxY = Math.max(maxY, c.y);
+    }
+    minX = Math.max(0, Math.min(WORLD_SIZE, minX));
+    maxX = Math.max(0, Math.min(WORLD_SIZE, maxX));
+    minY = Math.max(0, Math.min(WORLD_SIZE, minY));
+    maxY = Math.max(0, Math.min(WORLD_SIZE, maxY));
+    const p0 = worldToMinimap(minX, minY);
+    const p1 = worldToMinimap(maxX, maxY);
+    const left = Math.min(p0.x, p1.x);
+    const top = Math.min(p0.y, p1.y);
+    const rw = Math.abs(p1.x - p0.x);
+    const rh = Math.abs(p1.y - p0.y);
+    if (rw < 3 || rh < 3) return;
+    minimapViewport
+      .rect(left, top, rw, rh)
+      .stroke({ width: 1, color: 0xffffff, alpha: 0.38 });
+  }
+
+  function worldToMinimap(wx: number, wy: number): { x: number; y: number } {
+    const iw = MINIMAP_W - 2 * MINIMAP_PAD;
+    const ih = MINIMAP_H - 2 * MINIMAP_PAD;
+    const cx = Math.max(0, Math.min(WORLD_SIZE, wx));
+    const cy = Math.max(0, Math.min(WORLD_SIZE, wy));
+    return {
+      x: MINIMAP_PAD + (cx / WORLD_SIZE) * iw,
+      y: MINIMAP_PAD + (cy / WORLD_SIZE) * ih,
+    };
+  }
+
+  function redrawMinimapFrame(): void {
+    minimapFrame.clear();
+    minimapFrame
+      .roundRect(0, 0, MINIMAP_W, MINIMAP_H, 5)
+      .fill({ color: 0x0d0f18, alpha: 0.94 });
+    minimapFrame
+      .roundRect(0, 0, MINIMAP_W, MINIMAP_H, 5)
+      .stroke({ width: 1, color: 0x5c6578, alpha: 0.95 });
+  }
+
+  function redrawMinimap(): void {
+    minimapDots.clear();
+    for (const e of lastEntities) {
+      const { x, y } = worldToMinimap(e.pos.x, e.pos.y);
+      const sel = selectedIds.has(e.id);
+      const r = sel ? 3.5 : 2.5;
+      const c = sel ? 0xf1c40f : COLORS[colorIndex(e.id)];
+      minimapDots.circle(x, y, r).fill({ color: c, alpha: sel ? 1 : 0.88 });
+    }
+    if (moveTargetFlash !== null && performance.now() < moveTargetFlash.until) {
+      const { x, y } = worldToMinimap(moveTargetFlash.x, moveTargetFlash.y);
+      minimapDots
+        .circle(x, y, 5)
+        .stroke({ width: 1.5, color: 0x2ecc71, alpha: 0.95 });
+    }
+    redrawMinimapViewport();
+  }
+
   function notifySelection(): void {
     onSelectionChange?.(selectedIds);
+    redrawMinimap();
   }
 
   function pruneSelection(validIds: Set<string>): void {
@@ -135,21 +265,23 @@ export async function initPixiCanvas(
 
   function drawMoveTarget(): void {
     moveTargetGraphics.clear();
-    if (moveTargetFlash === null) return;
-    const now = performance.now();
-    if (now >= moveTargetFlash.until) {
-      moveTargetFlash = null;
-      return;
+    if (moveTargetFlash !== null) {
+      const now = performance.now();
+      if (now >= moveTargetFlash.until) {
+        moveTargetFlash = null;
+      } else {
+        const t = Math.min(1, (moveTargetFlash.until - now) / 450);
+        const alpha = 0.35 + t * 0.55;
+        const { x, y } = worldToScreen(moveTargetFlash.x, moveTargetFlash.y);
+        moveTargetGraphics
+          .circle(x, y, 14)
+          .stroke({ width: 2, color: 0x2ecc71, alpha: alpha * 0.95 });
+        moveTargetGraphics
+          .circle(x, y, 5)
+          .fill({ color: 0x2ecc71, alpha: alpha * 0.5 });
+      }
     }
-    const t = Math.min(1, (moveTargetFlash.until - now) / 450);
-    const alpha = 0.35 + t * 0.55;
-    const { x, y } = worldToScreen(moveTargetFlash.x, moveTargetFlash.y);
-    moveTargetGraphics
-      .circle(x, y, 14)
-      .stroke({ width: 2, color: 0x2ecc71, alpha: alpha * 0.95 });
-    moveTargetGraphics
-      .circle(x, y, 5)
-      .fill({ color: 0x2ecc71, alpha: alpha * 0.5 });
+    redrawMinimap();
   }
 
   function repositionAllGraphics(): void {
@@ -163,11 +295,14 @@ export async function initPixiCanvas(
     redrawSelectionRings();
     redrawHoverRing();
     drawMoveTarget();
+    layoutMinimap();
+    redrawMinimap();
   }
 
   application.renderer.on("resize", () => {
     setLogicalCanvasSize(application.screen.width, application.screen.height);
     repositionAllGraphics();
+    redrawMinimapFrame();
   });
 
   function redrawMarquee(
@@ -193,6 +328,7 @@ export async function initPixiCanvas(
   let dragStart: { x: number; y: number } | null = null;
   let dragCurrent: { x: number; y: number } | null = null;
   let isDragging = false;
+  let interactionStartedOnMinimap = false;
 
   function clearMarquee(): void {
     marqueeGraphics.clear();
@@ -243,6 +379,7 @@ export async function initPixiCanvas(
   function updateHoverFromClient(clientX: number, clientY: number): void {
     if (isDragging) return;
     const p = clientToCanvas(canvas, clientX, clientY);
+    canvas.style.cursor = canvasPointInMinimap(p.x, p.y) ? "pointer" : "";
     const hit = entityIdAtScreenPoint(lastEntities, p.x, p.y);
     if (hit !== hoveredId) {
       hoveredId = hit;
@@ -251,7 +388,9 @@ export async function initPixiCanvas(
   }
 
   canvas.addEventListener("pointerdown", (ev) => {
-    dragStart = clientToCanvas(canvas, ev.clientX, ev.clientY);
+    const p = clientToCanvas(canvas, ev.clientX, ev.clientY);
+    interactionStartedOnMinimap = canvasPointInMinimap(p.x, p.y);
+    dragStart = p;
     dragCurrent = { ...dragStart };
     isDragging = true;
     try {
@@ -262,7 +401,7 @@ export async function initPixiCanvas(
   });
 
   canvas.addEventListener("pointermove", (ev) => {
-    if (isDragging && dragStart !== null) {
+    if (isDragging && dragStart !== null && !interactionStartedOnMinimap) {
       dragCurrent = clientToCanvas(canvas, ev.clientX, ev.clientY);
       const dx = dragCurrent.x - dragStart.x;
       const dy = dragCurrent.y - dragStart.y;
@@ -277,6 +416,7 @@ export async function initPixiCanvas(
   canvas.addEventListener("pointerup", (ev) => {
     if (!isDragging || dragStart === null) {
       clearMarquee();
+      interactionStartedOnMinimap = false;
       try {
         canvas.releasePointerCapture(ev.pointerId);
       } catch {
@@ -288,6 +428,22 @@ export async function initPixiCanvas(
     const dx = end.x - dragStart.x;
     const dy = end.y - dragStart.y;
     const dist = Math.hypot(dx, dy);
+
+    if (interactionStartedOnMinimap) {
+      if (dist < DRAG_THRESHOLD_PX) {
+        const tap = canvasPointInMinimap(end.x, end.y) ? end : dragStart;
+        handleMinimapTap(tap.x, tap.y);
+      }
+      interactionStartedOnMinimap = false;
+      clearMarquee();
+      redrawSelectionRings();
+      try {
+        canvas.releasePointerCapture(ev.pointerId);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
 
     if (dist < DRAG_THRESHOLD_PX) {
       applyClickSelection(end.x, end.y, ev.shiftKey);
@@ -312,6 +468,7 @@ export async function initPixiCanvas(
 
   canvas.addEventListener("pointercancel", (ev) => {
     clearMarquee();
+    interactionStartedOnMinimap = false;
     try {
       canvas.releasePointerCapture(ev.pointerId);
     } catch {
@@ -320,6 +477,7 @@ export async function initPixiCanvas(
   });
 
   canvas.addEventListener("pointerleave", () => {
+    canvas.style.cursor = "";
     if (hoveredId !== null) {
       hoveredId = null;
       redrawHoverRing();
@@ -327,6 +485,10 @@ export async function initPixiCanvas(
   });
 
   container.appendChild(canvas);
+
+  layoutMinimap();
+  redrawMinimapFrame();
+  redrawMinimap();
 
   function updateEntities(entities: EntitySnapshot[]): void {
     lastEntities = entities;

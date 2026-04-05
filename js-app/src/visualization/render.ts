@@ -27,7 +27,8 @@ function escapeHtml(value: string): string {
  */
 export function renderEntities(
   entities: EntitySnapshot[],
-  container: HTMLElement
+  container: HTMLElement,
+  selectedIds?: ReadonlySet<string>
 ): void {
   const count = entities.length;
   const listHtml = entities
@@ -39,7 +40,12 @@ export function renderEntities(
       const idAttr = escapeAttr(e.id);
       const idHtml = escapeHtml(e.id);
       const typeHtml = escapeHtml(e.entityType);
-      return `<button type="button" class="entity entity-row" data-entity-id="${idAttr}" aria-label="Select entity ${idAttr}">
+      const selected = selectedIds?.has(e.id) ?? false;
+      const rowClass = selected
+        ? "entity entity-row entity-row--selected"
+        : "entity entity-row";
+      const ariaCurrent = selected ? ' aria-current="true"' : "";
+      return `<button type="button" class="${rowClass}" data-entity-id="${idAttr}" aria-label="Select entity ${idAttr}"${ariaCurrent}>
         <strong>Entity ${idHtml}</strong>
         <span class="entity-meta">${typeHtml} · (${formatCoord(e.pos.x)}, ${formatCoord(e.pos.y)}) · ${vel}</span>
       </button>`;

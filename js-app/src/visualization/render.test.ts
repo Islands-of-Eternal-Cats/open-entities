@@ -62,4 +62,17 @@ describe("renderEntities", () => {
     expect(container.innerHTML).toContain("10.00");
     expect(container.innerHTML).toContain("20.00");
   });
+
+  it("marks selected entity row when selectedIds is provided", () => {
+    const entities = [
+      mockEntity({ id: "a", pos: { x: 0, y: 0 } }),
+      mockEntity({ id: "b", pos: { x: 1, y: 1 } }),
+    ];
+    renderEntities(entities, container, new Set(["b"]));
+    const rows = container.querySelectorAll(".entity-row");
+    expect(rows.length).toBe(2);
+    expect(rows[0].classList.contains("entity-row--selected")).toBe(false);
+    expect(rows[1].classList.contains("entity-row--selected")).toBe(true);
+    expect(rows[1].getAttribute("aria-current")).toBe("true");
+  });
 });

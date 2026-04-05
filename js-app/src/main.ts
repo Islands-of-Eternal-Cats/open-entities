@@ -81,6 +81,20 @@ function updateSelectionPanel(
   selectionDetailEl.innerHTML = `<p class="selection-multi"><strong>${selected.size}</strong> units selected</p>`;
 }
 
+function syncEntityListSelectionHighlight(): void {
+  if (!entityListEl || !pixiApi) return;
+  const sel = pixiApi.getSelectedIds();
+  for (const btn of entityListEl.querySelectorAll<HTMLButtonElement>(
+    ".entity-row"
+  )) {
+    const id = btn.getAttribute("data-entity-id");
+    const selected = id != null && sel.has(id);
+    btn.classList.toggle("entity-row--selected", selected);
+    if (selected) btn.setAttribute("aria-current", "true");
+    else btn.removeAttribute("aria-current");
+  }
+}
+
 function syncSelectionUi(): void {
   if (!pixiApi) return;
   updateSelectionPanel(pixiApi.getSelectedIds(), lastEntities);
@@ -89,12 +103,13 @@ function syncSelectionUi(): void {
     clearSelectionBtn.hidden = ids.size === 0;
     clearSelectionBtn.disabled = ids.size === 0;
   }
+  syncEntityListSelectionHighlight();
 }
 
 function render(entities: EntitySnapshot[]): void {
   lastEntities = entities;
   if (!entityListEl) return;
-  renderEntities(entities, entityListEl);
+  renderEntities(entities, entityListEl, pixiApi?.getSelectedIds());
   if (updatePixiEntities) updatePixiEntities(entities);
   syncSelectionUi();
 }
