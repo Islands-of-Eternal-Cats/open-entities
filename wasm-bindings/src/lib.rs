@@ -172,14 +172,15 @@ impl JsWorld {
         Ok(())
     }
 
-    /// Snapshot of all entities as an array of `{ id, pos, velocity, faction }` for rendering.
+    /// Snapshot of all entities as an array of `{ id, pos, velocity, faction, entityType }` for rendering.
     /// Static entities have `velocity: null`; without [`Faction`] in ECS, `faction` is `null`.
+    /// `entityType` is the YAML `entities:` key (only units spawned from definitions are listed).
     /// `id` is a stable entity identifier (Entity::to_bits) so the same entity keeps the same id across frames.
     #[wasm_bindgen]
     pub fn get_entities(&mut self) -> Array {
         let snapshot = get_entities(&mut self.world);
         let arr = Array::new();
-        for (id_bits, pos, vel_opt, faction_opt) in snapshot {
+        for (id_bits, pos, vel_opt, faction_opt, type_name) in snapshot {
             let pos_obj = js_sys::Object::new();
             js_sys::Reflect::set(
                 &pos_obj,
@@ -216,6 +217,7 @@ impl JsWorld {
                 Some(f) => JsValue::from_f64(f.0 as f64),
                 None => JsValue::NULL,
             };
+            let entity_type_js = JsValue::from_str(&type_name);
             let obj = js_sys::Object::new();
             // Entity id as string to avoid JS Number precision loss (u64 > 2^53-1)
             js_sys::Reflect::set(
@@ -227,6 +229,7 @@ impl JsWorld {
             js_sys::Reflect::set(&obj, &JsValue::from_str("pos"), &pos_obj).unwrap();
             js_sys::Reflect::set(&obj, &JsValue::from_str("velocity"), &vel_js).unwrap();
             js_sys::Reflect::set(&obj, &JsValue::from_str("faction"), &faction_js).unwrap();
+            js_sys::Reflect::set(&obj, &JsValue::from_str("entityType"), &entity_type_js).unwrap();
             arr.push(&obj);
         }
         arr

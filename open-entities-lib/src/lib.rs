@@ -23,7 +23,7 @@ pub mod systems;
 pub mod world;
 
 pub use bevy_ecs::prelude::{Schedule, World};
-pub use components::{BaseMoveSpeed, Faction, MoveTarget, Position, Velocity};
+pub use components::{BaseMoveSpeed, EntityTypeName, Faction, MoveTarget, Position, Velocity};
 pub use entity_loader::{
     EntityDefinitions, EntityDefinitionsFile, EntityTemplate, LoadError, SpawnError, is_movable,
     load_and_spawn_all_from_path, spawn_entity_by_type, spawn_entity_by_type_at_in_world,
@@ -34,8 +34,8 @@ pub use systems::{
     print_position_system,
 };
 pub use world::{
-    create_empty_world, create_world_with_definitions, get_entities, order_move_entities_to,
-    run_tick, setup_world, setup_world_with_yaml,
+    EntitySnapshotRow, create_empty_world, create_world_with_definitions, get_entities,
+    order_move_entities_to, run_tick, setup_world, setup_world_with_yaml,
 };
 
 #[cfg(test)]

@@ -7,6 +7,7 @@ function mockEntity(
 ): EntitySnapshot {
   return {
     id: "0",
+    entityType: "mover",
     pos: { x: 0, y: 0 },
     velocity: { vx: 0, vy: 0 },
     faction: null,
@@ -40,6 +41,7 @@ describe("renderEntities", () => {
     expect(container.innerHTML).toContain("1.50");
     expect(container.innerHTML).toContain("2.25");
     expect(container.innerHTML).toContain("-0.50");
+    expect(container.innerHTML).toContain("Type: mover");
     expect(container.querySelectorAll(".entity").length).toBe(1);
   });
 

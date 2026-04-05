@@ -1,6 +1,6 @@
 //! World and schedule setup: create ECS world and run startup/update schedules.
 
-use crate::components::{BaseMoveSpeed, Faction, MoveTarget, Position, Velocity};
+use crate::components::{BaseMoveSpeed, EntityTypeName, Faction, MoveTarget, Position, Velocity};
 use crate::entity_loader::{EntityDefinitions, LoadError};
 use crate::systems::{
     DeltaTime, EntityDefinitionsPath, load_entities_from_yaml_system, move_system,
@@ -9,6 +9,10 @@ use crate::systems::{
 use bevy_ecs::prelude::{Entity, IntoScheduleConfigs, World};
 use bevy_ecs::schedule::Schedule;
 use std::path::PathBuf;
+
+/// One row from [`get_entities`]: id bits, position, optional velocity/faction, YAML type key.
+/// Only entities with [`EntityTypeName`] are included (gameplay units spawned from definitions).
+pub type EntitySnapshotRow = (u64, Position, Option<Velocity>, Option<Faction>, String);
 
 /// Initialize the ECS world with no entities.
 /// Spawn units via [`setup_world_with_yaml`] or [`create_world_with_definitions`] so every unit type
@@ -122,15 +126,21 @@ pub fn run_tick(world: &mut World, schedule: &mut Schedule, dt: f32) {
     schedule.run(world);
 }
 
-/// Returns all entities of the world that have at least a Position component.
-/// Each item is `(entity_id_bits, Position, Option<Velocity>, Option<Faction>)` for use by WASM/JS.
-/// Entities with only Position (e.g. static obstacles) have `None` for velocity.
-/// `Faction` is `None` if the entity has no [`Faction`] component.
+/// Returns entities that have [`Position`] and [`EntityTypeName`] (units from YAML definitions).
+/// Each item is `(entity_id_bits, Position, Option<Velocity>, Option<Faction>, type_name)` for WASM/JS.
+/// Static types have `None` for velocity; `Faction` is `None` without that component.
+/// `type_name` is the YAML `entities:` key from spawn.
 /// Entity id is from `Entity::to_bits()` so the same entity has a stable id across frames.
-pub fn get_entities(world: &mut World) -> Vec<(u64, Position, Option<Velocity>, Option<Faction>)> {
-    let mut query = world.query::<(Entity, &Position, Option<&Velocity>, Option<&Faction>)>();
+pub fn get_entities(world: &mut World) -> Vec<EntitySnapshotRow> {
+    let mut query = world.query::<(
+        Entity,
+        &Position,
+        Option<&Velocity>,
+        Option<&Faction>,
+        &EntityTypeName,
+    )>();
     query
         .iter(world)
-        .map(|(entity, p, v, f)| (entity.to_bits(), *p, v.copied(), f.copied()))
+        .map(|(entity, p, v, f, t)| (entity.to_bits(), *p, v.copied(), f.copied(), t.0.clone()))
         .collect()
 }

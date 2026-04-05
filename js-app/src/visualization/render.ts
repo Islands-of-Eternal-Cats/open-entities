@@ -21,6 +21,7 @@ export function renderEntities(
     .map(
       (e) => `<div class="entity">
         <strong>Entity ${e.id}</strong><br>
+        Type: ${e.entityType}<br>
         Position: (${formatCoord(e.pos.x)}, ${formatCoord(e.pos.y)})<br>
         Velocity: ${e.velocity != null ? `(${formatCoord(e.velocity.vx)}, ${formatCoord(e.velocity.vy)})` : "static"}
       </div>`

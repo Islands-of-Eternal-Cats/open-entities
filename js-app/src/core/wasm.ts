@@ -36,6 +36,7 @@ const requestQueue: QueuedRequest[] = [];
 function rawToSnapshots(
   raw: Array<{
     id: string;
+    entityType: string;
     pos: { x: number; y: number };
     velocity: { vx: number; vy: number } | null;
     faction?: number | null;
@@ -43,6 +44,7 @@ function rawToSnapshots(
 ): EntitySnapshot[] {
   return raw.map((e) => ({
     id: e.id,
+    entityType: e.entityType,
     pos: e.pos,
     velocity: e.velocity,
     faction: e.faction ?? null,

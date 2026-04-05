@@ -6,7 +6,7 @@
 //! ([`spawn_entity_by_type`], [`spawn_entity_by_type_in_world`], [`spawn_entity_by_type_at_in_world`]), не из YAML.
 //! [`EntityTemplate`] с `#[serde(default)]`: допустима пустая карта `{}`.
 
-use crate::components::{BaseMoveSpeed, Faction, Position, Velocity};
+use crate::components::{BaseMoveSpeed, EntityTypeName, Faction, Position, Velocity};
 use bevy_ecs::prelude::*;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -148,12 +148,15 @@ impl std::error::Error for SpawnError {}
 
 fn spawn_from_template_in_world(
     world: &mut World,
+    type_name: String,
     template: EntityTemplate,
     position_override: Option<Position>,
     include_initial_velocity: bool,
     faction: Option<u32>,
 ) -> Entity {
     let mut entity = world.spawn_empty();
+
+    entity.insert(EntityTypeName(type_name));
 
     // Position: override wins; otherwise use the template.
     if let Some(p) = position_override.or(template.position) {
@@ -209,6 +212,8 @@ pub fn spawn_entity_by_type(
         entity.insert(Faction(id));
     }
 
+    entity.insert(EntityTypeName(type_name.to_string()));
+
     Ok(entity.id())
 }
 
@@ -230,7 +235,12 @@ pub fn spawn_entity_by_type_in_world(
         })?;
 
     Ok(spawn_from_template_in_world(
-        world, template, None, true, faction,
+        world,
+        type_name.to_string(),
+        template,
+        None,
+        true,
+        faction,
     ))
 }
 
@@ -259,6 +269,7 @@ pub fn spawn_entity_by_type_at_in_world(
 
     Ok(spawn_from_template_in_world(
         world,
+        type_name.to_string(),
         template,
         Some(Position { x, y }),
         false,

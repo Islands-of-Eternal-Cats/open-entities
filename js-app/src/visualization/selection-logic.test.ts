@@ -6,12 +6,14 @@ import { entityIdAtScreenPoint, entityIdsInScreenMarquee } from "./selection-log
 describe("selection-logic", () => {
   const a: EntitySnapshot = {
     id: "1",
+    entityType: "mover",
     pos: { x: 5, y: 5 },
     velocity: null,
     faction: null,
   };
   const b: EntitySnapshot = {
     id: "2",
+    entityType: "mover",
     pos: { x: 90, y: 90 },
     velocity: null,
     faction: null,
