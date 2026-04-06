@@ -77,6 +77,7 @@ export async function initPixiCanvas(
   });
 
   setLogicalCanvasSize(application.screen.width, application.screen.height);
+  centerViewOnWorld(WORLD_SIZE / 2, WORLD_SIZE / 2);
 
   const canvas = application.canvas as HTMLCanvasElement;
   canvas.style.touchAction = "none";
@@ -300,7 +301,10 @@ export async function initPixiCanvas(
   }
 
   application.renderer.on("resize", () => {
+    const prev = getLogicalCanvasSize();
+    const centerBeforeResize = screenToWorld(prev.width / 2, prev.height / 2);
     setLogicalCanvasSize(application.screen.width, application.screen.height);
+    centerViewOnWorld(centerBeforeResize.x, centerBeforeResize.y);
     repositionAllGraphics();
     redrawMinimapFrame();
   });

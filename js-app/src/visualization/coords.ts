@@ -4,6 +4,7 @@
  */
 
 export const WORLD_SIZE = 120;
+export const WORLD_VIEW_FRACTION = 0.5;
 export const ENTITY_RADIUS_PX = 8;
 
 let logicalWidth = 640;
@@ -16,6 +17,9 @@ let viewPanY = 0;
 export function setLogicalCanvasSize(width: number, height: number): void {
   logicalWidth = Math.max(1, Math.floor(width));
   logicalHeight = Math.max(1, Math.floor(height));
+  const clamped = clampPan(viewPanX, viewPanY);
+  viewPanX = clamped.x;
+  viewPanY = clamped.y;
 }
 
 export function getLogicalCanvasSize(): { width: number; height: number } {
@@ -27,10 +31,26 @@ export function getScaleAndOffset(): {
   offsetX: number;
   offsetY: number;
 } {
-  const scale = Math.min(logicalWidth, logicalHeight) / WORLD_SIZE;
+  // Fit only a fraction of world bounds into the viewport so the map is larger than the window.
+  const fitScale = Math.min(logicalWidth, logicalHeight) / WORLD_SIZE;
+  const scale = fitScale / WORLD_VIEW_FRACTION;
   const offsetX = (logicalWidth - WORLD_SIZE * scale) / 2;
   const offsetY = (logicalHeight - WORLD_SIZE * scale) / 2;
   return { scale, offsetX, offsetY };
+}
+
+function clampPan(panX: number, panY: number): { x: number; y: number } {
+  const { scale, offsetX, offsetY } = getScaleAndOffset();
+  const minPanX = logicalWidth - offsetX - WORLD_SIZE * scale;
+  const maxPanX = -offsetX;
+  const minPanY = logicalHeight - offsetY - WORLD_SIZE * scale;
+  const maxPanY = -offsetY;
+
+  const x =
+    minPanX <= maxPanX ? Math.max(minPanX, Math.min(maxPanX, panX)) : (minPanX + maxPanX) / 2;
+  const y =
+    minPanY <= maxPanY ? Math.max(minPanY, Math.min(maxPanY, panY)) : (minPanY + maxPanY) / 2;
+  return { x, y };
 }
 
 export function worldToScreen(
@@ -60,14 +80,20 @@ export function centerViewOnWorld(wx: number, wy: number): void {
   const { scale, offsetX, offsetY } = getScaleAndOffset();
   const cx = logicalWidth / 2;
   const cy = logicalHeight / 2;
-  viewPanX = cx - offsetX - wx * scale;
-  viewPanY = cy - offsetY - wy * scale;
+  const nextPan = {
+    x: cx - offsetX - wx * scale,
+    y: cy - offsetY - wy * scale,
+  };
+  const clamped = clampPan(nextPan.x, nextPan.y);
+  viewPanX = clamped.x;
+  viewPanY = clamped.y;
 }
 
 /** Reset tactical view pan (full map centered as before). */
 export function resetViewPan(): void {
-  viewPanX = 0;
-  viewPanY = 0;
+  const clamped = clampPan(0, 0);
+  viewPanX = clamped.x;
+  viewPanY = clamped.y;
 }
 
 /** Axis-aligned world bounds from two canvas-space corners of a selection rectangle. */
