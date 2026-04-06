@@ -45,6 +45,40 @@ function installMockWorker(): void {
           this.onmessage?.(e);
           this.listeners.forEach((fn) => fn(e));
         }, 0);
+        return;
+      }
+
+      if (
+        data &&
+        typeof data === "object" &&
+        "type" in data &&
+        (data as { type: string }).type === "spawn_at"
+      ) {
+        const d = data as {
+          type: "spawn_at";
+          typeName: string;
+          x: number;
+          y: number;
+          faction?: number;
+        };
+        setTimeout(() => {
+          const e = {
+            data: {
+              type: "entities",
+              entities: [
+                {
+                  id: "1",
+                  entityType: d.typeName,
+                  pos: { x: d.x, y: d.y },
+                  velocity: null,
+                  faction: d.faction ?? null,
+                },
+              ],
+            },
+          } as MessageEvent;
+          this.onmessage?.(e);
+          this.listeners.forEach((fn) => fn(e));
+        }, 0);
       }
     }
 
@@ -72,5 +106,23 @@ describe("wasm module", () => {
     expect(isWasmReady()).toBe(false);
     await initWasm();
     expect(isWasmReady()).toBe(true);
+  });
+
+  it("spawnRandomAt uses WORLD_SIZE for random coordinate range", async () => {
+    const randomSpy = vi
+      .spyOn(Math, "random")
+      .mockReturnValueOnce(0.5)
+      .mockReturnValueOnce(0.25);
+    const { initWasm, spawnRandomAt } = await import("./wasm");
+    const { WORLD_SIZE } = await import("../visualization/coords");
+
+    await initWasm();
+    const entities = await spawnRandomAt("mover");
+
+    expect(entities).toHaveLength(1);
+    expect(entities[0]?.pos.x).toBeCloseTo(0.5 * WORLD_SIZE);
+    expect(entities[0]?.pos.y).toBeCloseTo(0.25 * WORLD_SIZE);
+    expect(randomSpy).toHaveBeenCalledTimes(2);
+    randomSpy.mockRestore();
   });
 });

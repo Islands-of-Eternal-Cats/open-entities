@@ -4,6 +4,7 @@
  */
 import type { EntitySnapshot } from "./types";
 import type { WorkerInMessage, WorkerOutMessage } from "./worker-types";
+import { WORLD_SIZE } from "../visualization/coords";
 
 function flushQueue(): void {
   if (!worker || pending !== null || requestQueue.length === 0) return;
@@ -211,9 +212,9 @@ export function spawnRandomAt(
   if (!worker || !initialized)
     return Promise.reject(new Error("WASM not initialized"));
   return new Promise((resolve, reject) => {
-    // Spawn in random world coordinates (roughly matching visualization WORLD_SIZE).
-    const x = Math.random() * 100;
-    const y = Math.random() * 100;
+    // Spawn in random world coordinates across the full logical map bounds.
+    const x = Math.random() * WORLD_SIZE;
+    const y = Math.random() * WORLD_SIZE;
     const message: WorkerInMessage = {
       type: "spawn_at",
       typeName,
