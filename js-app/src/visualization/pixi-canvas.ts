@@ -2,7 +2,7 @@
  * PixiJS canvas visualization: renders entities as circles on a 2D canvas.
  * World coordinates (from WASM) are scaled to canvas size.
  * Drag a rectangle to select multiple units; Shift adds to selection.
- * Tap empty ground with selection issues a move order; Esc / clear button clears selection.
+ * Tap empty ground with selection issues a move order; Esc / clear button / right-click clears selection.
  */
 import { Application, Container, Graphics } from "pixi.js";
 import type { EntitySnapshot, Pos } from "../core/types";
@@ -388,6 +388,7 @@ export async function initPixiCanvas(
   }
 
   canvas.addEventListener("pointerdown", (ev) => {
+    if (ev.button !== 0) return;
     const p = clientToCanvas(canvas, ev.clientX, ev.clientY);
     interactionStartedOnMinimap = canvasPointInMinimap(p.x, p.y);
     dragStart = p;
@@ -414,6 +415,19 @@ export async function initPixiCanvas(
   });
 
   canvas.addEventListener("pointerup", (ev) => {
+    if (ev.button === 2) {
+      if (selectedIds.size > 0) {
+        clearSelection();
+      }
+      clearMarquee();
+      interactionStartedOnMinimap = false;
+      try {
+        canvas.releasePointerCapture(ev.pointerId);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
     if (!isDragging || dragStart === null) {
       clearMarquee();
       interactionStartedOnMinimap = false;
@@ -482,6 +496,10 @@ export async function initPixiCanvas(
       hoveredId = null;
       redrawHoverRing();
     }
+  });
+
+  canvas.addEventListener("contextmenu", (ev) => {
+    ev.preventDefault();
   });
 
   container.appendChild(canvas);
