@@ -24,31 +24,25 @@ pub fn move_system(
 
     for (entity, mut pos, mut vel, target) in &mut query {
         if let Some(target) = target {
-            let step_x = vel.vx * dt_sec;
-            let step_y = vel.vy * dt_sec;
-            let next_x = pos.x + step_x;
-            let next_y = pos.y + step_y;
+            let (step_x, step_y) = vel.delta_for_dt(dt_sec);
+            let next_pos = pos.shifted(step_x, step_y);
 
-            let rem_x = target.at.x - pos.x;
-            let rem_y = target.at.y - pos.y;
-            let rem_sq = rem_x * rem_x + rem_y * rem_y;
-            let step_sq = step_x * step_x + step_y * step_y;
+            let rem_sq = target.remaining_dist_sq_from(*pos);
+            let step_sq = vel.step_len_sq_for_dt(dt_sec);
 
             if step_sq >= rem_sq {
                 pos.x = target.at.x;
                 pos.y = target.at.y;
-                vel.vx = 0.0;
-                vel.vy = 0.0;
+                *vel = Velocity::zero();
                 commands.entity(entity).remove::<MoveTarget>();
                 continue;
             }
 
-            pos.x = next_x;
-            pos.y = next_y;
+            *pos = next_pos;
             continue;
         }
 
-        pos.x += vel.vx * dt_sec;
-        pos.y += vel.vy * dt_sec;
+        let (step_x, step_y) = vel.delta_for_dt(dt_sec);
+        *pos = pos.shifted(step_x, step_y);
     }
 }
