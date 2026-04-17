@@ -320,6 +320,51 @@ entities:
     }
 
     #[test]
+    fn test_order_move_does_not_overshoot_target_on_large_dt() {
+        let yaml = r#"
+entities:
+  unit:
+    position: { x: 0.0, y: 0.0 }
+    base_move_speed: 10.0
+"#;
+        let (mut world, mut schedule) = create_world_with_definitions(yaml).unwrap();
+        let spawned = spawn_entity_by_type_in_world(&mut world, "unit", None).unwrap();
+        order_move_entities_to(&mut world, &[spawned.to_bits()], Position { x: 1.0, y: 0.0 });
+
+        // dt is intentionally very large: without clamping this can overshoot the target.
+        run_tick(&mut world, &mut schedule, 1.0);
+
+        let pos = world.get::<Position>(spawned).unwrap();
+        assert_eq!(pos.x, 1.0);
+        assert_eq!(pos.y, 0.0);
+        let vel = world.get::<Velocity>(spawned).unwrap();
+        assert_eq!(vel.vx, 0.0);
+        assert_eq!(vel.vy, 0.0);
+        assert!(
+            world.get::<MoveTarget>(spawned).is_none(),
+            "target should be cleared once reached"
+        );
+    }
+
+    #[test]
+    fn test_run_tick_with_negative_dt_does_not_move_entities() {
+        let yaml = r#"
+entities:
+  unit:
+    position: { x: 0.0, y: 0.0 }
+    base_move_speed: 10.0
+"#;
+        let (mut world, mut schedule) = create_world_with_definitions(yaml).unwrap();
+        let spawned = spawn_entity_by_type_in_world(&mut world, "unit", None).unwrap();
+        order_move_entities_to(&mut world, &[spawned.to_bits()], Position { x: 100.0, y: 0.0 });
+
+        run_tick(&mut world, &mut schedule, -0.5);
+        let pos = world.get::<Position>(spawned).unwrap();
+        assert_eq!(pos.x, 0.0);
+        assert_eq!(pos.y, 0.0);
+    }
+
+    #[test]
     fn test_order_move_skips_entities_without_base_move_speed() {
         let yaml = r#"
 entities:
