@@ -3,7 +3,11 @@
  * Visualization layer depends only on this module and types from ./types.
  */
 import type { EntitySnapshot } from "./types";
-import type { WorkerInMessage, WorkerOutMessage } from "./worker-types";
+import type {
+  RawEntitySnapshot,
+  WorkerInMessage,
+  WorkerOutMessage,
+} from "./worker-types";
 import { WORLD_SIZE } from "../visualization/coords";
 
 function flushQueue(): void {
@@ -35,13 +39,7 @@ type QueuedRequest = {
 const requestQueue: QueuedRequest[] = [];
 
 function rawToSnapshots(
-  raw: Array<{
-    id: string;
-    entityType: string;
-    pos: { x: number; y: number };
-    velocity: { vx: number; vy: number } | null;
-    faction?: number | null;
-  }>
+  raw: RawEntitySnapshot[]
 ): EntitySnapshot[] {
   return raw.map((e) => ({
     id: e.id,
@@ -170,11 +168,6 @@ export function tick(dt: number): Promise<EntitySnapshot[]> {
   });
 }
 
-/**
- * Spawn an entity in the worker by type name from `assets/entities.yaml`
- * using random coordinates.
- * Returns current entity snapshots.
- */
 /**
  * Issue move-to-world-point for the given entity ids (snapshot id strings). Does not tick.
  */
