@@ -6,7 +6,15 @@ import type { EntitySnapshot } from "./types";
 export type WorkerInMessage =
   | { type: "init"; wasmBuffer: ArrayBuffer; entitiesYaml: string }
   | { type: "tick"; dt: number }
-  | { type: "spawn"; typeName: string };
+  | {
+      type: "spawn_at";
+      typeName: string;
+      x: number;
+      y: number;
+      /** When set, ECS `Faction` component is attached with this id. */
+      faction?: number;
+    }
+  | { type: "move_to"; entityIds: string[]; point: { x: number; y: number } };
 
 export type WorkerOutMessage =
   | { type: "ready" }

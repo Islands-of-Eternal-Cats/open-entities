@@ -2,17 +2,17 @@
 //!
 //! A library for working with entities using the **bevy_ecs** framework (no bevy_app).
 //!
-//! - **Components**: Data attached to entities (Position, Velocity)
+//! - **Components**: Data attached to entities (Position, Velocity, BaseMoveSpeed, Faction, …)
 //! - **Systems**: Functions that operate on components
 //! - **Entities**: Unique objects in the world
 //!
 //! # Examples
 //!
-//! ```rust
-//! use open_entities::setup_world;
+//! ```rust,no_run
+//! use open_entities::setup_world_with_yaml;
 //!
 //! fn main() {
-//!     let (mut world, mut schedule) = setup_world();
+//!     let (mut world, mut schedule) = setup_world_with_yaml("assets/entities.yaml");
 //!     schedule.run(&mut world); // one tick
 //! }
 //! ```
@@ -23,18 +23,19 @@ pub mod systems;
 pub mod world;
 
 pub use bevy_ecs::prelude::{Schedule, World};
-pub use components::{Position, Velocity};
+pub use components::{BaseMoveSpeed, EntityTypeName, Faction, MoveTarget, Position, Velocity};
 pub use entity_loader::{
-    EntityDefinitions, EntityDefinitionsFile, EntityTemplate, LoadError, SpawnError,
-    load_and_spawn_all_from_path, spawn_entity_by_type, spawn_entity_by_type_in_world,
+    EntityDefinitions, EntityDefinitionsFile, EntityTemplate, LoadError, SpawnError, is_movable,
+    load_and_spawn_all_from_path, spawn_entity_by_type, spawn_entity_by_type_at_in_world,
+    spawn_entity_by_type_in_world,
 };
 pub use systems::{
     DeltaTime, EntityDefinitionsPath, load_entities_from_yaml_system, move_system,
     print_position_system,
 };
 pub use world::{
-    create_empty_world, create_world_with_definitions, get_entities, run_tick, setup_world,
-    setup_world_with_yaml,
+    EntitySnapshotRow, create_empty_world, create_world_with_definitions, get_entities,
+    order_move_entities_to, run_tick, setup_world, setup_world_with_yaml,
 };
 
 #[cfg(test)]
@@ -52,36 +53,53 @@ mod tests {
 
     #[test]
     fn test_spawn_entity_and_query() {
+        let yaml = r#"
+entities:
+  mobile:
+    position: { x: 5.0, y: 5.0 }
+    base_move_speed: 12.0
+"#;
+        let definitions = EntityDefinitions::load_from_str(yaml).unwrap();
         let mut world = World::new();
+        world.insert_resource(definitions);
 
-        // Spawn an entity with both Position and Velocity
+        let mut startup = Schedule::default();
+        startup.add_systems(|mut commands: Commands, defs: Res<EntityDefinitions>| {
+            let _ = spawn_entity_by_type(&mut commands, &defs, "mobile", None);
+        });
+        startup.run(&mut world);
+
         let entity = world
-            .spawn((Position { x: 5.0, y: 5.0 }, Velocity { vx: 2.0, vy: 3.0 }))
-            .id();
+            .query::<(Entity, &Velocity)>()
+            .iter(&world)
+            .map(|(e, _)| e)
+            .next()
+            .expect("spawned mobile");
 
-        // Query for entities with Velocity
         {
             let mut query = world.query::<&Velocity>();
             let velocities: Vec<_> = query.iter(&world).collect();
             assert_eq!(velocities.len(), 1);
         }
 
-        // Query for entities with Position but without Velocity
         {
             let mut query = world.query::<(&Position, Entity)>();
             let positions: Vec<_> = query
                 .iter(&world)
-                .filter(|(_, entity)| world.get::<Velocity>(*entity).is_none())
+                .filter(|(_, e)| world.get::<Velocity>(*e).is_none())
                 .collect();
             assert_eq!(positions.len(), 0);
         }
 
-        // Query for specific entity by ID
         {
             let pos = world.get::<Position>(entity).unwrap();
             assert_eq!(pos.x, 5.0);
             assert_eq!(pos.y, 5.0);
         }
+        let vel = world.get::<Velocity>(entity).unwrap();
+        assert_eq!(vel.vx, 0.0);
+        assert_eq!(vel.vy, 0.0);
+        assert_eq!(world.get::<BaseMoveSpeed>(entity).unwrap().0, 12.0);
     }
 
     #[test]
@@ -90,7 +108,7 @@ mod tests {
 entities:
   mover:
     position: { x: 1.0, y: 2.0 }
-    velocity: { vx: 0.5, vy: 0.5 }
+    base_move_speed: 1.0
   static:
     position: { x: 10.0, y: 10.0 }
 "#;
@@ -104,8 +122,8 @@ entities:
 
         let mut startup = Schedule::default();
         startup.add_systems(|mut commands: Commands, defs: Res<EntityDefinitions>| {
-            let _ = spawn_entity_by_type(&mut commands, &defs, "mover");
-            let _ = spawn_entity_by_type(&mut commands, &defs, "static");
+            let _ = spawn_entity_by_type(&mut commands, &defs, "mover", None);
+            let _ = spawn_entity_by_type(&mut commands, &defs, "static", None);
         });
         startup.run(&mut world);
 
@@ -123,8 +141,8 @@ entities:
         assert_eq!(without_vel.len(), 1);
 
         let (pos, _) = with_vel[0];
-        assert_eq!(pos.x, 1.5); // 1.0 + 0.5 after one move_system tick
-        assert_eq!(pos.y, 2.5);
+        assert_eq!(pos.x, 1.0);
+        assert_eq!(pos.y, 2.0);
     }
 
     #[test]
@@ -135,10 +153,10 @@ entities:
 entities:
   mover:
     position: { x: 0.0, y: 0.0 }
-    velocity: { vx: 1.0, vy: 2.0 }
+    base_move_speed: 45.0
   another_mover:
     position: { x: 5.0, y: 5.0 }
-    velocity: { vx: -0.5, vy: 0.5 }
+    base_move_speed: 30.0
   static_obstacle:
     position: { x: 10.0, y: 10.0 }
 "#;
@@ -157,19 +175,19 @@ entities:
             "YAML defines mover, another_mover, static_obstacle"
         );
 
-        update.run(&mut world); // one tick: movers move
+        update.run(&mut world); // one tick: zero initial velocity, positions unchanged
         let _ = std::fs::remove_file(&path);
         let positions: Vec<_> = query.iter(&world).collect();
         assert_eq!(positions.len(), 3);
         let pairs: Vec<(f32, f32)> = positions.iter().map(|p| (p.x, p.y)).collect();
         assert!(
-            pairs.contains(&(1.0, 2.0)),
-            "mover should be at (1.0, 2.0) after one tick, got pairs: {:?}",
+            pairs.contains(&(0.0, 0.0)),
+            "mover should stay at (0,0) with zero initial velocity, got pairs: {:?}",
             pairs
         );
         assert!(
-            pairs.contains(&(4.5, 5.5)),
-            "another_mover should be at (4.5, 5.5) after one tick, got pairs: {:?}",
+            pairs.contains(&(5.0, 5.0)),
+            "another_mover should stay at (5,5), got pairs: {:?}",
             pairs
         );
         assert!(
@@ -210,6 +228,23 @@ not_entities:
     }
 
     #[test]
+    fn test_static_type_without_positive_base_move_speed_has_no_velocity() {
+        let yaml = r#"
+entities:
+  wall:
+    position: { x: 3.0, y: 4.0 }
+"#;
+        let defs = EntityDefinitions::load_from_str(yaml).unwrap();
+        assert!(!is_movable(defs.get("wall").unwrap()));
+        let mut world = World::new();
+        world.insert_resource(defs);
+        let e = spawn_entity_by_type_in_world(&mut world, "wall", None).unwrap();
+        assert!(world.get::<Velocity>(e).is_none());
+        assert!(world.get::<Position>(e).is_some());
+        assert!(world.get::<BaseMoveSpeed>(e).is_none());
+    }
+
+    #[test]
     fn test_spawn_unknown_type_returns_explicit_error() {
         let defs = EntityDefinitions::load_from_str("entities: {}").unwrap();
         let mut world = World::new();
@@ -217,7 +252,7 @@ not_entities:
 
         let mut startup = Schedule::default();
         startup.add_systems(|mut commands: Commands, defs: Res<EntityDefinitions>| {
-            let err = spawn_entity_by_type(&mut commands, &defs, "missing").unwrap_err();
+            let err = spawn_entity_by_type(&mut commands, &defs, "missing", None).unwrap_err();
             assert_eq!(
                 err,
                 SpawnError::UnknownEntityType {
@@ -231,12 +266,14 @@ not_entities:
     #[test]
     fn test_spawn_in_world_reports_missing_defs_and_unknown_type() {
         let mut world = World::new();
-        let missing_defs_err = spawn_entity_by_type_in_world(&mut world, "mover").unwrap_err();
+        let missing_defs_err =
+            spawn_entity_by_type_in_world(&mut world, "mover", None).unwrap_err();
         assert_eq!(missing_defs_err, SpawnError::DefinitionsNotLoaded);
 
         let defs = EntityDefinitions::load_from_str("entities: {}").unwrap();
         world.insert_resource(defs);
-        let unknown_type_err = spawn_entity_by_type_in_world(&mut world, "ghost").unwrap_err();
+        let unknown_type_err =
+            spawn_entity_by_type_in_world(&mut world, "ghost", None).unwrap_err();
         assert_eq!(
             unknown_type_err,
             SpawnError::UnknownEntityType {
@@ -253,7 +290,7 @@ entities:
     position: { x: 7.0, y: 9.0 }
 "#;
         let (mut world, mut schedule) = create_world_with_definitions(yaml).unwrap();
-        let spawned = spawn_entity_by_type_in_world(&mut world, "static_only").unwrap();
+        let spawned = spawn_entity_by_type_in_world(&mut world, "static_only", None).unwrap();
 
         run_tick(&mut world, &mut schedule, 0.016);
         let pos = world
@@ -261,5 +298,135 @@ entities:
             .expect("spawned static_only should have Position");
         assert_eq!(pos.x, 7.0);
         assert_eq!(pos.y, 9.0);
+    }
+
+    #[test]
+    fn test_order_move_entities_to_adds_velocity_and_seeks_target() {
+        let yaml = r#"
+entities:
+  unit:
+    position: { x: 0.0, y: 0.0 }
+    base_move_speed: 45.0
+"#;
+        let (mut world, mut schedule) = create_world_with_definitions(yaml).unwrap();
+        let spawned = spawn_entity_by_type_in_world(&mut world, "unit", None).unwrap();
+        let bits = spawned.to_bits();
+        order_move_entities_to(&mut world, &[bits], Position { x: 100.0, y: 0.0 });
+        assert!(world.get::<Velocity>(spawned).is_some());
+        assert!(world.get::<MoveTarget>(spawned).is_some());
+        run_tick(&mut world, &mut schedule, 0.05);
+        let pos = world.get::<Position>(spawned).unwrap();
+        assert!(pos.x > 0.0, "expected movement toward x=100, got {:?}", pos);
+    }
+
+    #[test]
+    fn test_order_move_skips_entities_without_base_move_speed() {
+        let yaml = r#"
+entities:
+  wall:
+    position: { x: 0.0, y: 0.0 }
+"#;
+        let (mut world, _schedule) = create_world_with_definitions(yaml).unwrap();
+        let wall = spawn_entity_by_type_in_world(&mut world, "wall", None).unwrap();
+        order_move_entities_to(&mut world, &[wall.to_bits()], Position { x: 100.0, y: 0.0 });
+        assert!(world.get::<Velocity>(wall).is_none());
+        assert!(world.get::<MoveTarget>(wall).is_none());
+    }
+
+    #[test]
+    fn test_order_move_entities_to_spreads_two_targets_on_grid() {
+        let yaml = r#"
+entities:
+  u1:
+    position: { x: 0.0, y: 0.0 }
+    base_move_speed: 10.0
+  u2:
+    position: { x: 0.0, y: 0.0 }
+    base_move_speed: 10.0
+"#;
+        let (mut world, _schedule) = create_world_with_definitions(yaml).unwrap();
+        let e1 = spawn_entity_by_type_in_world(&mut world, "u1", None).unwrap();
+        let e2 = spawn_entity_by_type_in_world(&mut world, "u2", None).unwrap();
+        let center = Position { x: 50.0, y: 50.0 };
+        order_move_entities_to(&mut world, &[e1.to_bits(), e2.to_bits()], center);
+        let t1 = world.get::<MoveTarget>(e1).unwrap().at;
+        let t2 = world.get::<MoveTarget>(e2).unwrap().at;
+        assert_ne!(
+            (t1.x, t1.y),
+            (t2.x, t2.y),
+            "two units ordered together should get distinct destinations"
+        );
+    }
+
+    #[test]
+    fn test_base_move_speed_from_yaml_on_spawn() {
+        let yaml = r#"
+entities:
+  fast:
+    position: { x: 0.0, y: 0.0 }
+    base_move_speed: 100.0
+  default_speed:
+    position: { x: 1.0, y: 1.0 }
+"#;
+        let (mut world, _) = create_world_with_definitions(yaml).unwrap();
+        let fast = spawn_entity_by_type_in_world(&mut world, "fast", None).unwrap();
+        let default_speed =
+            spawn_entity_by_type_in_world(&mut world, "default_speed", None).unwrap();
+        assert_eq!(world.get::<BaseMoveSpeed>(fast).unwrap().0, 100.0);
+        assert!(world.get::<BaseMoveSpeed>(default_speed).is_none());
+    }
+
+    #[test]
+    fn test_faction_optional_on_spawn() {
+        let yaml = r#"
+entities:
+  allied:
+    position: { x: 0.0, y: 0.0 }
+  neutral:
+    position: { x: 1.0, y: 1.0 }
+  unit:
+    position: { x: 0.0, y: 0.0 }
+    base_move_speed: 10.0
+"#;
+        let (mut world, _) = create_world_with_definitions(yaml).unwrap();
+        let allied = spawn_entity_by_type_in_world(&mut world, "allied", Some(2)).unwrap();
+        let neutral = spawn_entity_by_type_in_world(&mut world, "neutral", None).unwrap();
+        assert_eq!(world.get::<Faction>(allied).unwrap().0, 2);
+        assert!(world.get::<Faction>(neutral).is_none());
+
+        let at = spawn_entity_by_type_at_in_world(&mut world, "unit", 3.0, 4.0, Some(9)).unwrap();
+        assert_eq!(world.get::<Faction>(at).unwrap().0, 9);
+        assert_eq!(world.get::<Position>(at).unwrap().x, 3.0);
+    }
+
+    #[test]
+    fn test_spawn_at_overrides_position_and_does_not_create_velocity() {
+        let yaml = r#"
+entities:
+  mover:
+    position: { x: 1.0, y: 2.0 }
+    base_move_speed: 40.0
+"#;
+        let (mut world, mut schedule) = create_world_with_definitions(yaml).unwrap();
+        let spawned =
+            spawn_entity_by_type_at_in_world(&mut world, "mover", 123.0, 456.0, None).unwrap();
+
+        let pos = world
+            .get::<Position>(spawned)
+            .expect("spawned mover should have Position");
+        assert_eq!(pos.x, 123.0);
+        assert_eq!(pos.y, 456.0);
+        assert!(
+            world.get::<Velocity>(spawned).is_none(),
+            "spawn_at must not create Velocity"
+        );
+        assert_eq!(world.get::<BaseMoveSpeed>(spawned).unwrap().0, 40.0);
+
+        run_tick(&mut world, &mut schedule, 0.016);
+        let pos_after = world
+            .get::<Position>(spawned)
+            .expect("spawned mover should still have Position after tick");
+        assert_eq!(pos_after.x, 123.0);
+        assert_eq!(pos_after.y, 456.0);
     }
 }

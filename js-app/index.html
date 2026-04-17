@@ -3,33 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenEntities WASM Demo</title>
-    <style>
-        body { font-family: monospace; padding: 20px; max-width: 800px; margin: 0 auto; }
-        .entity { padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px; }
-        .entity-count { margin: 0 0 10px 0; }
-        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
-        #status { font-weight: bold; color: #666; }
-        #canvas-container { margin: 16px 0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-    </style>
+    <title>OpenEntities — RTS demo</title>
 </head>
 <body>
-    <h1>OpenEntities WASM Demo</h1>
-    <p>Demonstrating Rust compiled to WebAssembly with ECS components.</p>
-    <div id="status">Loading WASM...</div>
-    <div id="canvas-container"></div>
-    <div id="entities">
-        <h2>Entities</h2>
-        <div id="entity-list"></div>
-    </div>
-    <div>
-      <label for="entity-type">Type:</label>
-      <select id="entity-type">
-        <option value="mover">mover</option>
-        <option value="another_mover">another_mover</option>
-        <option value="static_obstacle">static_obstacle</option>
-      </select>
-      <button id="add-entity">Add Entity</button>
+    <div class="rts-app">
+        <header class="rts-top-bar">
+            <div>
+                <h1>OpenEntities</h1>
+                <p class="tagline">ECS in Rust / WASM — map, selection, move orders</p>
+            </div>
+            <div id="status" class="rts-status rts-status--loading" role="status" aria-live="polite">Loading WASM…</div>
+        </header>
+
+        <main class="rts-main">
+            <div class="rts-map-column">
+                <div id="canvas-container" class="rts-map-viewport" aria-label="Tactical map"></div>
+            </div>
+            <aside class="rts-sidebar">
+                <section class="rts-panel" aria-labelledby="selection-heading">
+                    <h2 id="selection-heading">Selection</h2>
+                    <div id="selection-detail" class="selection-detail">
+                        <p class="selection-empty">Nothing selected</p>
+                    </div>
+                    <button type="button" id="clear-selection" class="rts-btn rts-btn--ghost" hidden disabled
+                        aria-label="Clear selection">Clear selection <span class="hotkey-hint">(Esc)</span></button>
+                </section>
+                <section class="rts-panel" aria-labelledby="forces-heading">
+                    <h2 id="forces-heading">Forces</h2>
+                    <div id="entity-list" class="entity-list-scroll"></div>
+                </section>
+            </aside>
+        </main>
+
+        <footer class="rts-command-bar">
+            <p id="command-hints" class="command-hints">
+                <strong>Orders:</strong> drag a box or click units to select ·
+                <kbd>Shift</kbd> add/remove · with a selection, click empty ground to <strong>move</strong> ·
+                <kbd>Esc</kbd> clears selection.
+                <strong>Minimap</strong> (corner): click with selection — move order; without selection — center view on that point (white frame = visible area).
+            </p>
+            <div class="train-bar" role="group" aria-label="Hire units">
+                <span class="train-bar-label">Hire</span>
+                <button type="button" class="rts-btn train-btn" data-train-type="mover"
+                    aria-label="Hire mover unit">
+                    <span class="train-title">Mover</span>
+                    <span class="train-sub">mobile</span>
+                </button>
+                <button type="button" class="rts-btn train-btn" data-train-type="another_mover"
+                    aria-label="Hire another mover unit">
+                    <span class="train-title">Mover B</span>
+                    <span class="train-sub">another_mover</span>
+                </button>
+                <button type="button" class="rts-btn train-btn" data-train-type="static_obstacle"
+                    aria-label="Place static obstacle">
+                    <span class="train-title">Obstacle</span>
+                    <span class="train-sub">static</span>
+                </button>
+            </div>
+        </footer>
     </div>
     <script type="module" src="./src/main.ts"></script>
 </body>

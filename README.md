@@ -5,8 +5,8 @@ A library for working with entities using the **bevy_ecs** framework, with WebAs
 ## Features
 
 - Entity-Component-System (ECS) architecture based on `bevy_ecs`
-- Components: `Position`, `Velocity`
-- Systems: `move_system`, `print_position_system`
+- Components: `Position`, `Velocity`, `BaseMoveSpeed`, `MoveTarget`, `Faction`, `EntityTypeName`, …
+- Systems: `seek_move_target_system`, `move_system`, `print_position_system`, …
 - WebAssembly support via `wasm-bindings`
 
 ## Project Structure
@@ -80,18 +80,7 @@ make docs
 
 ## Usage Example
 
-The library uses `bevy_ecs` only (no `bevy_app`). You get a `World` and `Schedule` and run the schedule each tick:
-
-```rust
-use open_entities::setup_world;
-
-fn main() {
-    let (mut world, mut schedule) = setup_world();
-    schedule.run(&mut world); // one tick
-}
-```
-
-To load entities from a YAML file instead of hardcoded ones:
+The library uses `bevy_ecs` only (no `bevy_app`). You get a `World` and `Schedule` and run the schedule each tick. Entity types are defined in YAML; `setup_world_with_yaml` loads the file and spawns one entity per type:
 
 ```rust
 use open_entities::setup_world_with_yaml;
@@ -102,16 +91,20 @@ fn main() {
 }
 ```
 
+**Spawn policy:** YAML is the source of truth for unit types. Every gameplay entity should be created from a type listed under `entities:`—for example via `setup_world_with_yaml`, `create_world_with_definitions`, or `spawn_entity_by_type` / `spawn_entity_by_type_in_world` after loading definitions. Do not add ad-hoc `world.spawn(...)` for units in shared library setup; keep types and defaults in YAML so balance and composition stay data-driven.
+
+`setup_world()` returns an empty world with the same update systems (no initial entities). Use it together with loaded `EntityDefinitions` and spawn-by-type when you build the world yourself.
+
 ### YAML Entity Definitions
 
 YAML root key must be `entities`. Each key inside `entities` is a type name.
-`position` and `velocity` are optional, so different types can have different component sets.
+`position` is usually set. **`base_move_speed`** (units per second) defines whether the type can move: value `> 0` means a movable unit (starts with zero velocity; used for seek / move orders). Omitted, zero, or negative means a static entity (position only).
 
 ```yaml
 entities:
   mover:
     position: { x: 0.0, y: 0.0 }
-    velocity: { vx: 1.0, vy: 2.0 }
+    base_move_speed: 45.0
   static_obstacle:
     position: { x: 10.0, y: 10.0 }
 ```
@@ -125,7 +118,7 @@ use open_entities::{EntityDefinitions, spawn_entity_by_type_in_world, SpawnError
 
 fn spawn_example(world: &mut World) -> Result<(), SpawnError> {
     // Assume EntityDefinitions resource was inserted earlier.
-    let _entity = spawn_entity_by_type_in_world(world, "mover")?;
+    let _entity = spawn_entity_by_type_in_world(world, "mover", None)?;
     Ok(())
 }
 ```
@@ -134,7 +127,7 @@ WASM/TypeScript API (through `JsWorld`):
 
 ```typescript
 const world = new JsWorld(entitiesYaml);
-await world.spawn("mover"); // throws JS Error if type is unknown
+await world.spawn("mover"); // optional second arg: faction id (number)
 ```
 
 ### Common YAML/Spawn Errors

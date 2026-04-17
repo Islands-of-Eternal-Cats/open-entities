@@ -6,7 +6,8 @@
 use js_sys::Array;
 use open_entities::{
     LoadError, Position, Schedule, SpawnError, Velocity, World, create_world_with_definitions,
-    get_entities, run_tick, spawn_entity_by_type_in_world,
+    get_entities, order_move_entities_to, run_tick, spawn_entity_by_type_at_in_world,
+    spawn_entity_by_type_in_world,
 };
 use wasm_bindgen::prelude::*;
 
@@ -122,9 +123,26 @@ impl JsWorld {
 
     /// Spawn an entity by type name from the loaded definitions (from assets/entities.yaml).
     /// Returns error if definitions were not loaded or the type name is unknown.
+    /// Optional `faction`: when set, attaches the `Faction` component with that id.
     #[wasm_bindgen]
-    pub fn spawn(&mut self, type_name: &str) -> Result<(), JsValue> {
-        spawn_entity_by_type_in_world(&mut self.world, type_name)
+    pub fn spawn(&mut self, type_name: &str, faction: Option<u32>) -> Result<(), JsValue> {
+        spawn_entity_by_type_in_world(&mut self.world, type_name, faction)
+            .map(|_| ())
+            .map_err(|e| JsValue::from_str(&format_spawn_error(&e)))
+    }
+
+    /// Spawn an entity by type name at the given position.
+    /// Does not create Velocity until a move order; movable types still get BaseMoveSpeed from YAML when base_move_speed > 0.
+    /// Optional `faction`: when set, attaches the `Faction` component with that id.
+    #[wasm_bindgen]
+    pub fn spawn_at(
+        &mut self,
+        type_name: &str,
+        x: f32,
+        y: f32,
+        faction: Option<u32>,
+    ) -> Result<(), JsValue> {
+        spawn_entity_by_type_at_in_world(&mut self.world, type_name, x, y, faction)
             .map(|_| ())
             .map_err(|e| JsValue::from_str(&format_spawn_error(&e)))
     }
@@ -135,14 +153,34 @@ impl JsWorld {
         run_tick(&mut self.world, &mut self.schedule, dt);
     }
 
-    /// Snapshot of all entities as an array of `{ id, pos: { x, y }, velocity: { vx, vy } | null }` for rendering.
-    /// Entities with only Position (static) have `velocity: null`; moving entities have velocity.
+    /// Move-to order for entities identified by snapshot id strings (`Entity::to_bits()` decimal).
+    /// Target uses the same [`Position`] shape as entity placement (`JsPosition`).
+    #[wasm_bindgen]
+    pub fn order_move_to(
+        &mut self,
+        entity_ids: Vec<String>,
+        target: &JsPosition,
+    ) -> Result<(), JsValue> {
+        let mut bits = Vec::with_capacity(entity_ids.len());
+        for s in entity_ids {
+            let b: u64 = s
+                .parse()
+                .map_err(|_| JsValue::from_str("invalid entity id"))?;
+            bits.push(b);
+        }
+        order_move_entities_to(&mut self.world, &bits, target.position);
+        Ok(())
+    }
+
+    /// Snapshot of all entities as an array of `{ id, pos, velocity, faction, entityType }` for rendering.
+    /// Static entities have `velocity: null`; without [`Faction`] in ECS, `faction` is `null`.
+    /// `entityType` is the YAML `entities:` key (only units spawned from definitions are listed).
     /// `id` is a stable entity identifier (Entity::to_bits) so the same entity keeps the same id across frames.
     #[wasm_bindgen]
     pub fn get_entities(&mut self) -> Array {
         let snapshot = get_entities(&mut self.world);
         let arr = Array::new();
-        for (id_bits, pos, vel_opt) in snapshot {
+        for (id_bits, pos, vel_opt, faction_opt, type_name) in snapshot {
             let pos_obj = js_sys::Object::new();
             js_sys::Reflect::set(
                 &pos_obj,
@@ -175,6 +213,11 @@ impl JsWorld {
                 }
                 None => JsValue::NULL,
             };
+            let faction_js = match faction_opt {
+                Some(f) => JsValue::from_f64(f.0 as f64),
+                None => JsValue::NULL,
+            };
+            let entity_type_js = JsValue::from_str(&type_name);
             let obj = js_sys::Object::new();
             // Entity id as string to avoid JS Number precision loss (u64 > 2^53-1)
             js_sys::Reflect::set(
@@ -185,6 +228,8 @@ impl JsWorld {
             .unwrap();
             js_sys::Reflect::set(&obj, &JsValue::from_str("pos"), &pos_obj).unwrap();
             js_sys::Reflect::set(&obj, &JsValue::from_str("velocity"), &vel_js).unwrap();
+            js_sys::Reflect::set(&obj, &JsValue::from_str("faction"), &faction_js).unwrap();
+            js_sys::Reflect::set(&obj, &JsValue::from_str("entityType"), &entity_type_js).unwrap();
             arr.push(&obj);
         }
         arr

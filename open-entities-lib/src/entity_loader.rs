@@ -1,20 +1,30 @@
 //! Загрузка описаний сущностей из YAML и создание сущностей в ECS по имени типа.
 //!
-//! Компоненты заданы заранее (Position, Velocity); поля YAML маппятся на них.
-//! У каждого типа сущности может быть свой набор компонентов.
+//! Подвижность типа задаётся только полем **`base_move_speed`**: значение `> 0` — юнит может двигаться
+//! ([`Velocity`] при спавне — нулевая, [`BaseMoveSpeed`] — из шаблона); иначе сущность статична
+//! (только [`Position`], без [`Velocity`]/[`BaseMoveSpeed`]). Компонент [`Faction`] задаётся только при спавне
+//! ([`spawn_entity_by_type`], [`spawn_entity_by_type_in_world`], [`spawn_entity_by_type_at_in_world`]), не из YAML.
+//! [`EntityTemplate`] с `#[serde(default)]`: допустима пустая карта `{}`.
 
-use crate::components::{Position, Velocity};
+use crate::components::{BaseMoveSpeed, EntityTypeName, Faction, Position, Velocity};
 use bevy_ecs::prelude::*;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-/// Шаблон одной сущности: какие компоненты и с какими значениями.
-/// Отсутствующие поля означают отсутствие компонента у этого типа.
-#[derive(Debug, Clone, Deserialize)]
+/// Шаблон одной сущности: позиция и базовая скорость движения.
+/// `base_move_speed` отсутствует, ноль или `≤ 0` — тип неподвижен; `> 0` — подвижный тип.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
 pub struct EntityTemplate {
     pub position: Option<Position>,
-    pub velocity: Option<Velocity>,
+    /// Базовая скорость движения (юнит/с). `> 0` — юнит подвижен и получает [`BaseMoveSpeed`]; иначе статика.
+    pub base_move_speed: Option<f32>,
+}
+
+/// `true`, если в YAML задан положительный `base_move_speed` (тип может двигаться).
+pub fn is_movable(template: &EntityTemplate) -> bool {
+    matches!(template.base_move_speed, Some(s) if s > 0.0)
 }
 
 /// Корневая структура YAML-файла: именованные типы сущностей.
@@ -136,12 +146,48 @@ impl std::fmt::Display for SpawnError {
 
 impl std::error::Error for SpawnError {}
 
+fn spawn_from_template_in_world(
+    world: &mut World,
+    type_name: String,
+    template: EntityTemplate,
+    position_override: Option<Position>,
+    include_initial_velocity: bool,
+    faction: Option<u32>,
+) -> Entity {
+    let mut entity = world.spawn_empty();
+
+    entity.insert(EntityTypeName(type_name));
+
+    // Position: override wins; otherwise use the template.
+    if let Some(p) = position_override.or(template.position) {
+        entity.insert(p);
+    }
+
+    if is_movable(&template) {
+        let cap = template
+            .base_move_speed
+            .expect("is_movable implies positive base_move_speed");
+        entity.insert(BaseMoveSpeed(cap));
+        if include_initial_velocity {
+            entity.insert(Velocity { vx: 0.0, vy: 0.0 });
+        }
+    }
+
+    if let Some(id) = faction {
+        entity.insert(Faction(id));
+    }
+
+    entity.id()
+}
+
 /// Создать одну сущность в ECS по имени типа из загруженных определений.
+/// `faction`: при `Some(id)` вешается компонент [`Faction`].
 /// Возвращает `Ok(Entity)` если тип найден и сущность создана, иначе ошибку.
 pub fn spawn_entity_by_type(
     commands: &mut Commands,
     definitions: &EntityDefinitions,
     type_name: &str,
+    faction: Option<u32>,
 ) -> Result<Entity, SpawnError> {
     let template = definitions
         .get(type_name)
@@ -154,18 +200,30 @@ pub fn spawn_entity_by_type(
     if let Some(p) = &template.position {
         entity.insert(*p);
     }
-    if let Some(v) = &template.velocity {
-        entity.insert(*v);
+    if is_movable(template) {
+        let cap = template
+            .base_move_speed
+            .expect("is_movable implies positive base_move_speed");
+        entity.insert(BaseMoveSpeed(cap));
+        entity.insert(Velocity { vx: 0.0, vy: 0.0 });
     }
+
+    if let Some(id) = faction {
+        entity.insert(Faction(id));
+    }
+
+    entity.insert(EntityTypeName(type_name.to_string()));
 
     Ok(entity.id())
 }
 
 /// Создать одну сущность в ECS по имени типа, используя ресурс `EntityDefinitions` в мире.
+/// `faction`: при `Some(id)` вешается компонент [`Faction`].
 /// Возвращает `Ok(Entity)` если тип найден и сущность создана, иначе ошибку.
 pub fn spawn_entity_by_type_in_world(
     world: &mut World,
     type_name: &str,
+    faction: Option<u32>,
 ) -> Result<Entity, SpawnError> {
     let template = world
         .get_resource::<EntityDefinitions>()
@@ -176,14 +234,47 @@ pub fn spawn_entity_by_type_in_world(
             type_name: type_name.to_string(),
         })?;
 
-    let mut entity = world.spawn_empty();
-    if let Some(p) = template.position {
-        entity.insert(p);
-    }
-    if let Some(v) = template.velocity {
-        entity.insert(v);
-    }
-    Ok(entity.id())
+    Ok(spawn_from_template_in_world(
+        world,
+        type_name.to_string(),
+        template,
+        None,
+        true,
+        faction,
+    ))
+}
+
+/// Create one entity by type name at the given position, using `EntityDefinitions` resource in the world.
+///
+/// Host-controlled spawn (e.g. WASM/JS). Подвижные типы (`base_move_speed` > 0) получают [`BaseMoveSpeed`],
+/// но без начальной [`Velocity`] — она появится при приказе движения.
+/// `faction`: при `Some(id)` вешается компонент [`Faction`].
+pub fn spawn_entity_by_type_at_in_world(
+    world: &mut World,
+    type_name: &str,
+    x: f32,
+    y: f32,
+    faction: Option<u32>,
+) -> Result<Entity, SpawnError> {
+    let defs = world
+        .get_resource::<EntityDefinitions>()
+        .ok_or(SpawnError::DefinitionsNotLoaded)?;
+
+    let template = defs
+        .get(type_name)
+        .cloned()
+        .ok_or_else(|| SpawnError::UnknownEntityType {
+            type_name: type_name.to_string(),
+        })?;
+
+    Ok(spawn_from_template_in_world(
+        world,
+        type_name.to_string(),
+        template,
+        Some(Position { x, y }),
+        false,
+        faction,
+    ))
 }
 
 /// Загрузить определения из файла и создать по одной сущности каждого типа.
@@ -197,11 +288,12 @@ pub fn load_and_spawn_all_from_path(
     let mut entities = Vec::with_capacity(names.len());
     for name in &names {
         // Names are collected from definitions; unknown-type error is unreachable here.
-        let e =
-            spawn_entity_by_type(commands, &definitions, name).map_err(|err| LoadError::Yaml {
+        let e = spawn_entity_by_type(commands, &definitions, name, None).map_err(|err| {
+            LoadError::Yaml {
                 op: "load_and_spawn_all_from_path",
                 source: err.to_string(),
-            })?;
+            }
+        })?;
         entities.push(e);
     }
     Ok(entities)

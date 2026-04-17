@@ -4,6 +4,7 @@
  */
 import type { EntitySnapshot } from "./types";
 import type { WorkerInMessage, WorkerOutMessage } from "./worker-types";
+import { WORLD_SIZE } from "../visualization/coords";
 
 function flushQueue(): void {
   if (!worker || pending !== null || requestQueue.length === 0) return;
@@ -36,14 +37,18 @@ const requestQueue: QueuedRequest[] = [];
 function rawToSnapshots(
   raw: Array<{
     id: string;
+    entityType: string;
     pos: { x: number; y: number };
     velocity: { vx: number; vy: number } | null;
+    faction?: number | null;
   }>
 ): EntitySnapshot[] {
   return raw.map((e) => ({
     id: e.id,
+    entityType: e.entityType,
     pos: e.pos,
     velocity: e.velocity,
+    faction: e.faction ?? null,
   }));
 }
 
@@ -166,14 +171,57 @@ export function tick(dt: number): Promise<EntitySnapshot[]> {
 }
 
 /**
- * Spawn an entity in the worker by type name (from assets/entities.yaml).
+ * Spawn an entity in the worker by type name from `assets/entities.yaml`
+ * using random coordinates.
  * Returns current entity snapshots.
  */
-export function spawn(typeName: string): Promise<EntitySnapshot[]> {
+/**
+ * Issue move-to-world-point for the given entity ids (snapshot id strings). Does not tick.
+ */
+export function moveSelectedTo(
+  entityIds: string[],
+  point: { x: number; y: number }
+): Promise<EntitySnapshot[]> {
+  if (!worker || !initialized)
+    return Promise.reject(new Error("WASM not initialized"));
+  if (entityIds.length === 0) {
+    return Promise.reject(new Error("moveSelectedTo: no entity ids"));
+  }
+  return new Promise((resolve, reject) => {
+    const message: WorkerInMessage = {
+      type: "move_to",
+      entityIds,
+      point,
+    };
+    if (pending === null && requestQueue.length === 0) {
+      pending = { resolve, reject };
+      worker!.postMessage(message);
+    } else {
+      requestQueue.push({ resolve, reject, message });
+    }
+  });
+}
+
+/**
+ * Spawn by type at random coordinates. Optional `faction` sets ECS `Faction` id.
+ */
+export function spawnRandomAt(
+  typeName: string,
+  faction?: number
+): Promise<EntitySnapshot[]> {
   if (!worker || !initialized)
     return Promise.reject(new Error("WASM not initialized"));
   return new Promise((resolve, reject) => {
-    const message: WorkerInMessage = { type: "spawn", typeName };
+    // Spawn in random world coordinates across the full logical map bounds.
+    const x = Math.random() * WORLD_SIZE;
+    const y = Math.random() * WORLD_SIZE;
+    const message: WorkerInMessage = {
+      type: "spawn_at",
+      typeName,
+      x,
+      y,
+      ...(faction !== undefined ? { faction } : {}),
+    };
     if (pending === null && requestQueue.length === 0) {
       pending = { resolve, reject };
       worker!.postMessage(message);
