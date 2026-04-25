@@ -6,6 +6,7 @@
 use crate::components::{Position, Unit, Vehicle, Velocity};
 use bevy_ecs::prelude::{Commands, Entity};
 use serde::Deserialize;
+use yaml_serde as serde_yaml;
 
 /// Represents a single component parsed from YAML
 #[derive(Debug, Deserialize)]

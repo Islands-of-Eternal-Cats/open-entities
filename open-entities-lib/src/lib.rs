@@ -49,6 +49,7 @@ mod tests {
         // Test that components can be instantiated
         let _pos = Position { x: 0.0, y: 0.0 };
         let _vel = Velocity { vx: 1.0, vy: 2.0 };
+        use crate::components::{Unit, Vehicle};
         let _unit = Unit;
         let _vehicle = Vehicle;
     }
