@@ -190,6 +190,12 @@ async function run(): Promise<void> {
     )) {
       const trainType = btn.dataset.trainType;
       btn.addEventListener("click", () => {
+        if (trainType === "base") {
+          void spawnRandomAt("base", 1)
+            .then((entities) => render(entities))
+            .catch((e) => console.error("spawnRandomAt(base) error:", e));
+          return;
+        }
         if (
           trainType &&
           (ENTITY_TYPES as readonly string[]).includes(trainType)
