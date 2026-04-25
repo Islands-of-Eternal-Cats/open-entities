@@ -1,7 +1,7 @@
 # Rust
 target/
+target_dev/
 **/*.rs.bk
-Cargo.lock
 *.pdb
 
 # WASM

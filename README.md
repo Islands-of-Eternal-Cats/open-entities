@@ -1,12 +1,12 @@
 # OpenEntities
 
-A library for working with entities using the **bevy_ecs** framework, with WebAssembly bindings.
+A library for working with entities using the **bevy_ecs** framework, with WebAssembly bindings and a **TypeScript** demo app (Vite). WASM собирается автоматически при запуске dev-сервера и при изменении кода на Rust.
 
 ## Features
 
 - Entity-Component-System (ECS) architecture based on `bevy_ecs`
-- Components: `Position`, `Velocity`
-- Systems: `move_system`, `print_position_system`
+- Components: `Position`, `Velocity`, `BaseMoveSpeed`, `MoveTarget`, `Faction`, `EntityTypeName`, …
+- Systems: `seek_move_target_system`, `move_system`, `print_position_system`, …
 - WebAssembly support via `wasm-bindings`
 
 ## Project Structure
@@ -15,7 +15,7 @@ A library for working with entities using the **bevy_ecs** framework, with WebAs
 open-entities/
 ├── open-entities-lib/    # Core ECS library
 ├── wasm-bindings/        # WebAssembly bindings
-├── js-app/              # JavaScript application (if any)
+├── js-app/              # TypeScript demo app (Vite, auto WASM build)
 ├── target/              # Build artifacts
 ├── Cargo.toml           # Workspace configuration
 └── Makefile             # Build helpers
@@ -27,6 +27,7 @@ open-entities/
 
 - Rust and Cargo (`rustc`, `cargo`)
 - `wasm32-unknown-unknown` target: `rustup target add wasm32-unknown-unknown`
+- Для js-app: Node.js 18+, wasm-pack
 
 ### Building
 
@@ -37,8 +38,18 @@ make
 # Build in release mode
 make release
 
-# Build WebAssembly
+# Build WebAssembly (вручную; для js-app при npm run dev собирается автоматически)
 make wasm
+```
+
+### TypeScript app (js-app)
+
+Фронтенд на **TypeScript** (Vite). WASM собирается автоматически при `npm run dev` и при изменении файлов в `open-entities-lib/` и `wasm-bindings/`.
+
+```bash
+cd js-app && npm run dev      # Dev-сервер с автосборкой WASM
+cd js-app && npm run typecheck
+cd js-app && npm run build:wasm && npm run build   # Production build
 ```
 
 ### Running Tests
@@ -69,16 +80,62 @@ make docs
 
 ## Usage Example
 
+The library uses `bevy_ecs` only (no `bevy_app`). You get a `World` and `Schedule` and run the schedule each tick. Entity types are defined in YAML; `setup_world_with_yaml` loads the file and spawns one entity per type:
+
 ```rust
-use bevy_app::App;
-use open_entities_lib::setup_app;
+use open_entities::setup_world_with_yaml;
 
 fn main() {
-    let mut app = App::new();
-    setup_app(&mut app);
-    app.run();
+    let (mut world, mut schedule) = setup_world_with_yaml("assets/entities.yaml");
+    schedule.run(&mut world);
 }
 ```
+
+**Spawn policy:** YAML is the source of truth for unit types. Every gameplay entity should be created from a type listed under `entities:`—for example via `setup_world_with_yaml`, `create_world_with_definitions`, or `spawn_entity_by_type` / `spawn_entity_by_type_in_world` after loading definitions. Do not add ad-hoc `world.spawn(...)` for units in shared library setup; keep types and defaults in YAML so balance and composition stay data-driven.
+
+`setup_world()` returns an empty world with the same update systems (no initial entities). Use it together with loaded `EntityDefinitions` and spawn-by-type when you build the world yourself.
+
+### YAML Entity Definitions
+
+YAML root key must be `entities`. Each key inside `entities` is a type name.
+`position` is usually set. **`base_move_speed`** (units per second) defines whether the type can move: value `> 0` means a movable unit (starts with zero velocity; used for seek / move orders). Omitted, zero, or negative means a static entity (position only).
+
+```yaml
+entities:
+  mover:
+    position: { x: 0.0, y: 0.0 }
+    base_move_speed: 45.0
+  static_obstacle:
+    position: { x: 10.0, y: 10.0 }
+```
+
+### Spawn by Type Name
+
+Rust API:
+
+```rust
+use open_entities::{EntityDefinitions, spawn_entity_by_type_in_world, SpawnError, World};
+
+fn spawn_example(world: &mut World) -> Result<(), SpawnError> {
+    // Assume EntityDefinitions resource was inserted earlier.
+    let _entity = spawn_entity_by_type_in_world(world, "mover", None)?;
+    Ok(())
+}
+```
+
+WASM/TypeScript API (through `JsWorld`):
+
+```typescript
+const world = new JsWorld(entitiesYaml);
+await world.spawn("mover"); // optional second arg: faction id (number)
+```
+
+### Common YAML/Spawn Errors
+
+- `YAML parse error during load_from_str`: invalid YAML syntax or missing required `entities` root.
+- `IO error during load_from_path`: bad path or read permissions issue for YAML file.
+- `spawn failed: Unknown entity type: '...'`: requested type name is not in `entities`.
+- `spawn failed: Entity definitions resource is not loaded`: world does not contain `EntityDefinitions` resource.
 
 ## License
 
@@ -87,4 +144,3 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
-```
