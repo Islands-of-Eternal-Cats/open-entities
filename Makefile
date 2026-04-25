@@ -1,9 +1,26 @@
 # Makefile for open-entities Rust Workspace
 
-.PHONY: all build test full-check clippy fmt run-wasm-todo clean check docs js-app
+.PHONY: all build test full-check clippy fmt run-wasm-todo clean check docs js-app help
 
-# По умолчанию - сборка всего
-all: build
+# По умолчанию - список доступных команд
+all: help
+
+# Показать краткий список команд
+help:
+	@echo "Доступные команды:"
+	@echo "  build      - Сборка проекта в режиме отладки"
+	@echo "  release    - Сборка проекта в релизном режиме"
+	@echo "  test       - Запуск тестов"
+	@echo "  full-check - Rust-тесты + TypeScript проверки"
+	@echo "  clippy     - Статический анализ с Clippy"
+	@echo "  fmt        - Форматирование кода"
+	@echo "  check      - Проверка без сборки"
+	@echo "  docs       - Генерация документации"
+	@echo "  wasm       - Сборка WASM"
+	@echo "  js-app     - Запуск dev-сервера js-app"
+	@echo "  clean      - Очистка проекта"
+	@echo "  ci         - Запуск всех проверок (CI)"
+	@echo "  help       - Показать этот список"
 
 # Сборка проекта в режиме отладки
 build:
