@@ -63,6 +63,10 @@ wasm:
 # Запуск dev-сервера js-app (Vite). Сначала пересобирает WASM, затем стартует сервер.
 js-app:
 	$(MAKE) wasm
+	@if [ ! -x "js-app/node_modules/.bin/vite" ]; then \
+		echo "Installing js-app dependencies (npm ci)..."; \
+		cd js-app && npm ci; \
+	fi
 	cd js-app && npm run dev
 
 # Чистка проекта (target/ и wasm-bindings/pkg/)
