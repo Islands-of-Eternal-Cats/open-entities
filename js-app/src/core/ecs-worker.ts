@@ -1,10 +1,20 @@
 /**
  * ECS web worker: loads WASM and runs simulation.
- * Listens for init, tick, spawn; posts back ready, entities, error.
+ * Listens for init/tick/spawn_at/move_to; posts back ready/entities/error.
  */
 import initWasmModule, { JsPosition, JsWorld } from "open-entities-wasm";
-import type { EntitySnapshot } from "./types";
 import type { WorkerInMessage, WorkerOutMessage } from "./worker-types";
+
+function snapshotFromWorld(world: JsWorld): WorkerOutMessage {
+  const entities = Array.from(world.get_entities()).map((e) => ({
+    id: e.id,
+    entityType: e.entityType,
+    pos: e.pos,
+    velocity: e.velocity,
+    faction: e.faction ?? null,
+  }));
+  return { type: "entities", entities };
+}
 
 let world: JsWorld | null = null;
 
@@ -37,8 +47,7 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
 
     if (msg.type === "tick") {
       world.tick(msg.dt);
-      const entities: EntitySnapshot[] = Array.from(world.get_entities());
-      post({ type: "entities", entities });
+      post(snapshotFromWorld(world));
       return;
     }
 
@@ -50,8 +59,7 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
         post({ type: "error", message });
         return;
       }
-      const entities: EntitySnapshot[] = Array.from(world.get_entities());
-      post({ type: "entities", entities });
+      post(snapshotFromWorld(world));
       return;
     }
 
@@ -66,8 +74,7 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
         post({ type: "error", message });
         return;
       }
-      const entities: EntitySnapshot[] = Array.from(world.get_entities());
-      post({ type: "entities", entities });
+      post(snapshotFromWorld(world));
       return;
     }
   } catch (err) {

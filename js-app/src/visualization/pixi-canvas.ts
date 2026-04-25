@@ -16,7 +16,11 @@ import {
   setLogicalCanvasSize,
   worldToScreen,
 } from "./coords";
-import { entityIdAtScreenPoint, entityIdsInScreenMarquee } from "./selection-logic";
+import {
+  entityIdAtScreenPoint,
+  entityIdsInScreenMarquee,
+  shouldIssueMoveOrder,
+} from "./selection-logic";
 
 const COLORS = [0x3498db, 0xe74c3c, 0x2ecc71, 0xf39c12, 0x9b59b6, 0x1abc9c];
 
@@ -137,10 +141,23 @@ export async function initPixiCanvas(
     };
   }
 
-  function handleMinimapTap(sx: number, sy: number): void {
+  type InputModifiers = {
+    shiftKey: boolean;
+    ctrlKey: boolean;
+    altKey: boolean;
+    metaKey: boolean;
+  };
+
+  function handleMinimapTap(sx: number, sy: number, modifiers: InputModifiers): void {
     if (!canvasPointInMinimap(sx, sy)) return;
     const world = minimapCanvasToWorld(sx, sy);
-    if (selectedIds.size > 0) {
+    if (
+      shouldIssueMoveOrder({
+        hitEntityId: null,
+        selectedCount: selectedIds.size,
+        ...modifiers,
+      })
+    ) {
       void Promise.resolve(onMoveOrder?.(world));
     } else {
       centerViewOnWorld(world.x, world.y);
@@ -358,19 +375,22 @@ export async function initPixiCanvas(
     notifySelection();
   }
 
-  function applyClickSelection(
-    sx: number,
-    sy: number,
-    shiftKey: boolean
-  ): void {
+  function applyClickSelection(sx: number, sy: number, modifiers: InputModifiers): void {
     const hit = entityIdAtScreenPoint(lastEntities, sx, sy);
-    if (hit === null) {
-      if (selectedIds.size > 0) {
-        void Promise.resolve(onMoveOrder?.(screenToWorld(sx, sy)));
-      }
+    if (
+      shouldIssueMoveOrder({
+        hitEntityId: hit,
+        selectedCount: selectedIds.size,
+        ...modifiers,
+      })
+    ) {
+      void Promise.resolve(onMoveOrder?.(screenToWorld(sx, sy)));
       return;
     }
-    if (shiftKey) {
+    if (hit === null) {
+      return;
+    }
+    if (modifiers.shiftKey) {
       if (selectedIds.has(hit)) selectedIds.delete(hit);
       else selectedIds.add(hit);
     } else {
@@ -450,7 +470,12 @@ export async function initPixiCanvas(
     if (interactionStartedOnMinimap) {
       if (dist < DRAG_THRESHOLD_PX) {
         const tap = canvasPointInMinimap(end.x, end.y) ? end : dragStart;
-        handleMinimapTap(tap.x, tap.y);
+        handleMinimapTap(tap.x, tap.y, {
+          shiftKey: ev.shiftKey,
+          ctrlKey: ev.ctrlKey,
+          altKey: ev.altKey,
+          metaKey: ev.metaKey,
+        });
       }
       interactionStartedOnMinimap = false;
       clearMarquee();
@@ -464,7 +489,12 @@ export async function initPixiCanvas(
     }
 
     if (dist < DRAG_THRESHOLD_PX) {
-      applyClickSelection(end.x, end.y, ev.shiftKey);
+      applyClickSelection(end.x, end.y, {
+        shiftKey: ev.shiftKey,
+        ctrlKey: ev.ctrlKey,
+        altKey: ev.altKey,
+        metaKey: ev.metaKey,
+      });
     } else {
       applyMarqueeSelection(
         dragStart.x,

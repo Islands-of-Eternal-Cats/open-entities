@@ -39,3 +39,23 @@ export function entityIdAtScreenPoint(
   }
   return hit;
 }
+
+type MoveOrderIntentArgs = {
+  hitEntityId: string | null;
+  selectedCount: number;
+  shiftKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+  metaKey: boolean;
+};
+
+/**
+ * Move order should fire only on plain click/tap on empty ground
+ * while there is an active selection.
+ */
+export function shouldIssueMoveOrder(args: MoveOrderIntentArgs): boolean {
+  if (args.hitEntityId !== null) return false;
+  if (args.selectedCount <= 0) return false;
+  if (args.shiftKey || args.ctrlKey || args.altKey || args.metaKey) return false;
+  return true;
+}

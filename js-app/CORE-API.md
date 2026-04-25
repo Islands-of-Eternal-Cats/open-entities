@@ -52,6 +52,25 @@
 | `src/visualization/selection-logic.ts` | Логика выбора (без привязки к рендеру). |
 | `src/main.ts` | Точка входа: `initWasm`, игровой цикл, UI, связка с Pixi и `render.ts`. |
 
+## Семантика ввода (selection + orders)
+
+Правила слоя визуализации (`src/visualization/pixi-canvas.ts`, `src/visualization/selection-logic.ts`):
+
+- Move order отправляется **только** при plain click/tap по пустой земле (или по миникарте), когда есть активный `selection`.
+- Любой модификатор (`Shift`/`Ctrl`/`Alt`/`Meta`) блокирует отправку move order.
+- `Shift+click` используется только для операций выбора (add/remove), но не для приказа движения.
+- Очистка selection выполняется явно: `Esc`, кнопка UI `clear-selection`, либо `right-click` на канвасе.
+- Клик по пустоте без модификаторов и с активным `selection` не очищает selection и трактуется как приказ движения.
+
+Краткая матрица поведения:
+
+| Сценарий | Ожидаемое действие |
+|------|------------|
+| Plain click по пустой земле при активном selection | Отправить move order |
+| Shift/Ctrl/Alt/Meta + click по пустоте | Не отправлять move order |
+| Click по миникарте с модификаторами | Не отправлять move order (только навигация камеры) |
+| Esc / UI clear / right-click | Очистить selection |
+
 ## Дальнейшее развитие API
 
 1. **Инициализация**: `init()`, `new JsWorld(yaml)` — уже есть (в js-app YAML приходит с главного потока в `init`).

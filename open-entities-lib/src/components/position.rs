@@ -7,3 +7,13 @@ pub struct Position {
     pub x: f32,
     pub y: f32,
 }
+
+impl Position {
+    /// Returns a new position shifted by the provided delta.
+    pub fn shifted(self, dx: f32, dy: f32) -> Self {
+        Self {
+            x: self.x + dx,
+            y: self.y + dy,
+        }
+    }
+}
