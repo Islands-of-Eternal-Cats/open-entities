@@ -40,6 +40,16 @@ let pixiApi: PixiApi | null = null;
 let lastEntities: EntitySnapshot[] = [];
 let updatePixiEntities: ((entities: EntitySnapshot[]) => void) | null = null;
 let lastFrameTime: number | null = null;
+const START_PADDING = 20;
+const START_MOVER_OFFSET = 2;
+
+function randomInRange(min: number, max: number): number {
+  return min + Math.random() * (max - min);
+}
+
+function clampToWorld(value: number): number {
+  return Math.max(0, Math.min(WORLD_SIZE, value));
+}
 
 function getSelectedBaseFaction(
   selected: ReadonlySet<string>,
@@ -257,7 +267,15 @@ async function run(): Promise<void> {
       });
     }
 
-    await createEntity();
+    const baseX = randomInRange(START_PADDING, WORLD_SIZE - START_PADDING);
+    const baseY = randomInRange(START_PADDING, WORLD_SIZE - START_PADDING);
+    await spawnAt("base", baseX, baseY, 1);
+    await spawnAt(
+      "mover",
+      clampToWorld(baseX + START_MOVER_OFFSET),
+      clampToWorld(baseY),
+      1
+    );
     const entities = await tick(0);
     render(entities);
     requestAnimationFrame(gameLoop);
