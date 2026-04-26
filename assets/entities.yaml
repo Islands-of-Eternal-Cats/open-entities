@@ -13,3 +13,6 @@ entities:
 
   static_obstacle:
     position: { x: 10.0, y: 10.0 }
+
+  base:
+    position: { x: 20.0, y: 20.0 }

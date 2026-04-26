@@ -223,3 +223,31 @@ export function spawnRandomAt(
     }
   });
 }
+
+/**
+ * Spawn by type at explicit world coordinates. Optional `faction` sets ECS `Faction` id.
+ */
+export function spawnAt(
+  typeName: string,
+  x: number,
+  y: number,
+  faction?: number
+): Promise<EntitySnapshot[]> {
+  if (!worker || !initialized)
+    return Promise.reject(new Error("WASM not initialized"));
+  return new Promise((resolve, reject) => {
+    const message: WorkerInMessage = {
+      type: "spawn_at",
+      typeName,
+      x,
+      y,
+      ...(faction !== undefined ? { faction } : {}),
+    };
+    if (pending === null && requestQueue.length === 0) {
+      pending = { resolve, reject };
+      worker!.postMessage(message);
+    } else {
+      requestQueue.push({ resolve, reject, message });
+    }
+  });
+}
