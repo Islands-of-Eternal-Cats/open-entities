@@ -8,10 +8,12 @@ import {
   moveSelectedTo,
   tick,
   spawnRandomAt,
+  spawnAt,
 } from "./core/wasm";
 import type { EntitySnapshot, Pos } from "./core/types";
 import { renderEntities } from "./visualization/render";
 import { initPixiCanvas } from "./visualization/pixi-canvas";
+import { WORLD_SIZE } from "./visualization/coords";
 
 const statusEl = document.getElementById("status");
 const selectionDetailEl = document.getElementById("selection-detail");
@@ -20,6 +22,9 @@ const canvasContainer = document.getElementById("canvas-container");
 const clearSelectionBtn = document.getElementById(
   "clear-selection"
 ) as HTMLButtonElement | null;
+const trainButtons = Array.from(
+  document.querySelectorAll<HTMLButtonElement>("[data-train-type]")
+);
 
 const ENTITY_TYPES = ["mover", "another_mover", "static_obstacle"] as const;
 
@@ -35,6 +40,36 @@ let pixiApi: PixiApi | null = null;
 let lastEntities: EntitySnapshot[] = [];
 let updatePixiEntities: ((entities: EntitySnapshot[]) => void) | null = null;
 let lastFrameTime: number | null = null;
+
+function getSelectedBaseFaction(
+  selected: ReadonlySet<string>,
+  entities: EntitySnapshot[]
+): number | null {
+  if (selected.size !== 1) return null;
+  const selectedId = [...selected][0];
+  const selectedEntity = entities.find((entity) => entity.id === selectedId);
+  if (!selectedEntity || selectedEntity.entityType !== "base") return null;
+  return selectedEntity.faction;
+}
+
+function syncTrainButtonsVisibility(
+  selected: ReadonlySet<string>,
+  entities: EntitySnapshot[]
+): void {
+  const baseFaction = getSelectedBaseFaction(selected, entities);
+  for (const btn of trainButtons) {
+    const trainType = btn.dataset.trainType;
+    if (!trainType || trainType === "base") continue;
+    const canTrainFromSelectedBase = baseFaction !== null;
+    btn.hidden = !canTrainFromSelectedBase;
+    btn.disabled = !canTrainFromSelectedBase;
+    if (canTrainFromSelectedBase) {
+      btn.dataset.trainFaction = String(baseFaction);
+    } else {
+      delete btn.dataset.trainFaction;
+    }
+  }
+}
 
 function setStatusReady(el: HTMLElement): void {
   el.textContent = "Core ready (worker)";
@@ -97,8 +132,9 @@ function syncEntityListSelectionHighlight(): void {
 
 function syncSelectionUi(): void {
   if (!pixiApi) return;
-  updateSelectionPanel(pixiApi.getSelectedIds(), lastEntities);
   const ids = pixiApi.getSelectedIds();
+  updateSelectionPanel(ids, lastEntities);
+  syncTrainButtonsVisibility(ids, lastEntities);
   if (clearSelectionBtn) {
     clearSelectionBtn.hidden = ids.size === 0;
     clearSelectionBtn.disabled = ids.size === 0;
@@ -116,14 +152,32 @@ function render(entities: EntitySnapshot[]): void {
 
 async function createEntity(typeName?: string): Promise<void> {
   if (!isWasmReady()) return;
+  if (!pixiApi) return;
+  const selectedIds = pixiApi.getSelectedIds();
+  if (selectedIds.size !== 1) return;
+  const selectedBaseId = [...selectedIds][0];
+  const selectedBase = lastEntities.find((entity) => entity.id === selectedBaseId);
+  if (!selectedBase || selectedBase.entityType !== "base") return;
+  if (selectedBase.faction === null) return;
   const type =
     typeName ??
     ENTITY_TYPES[Math.floor(Math.random() * ENTITY_TYPES.length)];
   try {
-    const entities = await spawnRandomAt(type);
+    const spawnRadius = 20;
+    const angle = Math.random() * Math.PI * 2;
+    const distance = Math.random() * spawnRadius;
+    const x = Math.max(
+      0,
+      Math.min(WORLD_SIZE, selectedBase.pos.x + Math.cos(angle) * distance)
+    );
+    const y = Math.max(
+      0,
+      Math.min(WORLD_SIZE, selectedBase.pos.y + Math.sin(angle) * distance)
+    );
+    const entities = await spawnAt(type, x, y, selectedBase.faction);
     render(entities);
   } catch (e) {
-    console.error("spawnRandomAt error:", e);
+    console.error("spawnAt error:", e);
   }
 }
 
@@ -185,9 +239,7 @@ async function run(): Promise<void> {
       if (id) pixiApi.setSelectedIds([id]);
     });
 
-    for (const btn of document.querySelectorAll<HTMLButtonElement>(
-      "[data-train-type]"
-    )) {
+    for (const btn of trainButtons) {
       const trainType = btn.dataset.trainType;
       btn.addEventListener("click", () => {
         if (trainType === "base") {
