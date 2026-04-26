@@ -19,6 +19,7 @@
 
 pub mod components;
 pub mod entity_loader;
+pub mod map_loader;
 pub mod systems;
 pub mod world;
 
@@ -28,6 +29,9 @@ pub use entity_loader::{
     EntityDefinitions, EntityDefinitionsFile, EntityTemplate, LoadError, SpawnError, is_movable,
     load_and_spawn_all_from_path, spawn_entity_by_type, spawn_entity_by_type_at_in_world,
     spawn_entity_by_type_in_world,
+};
+pub use map_loader::{
+    InitMapFile, MapLoadError, MapMeta, MapSpawn, load_map_from_path, load_map_from_str,
 };
 pub use systems::{
     DeltaTime, EntityDefinitionsPath, load_entities_from_yaml_system, move_system,
@@ -332,7 +336,11 @@ entities:
 "#;
         let (mut world, mut schedule) = create_world_with_definitions(yaml).unwrap();
         let spawned = spawn_entity_by_type_in_world(&mut world, "unit", None).unwrap();
-        order_move_entities_to(&mut world, &[spawned.to_bits()], Position { x: 1.0, y: 0.0 });
+        order_move_entities_to(
+            &mut world,
+            &[spawned.to_bits()],
+            Position { x: 1.0, y: 0.0 },
+        );
 
         // dt is intentionally very large: without clamping this can overshoot the target.
         run_tick(&mut world, &mut schedule, 1.0);
@@ -359,7 +367,11 @@ entities:
 "#;
         let (mut world, mut schedule) = create_world_with_definitions(yaml).unwrap();
         let spawned = spawn_entity_by_type_in_world(&mut world, "unit", None).unwrap();
-        order_move_entities_to(&mut world, &[spawned.to_bits()], Position { x: 100.0, y: 0.0 });
+        order_move_entities_to(
+            &mut world,
+            &[spawned.to_bits()],
+            Position { x: 100.0, y: 0.0 },
+        );
 
         run_tick(&mut world, &mut schedule, -0.5);
         let pos = world.get::<Position>(spawned).unwrap();
@@ -476,5 +488,100 @@ entities:
             .expect("spawned mover should still have Position after tick");
         assert_eq!(pos_after.x, 123.0);
         assert_eq!(pos_after.y, 456.0);
+    }
+
+    #[test]
+    fn test_load_map_from_str_spawns_base_and_mover_with_faction() {
+        let entities_yaml = r#"
+entities:
+  base:
+    position: { x: 0.0, y: 0.0 }
+  mover:
+    position: { x: 0.0, y: 0.0 }
+    base_move_speed: 20.0
+"#;
+        let map_yaml = r#"
+map:
+  width: 200.0
+  height: 200.0
+spawns:
+  - type: base
+    position: { x: 20.0, y: 20.0 }
+    faction: 1
+  - type: mover
+    position: { x: 30.0, y: 20.0 }
+    faction: 1
+"#;
+
+        let (mut world, _) = create_world_with_definitions(entities_yaml).unwrap();
+        load_map_from_str(&mut world, map_yaml).unwrap();
+
+        let mut query = world.query::<(&EntityTypeName, &Position, Option<&Faction>)>();
+        let rows: Vec<(String, f32, f32, Option<u32>)> = query
+            .iter(&world)
+            .map(|(t, p, f)| (t.0.clone(), p.x, p.y, f.map(|x| x.0)))
+            .collect();
+        assert_eq!(rows.len(), 2);
+        assert!(
+            rows.iter()
+                .any(|(t, x, y, f)| { t == "base" && *x == 20.0 && *y == 20.0 && *f == Some(1) })
+        );
+        assert!(
+            rows.iter()
+                .any(|(t, x, y, f)| { t == "mover" && *x == 30.0 && *y == 20.0 && *f == Some(1) })
+        );
+    }
+
+    #[test]
+    fn test_load_map_from_str_unknown_type_returns_spawn_error() {
+        let entities_yaml = r#"
+entities:
+  mover:
+    position: { x: 0.0, y: 0.0 }
+    base_move_speed: 20.0
+"#;
+        let map_yaml = r#"
+map:
+  width: 100.0
+  height: 100.0
+spawns:
+  - type: ghost
+    position: { x: 5.0, y: 5.0 }
+"#;
+
+        let (mut world, _) = create_world_with_definitions(entities_yaml).unwrap();
+        let err = load_map_from_str(&mut world, map_yaml).unwrap_err();
+        match err {
+            MapLoadError::Spawn { type_name, source } => {
+                assert_eq!(type_name, "ghost");
+                assert_eq!(
+                    source,
+                    SpawnError::UnknownEntityType {
+                        type_name: "ghost".to_string()
+                    }
+                );
+            }
+            other => panic!("expected MapLoadError::Spawn, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_load_map_from_str_invalid_yaml_returns_parse_error() {
+        let entities_yaml = r#"
+entities:
+  base:
+    position: { x: 0.0, y: 0.0 }
+"#;
+        let broken_map_yaml =
+            "map:\n  width: 100\n  height: 100\nspawns:\n  - type: base\n    position: [";
+        let (mut world, _) = create_world_with_definitions(entities_yaml).unwrap();
+        let err = load_map_from_str(&mut world, broken_map_yaml).unwrap_err();
+        match err {
+            MapLoadError::Yaml { op, source } => {
+                assert_eq!(op, "load_map_from_str");
+                assert!(!source.is_empty());
+            }
+            other => panic!("expected MapLoadError::Yaml, got: {:?}", other),
+        }
     }
 }
