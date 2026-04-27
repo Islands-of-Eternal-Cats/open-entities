@@ -151,11 +151,14 @@ function render(entities: EntitySnapshot[]): void {
   syncSelectionUi();
 }
 
-function getPlayerBaseId(entities: EntitySnapshot[]): string | null {
+function getInitialLookAtEntityId(entities: EntitySnapshot[]): string | null {
   const playerBase = entities.find(
     (entity) => entity.entityType === "base" && entity.faction === 1
   );
-  return playerBase?.id ?? null;
+  if (playerBase) return playerBase.id;
+
+  const playerUnit = entities.find((entity) => entity.faction === 1);
+  return playerUnit?.id ?? null;
 }
 
 async function createEntity(typeName?: string): Promise<void> {
@@ -267,9 +270,9 @@ async function run(): Promise<void> {
 
     const entities = await tick(0);
     render(entities);
-    const playerBaseId = getPlayerBaseId(entities);
-    if (playerBaseId && pixiApi) {
-      pixiApi.LookAt(playerBaseId);
+    const initialLookAtEntityId = getInitialLookAtEntityId(entities);
+    if (initialLookAtEntityId && pixiApi) {
+      pixiApi.LookAt(initialLookAtEntityId);
     }
     requestAnimationFrame(gameLoop);
   } catch (error) {
