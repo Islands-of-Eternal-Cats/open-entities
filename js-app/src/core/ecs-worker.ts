@@ -16,6 +16,28 @@ function snapshotFromWorld(world: JsWorld): WorkerOutMessage {
   return { type: "entities", entities };
 }
 
+function spawnedFromWorld(
+  world: JsWorld,
+  beforeIds: ReadonlySet<string>
+): WorkerOutMessage {
+  const spawned = Array.from(world.get_entities()).find((entity) => {
+    return !beforeIds.has(entity.id);
+  });
+  if (!spawned) {
+    throw new Error("spawn_at succeeded but spawned entity was not found");
+  }
+  return {
+    type: "spawned",
+    entity: {
+      id: spawned.id,
+      entityType: spawned.entityType,
+      pos: spawned.pos,
+      velocity: spawned.velocity,
+      faction: spawned.faction ?? null,
+    },
+  };
+}
+
 let world: JsWorld | null = null;
 
 function post(msg: WorkerOutMessage): void {
@@ -54,13 +76,15 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
 
     if (msg.type === "spawn_at") {
       try {
+        const beforeIds = new Set(
+          Array.from(world.get_entities()).map((entity) => entity.id)
+        );
         world.spawn_at(msg.typeName, msg.x, msg.y, msg.faction);
+        post(spawnedFromWorld(world, beforeIds));
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         post({ type: "error", message });
-        return;
       }
-      post(snapshotFromWorld(world));
       return;
     }
 

@@ -13,7 +13,7 @@ import { WORLD_SIZE } from "../visualization/coords";
 function flushQueue(): void {
   if (!worker || pending !== null || requestQueue.length === 0) return;
   const next = requestQueue.shift()!;
-  pending = { resolve: next.resolve, reject: next.reject };
+  pending = next;
   worker.postMessage(next.message);
 }
 
@@ -24,18 +24,32 @@ let initPromise: Promise<void> | null = null;
 /** Resolve/reject for the init promise; only set while waiting for worker "ready" or "error". */
 let initResolve: (() => void) | null = null;
 let initReject: ((reason: unknown) => void) | null = null;
-let pending:
+type PendingRequest =
   | {
       resolve: (value: EntitySnapshot[]) => void;
       reject: (reason: unknown) => void;
+      kind: "entities";
     }
-  | null = null;
+  | {
+      resolve: (value: EntitySnapshot) => void;
+      reject: (reason: unknown) => void;
+      kind: "spawned";
+    };
+let pending: PendingRequest | null = null;
 
-type QueuedRequest = {
-  resolve: (value: EntitySnapshot[]) => void;
-  reject: (reason: unknown) => void;
-  message: WorkerInMessage;
-};
+type QueuedRequest =
+  | {
+      resolve: (value: EntitySnapshot[]) => void;
+      reject: (reason: unknown) => void;
+      message: WorkerInMessage;
+      kind: "entities";
+    }
+  | {
+      resolve: (value: EntitySnapshot) => void;
+      reject: (reason: unknown) => void;
+      message: WorkerInMessage;
+      kind: "spawned";
+    };
 const requestQueue: QueuedRequest[] = [];
 
 function rawToSnapshots(
@@ -48,6 +62,16 @@ function rawToSnapshots(
     velocity: e.velocity,
     faction: e.faction ?? null,
   }));
+}
+
+function rawToSnapshot(raw: RawEntitySnapshot): EntitySnapshot {
+  return {
+    id: raw.id,
+    entityType: raw.entityType,
+    pos: raw.pos,
+    velocity: raw.velocity,
+    faction: raw.faction ?? null,
+  };
 }
 
 function onMessage(event: MessageEvent<WorkerOutMessage>): void {
@@ -75,8 +99,14 @@ function onMessage(event: MessageEvent<WorkerOutMessage>): void {
     }
     return;
   }
-  if (msg.type === "entities" && pending) {
+  if (msg.type === "entities" && pending && pending.kind === "entities") {
     pending.resolve(rawToSnapshots(msg.entities));
+    pending = null;
+    flushQueue();
+    return;
+  }
+  if (msg.type === "spawned" && pending && pending.kind === "spawned") {
+    pending.resolve(rawToSnapshot(msg.entity));
     pending = null;
     flushQueue();
   }
@@ -172,10 +202,10 @@ export function tick(dt: number): Promise<EntitySnapshot[]> {
   return new Promise((resolve, reject) => {
     const message: WorkerInMessage = { type: "tick", dt };
     if (pending === null && requestQueue.length === 0) {
-      pending = { resolve, reject };
+      pending = { resolve, reject, kind: "entities" };
       worker!.postMessage(message);
     } else {
-      requestQueue.push({ resolve, reject, message });
+      requestQueue.push({ resolve, reject, message, kind: "entities" });
     }
   });
 }
@@ -199,10 +229,10 @@ export function moveSelectedTo(
       point,
     };
     if (pending === null && requestQueue.length === 0) {
-      pending = { resolve, reject };
+      pending = { resolve, reject, kind: "entities" };
       worker!.postMessage(message);
     } else {
-      requestQueue.push({ resolve, reject, message });
+      requestQueue.push({ resolve, reject, message, kind: "entities" });
     }
   });
 }
@@ -213,7 +243,7 @@ export function moveSelectedTo(
 export function spawnRandomAt(
   typeName: string,
   faction?: number
-): Promise<EntitySnapshot[]> {
+): Promise<EntitySnapshot> {
   if (!worker || !initialized)
     return Promise.reject(new Error("WASM not initialized"));
   return new Promise((resolve, reject) => {
@@ -228,10 +258,10 @@ export function spawnRandomAt(
       ...(faction !== undefined ? { faction } : {}),
     };
     if (pending === null && requestQueue.length === 0) {
-      pending = { resolve, reject };
+      pending = { resolve, reject, kind: "spawned" };
       worker!.postMessage(message);
     } else {
-      requestQueue.push({ resolve, reject, message });
+      requestQueue.push({ resolve, reject, message, kind: "spawned" });
     }
   });
 }
@@ -244,7 +274,7 @@ export function spawnAt(
   x: number,
   y: number,
   faction?: number
-): Promise<EntitySnapshot[]> {
+): Promise<EntitySnapshot> {
   if (!worker || !initialized)
     return Promise.reject(new Error("WASM not initialized"));
   return new Promise((resolve, reject) => {
@@ -256,10 +286,10 @@ export function spawnAt(
       ...(faction !== undefined ? { faction } : {}),
     };
     if (pending === null && requestQueue.length === 0) {
-      pending = { resolve, reject };
+      pending = { resolve, reject, kind: "spawned" };
       worker!.postMessage(message);
     } else {
-      requestQueue.push({ resolve, reject, message });
+      requestQueue.push({ resolve, reject, message, kind: "spawned" });
     }
   });
 }
