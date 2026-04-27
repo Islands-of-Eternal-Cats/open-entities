@@ -1,6 +1,6 @@
 /**
  * ECS web worker: loads WASM and runs simulation.
- * Listens for init/tick/spawn_at/move_to; posts back ready/entities/error.
+ * Listens for init/snapshot/tick/spawn_at/move_to; posts back ready/entities/error.
  */
 import initWasmModule, { JsPosition, JsWorld } from "open-entities-wasm";
 import type { WorkerInMessage, WorkerOutMessage } from "./worker-types";
@@ -70,6 +70,11 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
 
     if (msg.type === "tick") {
       world.tick(msg.dt);
+      post(snapshotFromWorld(world));
+      return;
+    }
+
+    if (msg.type === "snapshot") {
       post(snapshotFromWorld(world));
       return;
     }
