@@ -1,0 +1,12 @@
+# Initial map layout for local startup.
+map:
+  width: 200.0
+  height: 200.0
+
+spawns:
+  - type: base
+    position: { x: 20.0, y: 20.0 }
+    faction: 1
+  - type: mover
+    position: { x: 30.0, y: 20.0 }
+    faction: 1

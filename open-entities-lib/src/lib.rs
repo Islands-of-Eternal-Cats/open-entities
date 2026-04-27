@@ -19,6 +19,7 @@
 
 pub mod components;
 pub mod entity_loader;
+pub mod map_loader;
 pub mod systems;
 pub mod world;
 
@@ -28,6 +29,9 @@ pub use entity_loader::{
     EntityDefinitions, EntityDefinitionsFile, EntityTemplate, LoadError, SpawnError, is_movable,
     load_and_spawn_all_from_path, spawn_entity_by_type, spawn_entity_by_type_at_in_world,
     spawn_entity_by_type_in_world,
+};
+pub use map_loader::{
+    InitMapFile, MapLoadError, MapMeta, MapSpawn, load_map_from_path, load_map_from_str,
 };
 pub use systems::{
     DeltaTime, EntityDefinitionsPath, load_entities_from_yaml_system, move_system,
@@ -49,6 +53,9 @@ mod tests {
         // Test that components can be instantiated
         let _pos = Position { x: 0.0, y: 0.0 };
         let _vel = Velocity { vx: 1.0, vy: 2.0 };
+        use crate::components::{Unit, Vehicle};
+        let _unit = Unit;
+        let _vehicle = Vehicle;
     }
 
     #[test]
@@ -329,7 +336,11 @@ entities:
 "#;
         let (mut world, mut schedule) = create_world_with_definitions(yaml).unwrap();
         let spawned = spawn_entity_by_type_in_world(&mut world, "unit", None).unwrap();
-        order_move_entities_to(&mut world, &[spawned.to_bits()], Position { x: 1.0, y: 0.0 });
+        order_move_entities_to(
+            &mut world,
+            &[spawned.to_bits()],
+            Position { x: 1.0, y: 0.0 },
+        );
 
         // dt is intentionally very large: without clamping this can overshoot the target.
         run_tick(&mut world, &mut schedule, 1.0);
@@ -356,7 +367,11 @@ entities:
 "#;
         let (mut world, mut schedule) = create_world_with_definitions(yaml).unwrap();
         let spawned = spawn_entity_by_type_in_world(&mut world, "unit", None).unwrap();
-        order_move_entities_to(&mut world, &[spawned.to_bits()], Position { x: 100.0, y: 0.0 });
+        order_move_entities_to(
+            &mut world,
+            &[spawned.to_bits()],
+            Position { x: 100.0, y: 0.0 },
+        );
 
         run_tick(&mut world, &mut schedule, -0.5);
         let pos = world.get::<Position>(spawned).unwrap();
@@ -474,4 +489,5 @@ entities:
         assert_eq!(pos_after.x, 123.0);
         assert_eq!(pos_after.y, 456.0);
     }
+
 }

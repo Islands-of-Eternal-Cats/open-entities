@@ -29,6 +29,7 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
       await initWasmModule(msg.wasmBuffer);
       try {
         world = new JsWorld(msg.entitiesYaml);
+        world.load_map_yaml(msg.initMapYaml);
       } catch (e) {
         post({
           type: "error",

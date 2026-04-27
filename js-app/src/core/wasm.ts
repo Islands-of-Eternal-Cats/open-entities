@@ -110,24 +110,36 @@ export async function initWasm(): Promise<void> {
           ? window.location.origin
           : "http://localhost:5173";
       const wasmUrl = `${origin}/wasm_bindings_bg.wasm?t=${Date.now()}`;
-      const [wasmRes, yamlRes] = await Promise.all([
+      const [wasmRes, entitiesYamlRes, initMapYamlRes] = await Promise.all([
         fetch(wasmUrl, { cache: "no-store" }),
         fetch(`${origin}/assets/entities.yaml`, { cache: "no-store" }),
+        fetch(`${origin}/assets/init_map.yaml`, { cache: "no-store" }),
       ]);
       if (!wasmRes.ok) throw new Error(`Failed to fetch WASM: ${wasmRes.status}`);
-      if (!yamlRes.ok) {
+      if (!entitiesYamlRes.ok) {
         throw new Error(
-          `Failed to fetch entity definitions (assets/entities.yaml): HTTP ${yamlRes.status} ${yamlRes.statusText}`
+          `Failed to fetch entity definitions (assets/entities.yaml): HTTP ${entitiesYamlRes.status} ${entitiesYamlRes.statusText}`
+        );
+      }
+      if (!initMapYamlRes.ok) {
+        throw new Error(
+          `Failed to fetch init map (assets/init_map.yaml): HTTP ${initMapYamlRes.status} ${initMapYamlRes.statusText}`
         );
       }
       const wasmBuffer = await wasmRes.arrayBuffer();
-      const entitiesYaml = await yamlRes.text();
+      const entitiesYaml = await entitiesYamlRes.text();
+      const initMapYaml = await initMapYamlRes.text();
 
       await new Promise<void>((resolve, reject) => {
         initResolve = resolve;
         initReject = reject;
         worker!.postMessage(
-          { type: "init", wasmBuffer, entitiesYaml } satisfies WorkerInMessage,
+          {
+            type: "init",
+            wasmBuffer,
+            entitiesYaml,
+            initMapYaml,
+          } satisfies WorkerInMessage,
           [wasmBuffer]
         );
       });

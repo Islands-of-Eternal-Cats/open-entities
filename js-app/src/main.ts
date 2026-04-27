@@ -34,6 +34,7 @@ type PixiApi = {
   clearSelection: () => void;
   setSelectedIds: (ids: readonly string[]) => void;
   showMoveTarget: (world: Pos) => void;
+  LookAt: (entityId: string) => boolean;
 };
 
 let pixiApi: PixiApi | null = null;
@@ -150,6 +151,16 @@ function render(entities: EntitySnapshot[]): void {
   syncSelectionUi();
 }
 
+function getInitialLookAtEntityId(entities: EntitySnapshot[]): string | null {
+  const playerBase = entities.find(
+    (entity) => entity.entityType === "base" && entity.faction === 1
+  );
+  if (playerBase) return playerBase.id;
+
+  const playerUnit = entities.find((entity) => entity.faction === 1);
+  return playerUnit?.id ?? null;
+}
+
 async function createEntity(typeName?: string): Promise<void> {
   if (!isWasmReady()) return;
   if (!pixiApi) return;
@@ -257,9 +268,12 @@ async function run(): Promise<void> {
       });
     }
 
-    await createEntity();
     const entities = await tick(0);
     render(entities);
+    const initialLookAtEntityId = getInitialLookAtEntityId(entities);
+    if (initialLookAtEntityId && pixiApi) {
+      pixiApi.LookAt(initialLookAtEntityId);
+    }
     requestAnimationFrame(gameLoop);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
