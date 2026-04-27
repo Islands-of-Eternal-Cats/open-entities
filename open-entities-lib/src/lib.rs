@@ -489,5 +489,4 @@ entities:
         assert_eq!(pos_after.x, 123.0);
         assert_eq!(pos_after.y, 456.0);
     }
-
 }

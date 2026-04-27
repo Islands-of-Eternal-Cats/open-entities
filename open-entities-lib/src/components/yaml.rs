@@ -39,16 +39,16 @@ pub struct YamlEntityList {
 }
 
 /// Spawn entities from YAML string
-/// 
+///
 /// # Arguments
 /// * `commands` - Bevy Commands to spawn entities
 /// * `yaml` - YAML string containing entity descriptions
-/// 
+///
 /// # Returns
 /// * `Vec<Entity>` - List of spawned entity IDs
-/// 
+///
 /// # Example
-/// 
+///
 /// ```yaml
 /// entities:
 ///   - name: "player"
@@ -63,22 +63,25 @@ pub struct YamlEntityList {
 ///           vy: 0.0
 ///       - type: Unit
 /// ```
-pub fn spawn_from_yaml(commands: &mut Commands, yaml: &str) -> Result<Vec<Entity>, serde_yaml::Error> {
+pub fn spawn_from_yaml(
+    commands: &mut Commands,
+    yaml: &str,
+) -> Result<Vec<Entity>, serde_yaml::Error> {
     let entity_list: YamlEntityList = serde_yaml::from_str(yaml)?;
     let mut entities = Vec::new();
-    
+
     for yaml_entity in entity_list.entities {
         let entity_id = spawn_single_entity(commands, &yaml_entity);
         entities.push(entity_id);
     }
-    
+
     Ok(entities)
 }
 
 /// Spawn a single entity from YamlEntity
 fn spawn_single_entity(commands: &mut Commands, yaml_entity: &YamlEntity) -> Entity {
     let mut entity_commands = commands.spawn(());
-    
+
     for component in &yaml_entity.components {
         match component {
             YamlComponent::Position { x, y } => {
@@ -95,20 +98,20 @@ fn spawn_single_entity(commands: &mut Commands, yaml_entity: &YamlEntity) -> Ent
             }
         }
     }
-    
+
     entity_commands.id()
 }
 
 /// Spawn entities from YAML and return the Commands for further chaining
-/// 
+///
 /// This is a simpler version that directly spawns entities
 pub fn spawn_yaml_entities(commands: &mut Commands, yaml: &str) -> Result<(), serde_yaml::Error> {
     let entity_list: YamlEntityList = serde_yaml::from_str(yaml)?;
-    
+
     for yaml_entity in entity_list.entities {
         spawn_single_entity(commands, &yaml_entity);
     }
-    
+
     Ok(())
 }
 
