@@ -5,9 +5,9 @@
 
 use js_sys::Array;
 use open_entities::{
-    LoadError, Position, Schedule, SpawnError, Velocity, World, create_world_with_definitions,
-    get_entities, order_move_entities_to, run_tick, spawn_entity_by_type_at_in_world,
-    spawn_entity_by_type_in_world,
+    LoadError, MapLoadError, Position, Schedule, SpawnError, Velocity, World,
+    create_world_with_definitions, get_entities, load_map_from_str, order_move_entities_to,
+    run_tick, spawn_entity_by_type_at_in_world, spawn_entity_by_type_in_world,
 };
 use wasm_bindgen::prelude::*;
 
@@ -17,6 +17,10 @@ fn format_init_error(err: &LoadError) -> String {
 
 fn format_spawn_error(err: &SpawnError) -> String {
     format!("spawn failed: {}", err)
+}
+
+fn format_map_load_error(err: &MapLoadError) -> String {
+    format!("load_map failed: {}", err)
 }
 
 /// Initialize the WASM environment
@@ -147,6 +151,13 @@ impl JsWorld {
             .map_err(|e| JsValue::from_str(&format_spawn_error(&e)))
     }
 
+    /// Load map instances from YAML (`assets/init_map.yaml`) into this world.
+    #[wasm_bindgen]
+    pub fn load_map_yaml(&mut self, map_yaml: String) -> Result<(), JsValue> {
+        load_map_from_str(&mut self.world, &map_yaml)
+            .map_err(|e| JsValue::from_str(&format_map_load_error(&e)))
+    }
+
     /// Run one simulation tick with the given delta time in seconds.
     #[wasm_bindgen]
     pub fn tick(&mut self, dt: f32) {
@@ -257,5 +268,15 @@ mod tests {
         });
         assert!(message.contains("spawn failed"));
         assert!(message.contains("ghost"));
+    }
+
+    #[test]
+    fn map_load_error_message_is_stable_and_readable() {
+        let message = format_map_load_error(&MapLoadError::Yaml {
+            op: "load_map_from_str",
+            source: "expected map root".to_string(),
+        });
+        assert!(message.contains("load_map failed"));
+        assert!(message.contains("YAML parse error"));
     }
 }

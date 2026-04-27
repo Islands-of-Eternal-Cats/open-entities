@@ -67,6 +67,7 @@ export async function initPixiCanvas(
   clearSelection: () => void;
   setSelectedIds: (ids: readonly string[]) => void;
   showMoveTarget: (world: Pos) => void;
+  LookAt: (entityId: string) => boolean;
 }> {
   const onSelectionChange = options?.onSelectionChange;
   const onMoveOrder = options?.onMoveOrder;
@@ -604,11 +605,20 @@ export async function initPixiCanvas(
     drawMoveTarget();
   }
 
+  function LookAt(entityId: string): boolean {
+    const entity = lastEntities.find((e) => e.id === entityId);
+    if (!entity) return false;
+    centerViewOnWorld(entity.pos.x, entity.pos.y);
+    repositionAllGraphics();
+    return true;
+  }
+
   return {
     updateEntities,
     getSelectedIds,
     clearSelection,
     setSelectedIds,
     showMoveTarget,
+    LookAt,
   };
 }

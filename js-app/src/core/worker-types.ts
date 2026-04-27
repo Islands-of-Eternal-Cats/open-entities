@@ -12,7 +12,12 @@ export type RawEntitySnapshot = Omit<EntitySnapshot, "faction"> & {
 };
 
 export type WorkerInMessage =
-  | { type: "init"; wasmBuffer: ArrayBuffer; entitiesYaml: string }
+  | {
+      type: "init";
+      wasmBuffer: ArrayBuffer;
+      entitiesYaml: string;
+      initMapYaml: string;
+    }
   | { type: "tick"; dt: number }
   | {
       type: "spawn_at";

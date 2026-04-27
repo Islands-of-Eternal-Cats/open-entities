@@ -34,22 +34,13 @@ type PixiApi = {
   clearSelection: () => void;
   setSelectedIds: (ids: readonly string[]) => void;
   showMoveTarget: (world: Pos) => void;
+  LookAt: (entityId: string) => boolean;
 };
 
 let pixiApi: PixiApi | null = null;
 let lastEntities: EntitySnapshot[] = [];
 let updatePixiEntities: ((entities: EntitySnapshot[]) => void) | null = null;
 let lastFrameTime: number | null = null;
-const START_PADDING = 20;
-const START_MOVER_OFFSET = 2;
-
-function randomInRange(min: number, max: number): number {
-  return min + Math.random() * (max - min);
-}
-
-function clampToWorld(value: number): number {
-  return Math.max(0, Math.min(WORLD_SIZE, value));
-}
 
 function getSelectedBaseFaction(
   selected: ReadonlySet<string>,
@@ -160,6 +151,13 @@ function render(entities: EntitySnapshot[]): void {
   syncSelectionUi();
 }
 
+function getPlayerBaseId(entities: EntitySnapshot[]): string | null {
+  const playerBase = entities.find(
+    (entity) => entity.entityType === "base" && entity.faction === 1
+  );
+  return playerBase?.id ?? null;
+}
+
 async function createEntity(typeName?: string): Promise<void> {
   if (!isWasmReady()) return;
   if (!pixiApi) return;
@@ -267,17 +265,12 @@ async function run(): Promise<void> {
       });
     }
 
-    const baseX = randomInRange(START_PADDING, WORLD_SIZE - START_PADDING);
-    const baseY = randomInRange(START_PADDING, WORLD_SIZE - START_PADDING);
-    await spawnAt("base", baseX, baseY, 1);
-    await spawnAt(
-      "mover",
-      clampToWorld(baseX + START_MOVER_OFFSET),
-      clampToWorld(baseY),
-      1
-    );
     const entities = await tick(0);
     render(entities);
+    const playerBaseId = getPlayerBaseId(entities);
+    if (playerBaseId && pixiApi) {
+      pixiApi.LookAt(playerBaseId);
+    }
     requestAnimationFrame(gameLoop);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
