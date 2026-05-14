@@ -42,6 +42,17 @@ let lastEntities: EntitySnapshot[] = [];
 let updatePixiEntities: ((entities: EntitySnapshot[]) => void) | null = null;
 let lastFrameTime: number | null = null;
 
+function upsertSpawnedEntity(spawned: EntitySnapshot): void {
+  const existingIndex = lastEntities.findIndex((entity) => entity.id === spawned.id);
+  if (existingIndex === -1) {
+    render([...lastEntities, spawned]);
+    return;
+  }
+  const next = [...lastEntities];
+  next[existingIndex] = spawned;
+  render(next);
+}
+
 function getSelectedBaseFaction(
   selected: ReadonlySet<string>,
   entities: EntitySnapshot[]
@@ -185,8 +196,8 @@ async function createEntity(typeName?: string): Promise<void> {
       0,
       Math.min(WORLD_SIZE, selectedBase.pos.y + Math.sin(angle) * distance)
     );
-    const entities = await spawnAt(type, x, y, selectedBase.faction);
-    render(entities);
+    const spawned = await spawnAt(type, x, y, selectedBase.faction);
+    upsertSpawnedEntity(spawned);
   } catch (e) {
     console.error("spawnAt error:", e);
   }
@@ -255,7 +266,7 @@ async function run(): Promise<void> {
       btn.addEventListener("click", () => {
         if (trainType === "base") {
           void spawnRandomAt("base", 1)
-            .then((entities) => render(entities))
+            .then((spawned) => upsertSpawnedEntity(spawned))
             .catch((e) => console.error("spawnRandomAt(base) error:", e));
           return;
         }

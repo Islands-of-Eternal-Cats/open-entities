@@ -32,4 +32,5 @@ export type WorkerInMessage =
 export type WorkerOutMessage =
   | { type: "ready" }
   | { type: "error"; message: string }
-  | { type: "entities"; entities: RawEntitySnapshot[] };
+  | { type: "entities"; entities: RawEntitySnapshot[] }
+  | { type: "spawned"; entity: RawEntitySnapshot };
