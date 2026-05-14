@@ -6,6 +6,7 @@ import {
   initWasm,
   isWasmReady,
   moveSelectedTo,
+  snapshot,
   tick,
   spawnRandomAt,
   spawnAt,
@@ -279,7 +280,8 @@ async function run(): Promise<void> {
       });
     }
 
-    const entities = await tick(0);
+    // Initial state read without advancing simulation time.
+    const entities = await snapshot();
     render(entities);
     const initialLookAtEntityId = getInitialLookAtEntityId(entities);
     if (initialLookAtEntityId && pixiApi) {

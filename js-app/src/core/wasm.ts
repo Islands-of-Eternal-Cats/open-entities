@@ -194,7 +194,25 @@ export function isWasmReady(): boolean {
 }
 
 /**
- * One simulation tick in the worker. Returns current entity snapshots.
+ * Read current world state without advancing simulation time.
+ * Use this for initial UI sync or on-demand refreshes.
+ */
+export function snapshot(): Promise<EntitySnapshot[]> {
+  if (!worker || !initialized)
+    return Promise.reject(new Error("WASM not initialized"));
+  return new Promise((resolve, reject) => {
+    const message: WorkerInMessage = { type: "snapshot" };
+    if (pending === null && requestQueue.length === 0) {
+      pending = { resolve, reject, kind: "entities" };
+      worker!.postMessage(message);
+    } else {
+      requestQueue.push({ resolve, reject, message, kind: "entities" });
+    }
+  });
+}
+
+/**
+ * Advance simulation by `dt` seconds and return updated world snapshots.
  */
 export function tick(dt: number): Promise<EntitySnapshot[]> {
   if (!worker || !initialized)
@@ -211,7 +229,8 @@ export function tick(dt: number): Promise<EntitySnapshot[]> {
 }
 
 /**
- * Issue move-to-world-point for the given entity ids (snapshot id strings). Does not tick.
+ * Queue move-to order for the given entity ids (snapshot id strings).
+ * Does not advance simulation; call `tick` to apply movement over time.
  */
 export function moveSelectedTo(
   entityIds: string[],
@@ -238,7 +257,9 @@ export function moveSelectedTo(
 }
 
 /**
- * Spawn by type at random coordinates. Optional `faction` sets ECS `Faction` id.
+ * Spawn by type at random coordinates.
+ * Returns only the newly spawned entity (not a full world snapshot).
+ * Optional `faction` sets ECS `Faction` id.
  */
 export function spawnRandomAt(
   typeName: string,
@@ -267,7 +288,9 @@ export function spawnRandomAt(
 }
 
 /**
- * Spawn by type at explicit world coordinates. Optional `faction` sets ECS `Faction` id.
+ * Spawn by type at explicit world coordinates.
+ * Returns only the newly spawned entity (not a full world snapshot).
+ * Optional `faction` sets ECS `Faction` id.
  */
 export function spawnAt(
   typeName: string,

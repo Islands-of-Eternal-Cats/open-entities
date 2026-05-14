@@ -18,6 +18,7 @@ export type WorkerInMessage =
       entitiesYaml: string;
       initMapYaml: string;
     }
+  | { type: "snapshot" }
   | { type: "tick"; dt: number }
   | {
       type: "spawn_at";
