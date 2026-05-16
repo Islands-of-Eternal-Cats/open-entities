@@ -117,7 +117,7 @@ fn world_json_from_world(world: &mut World) -> Result<String, ExportError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::{Faction, MoveTarget, Position, Velocity};
+    use crate::components::{Faction, Position, Velocity};
 
     #[test]
     fn world_json_empty_world() {
