@@ -1,3 +1,8 @@
+/// Returns the canonical hello-world greeting.
+pub fn hello() -> &'static str {
+    "Hello, world!"
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
