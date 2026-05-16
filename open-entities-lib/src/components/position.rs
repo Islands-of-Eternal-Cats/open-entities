@@ -1,7 +1,8 @@
 use bevy_ecs::prelude::Component;
+use serde::Serialize;
 
 /// 2D position in world/simulation space.
-#[derive(Component, Debug, Clone, Copy, PartialEq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Position {
     pub x: f32,
     pub y: f32,
