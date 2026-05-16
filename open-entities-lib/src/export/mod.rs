@@ -2,9 +2,9 @@ use bevy_ecs::prelude::{Entity, World};
 use serde::Serialize;
 
 use crate::api::Api;
-use crate::components::Position;
+use crate::components::{Faction, MoveTarget, Position, Velocity};
 
-const SCHEMA_VERSION: u32 = 1;
+const SCHEMA_VERSION: u32 = 2;
 
 /// Errors while serializing a world snapshot to JSON.
 #[derive(Debug)]
@@ -44,7 +44,14 @@ struct WorldExport {
 #[derive(Serialize)]
 struct EntityExport {
     id: EntityIdExport,
-    position: Position,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    position: Option<Position>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    velocity: Option<Velocity>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    faction: Option<Faction>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    move_target: Option<MoveTarget>,
 }
 
 #[derive(Serialize)]
@@ -54,7 +61,11 @@ struct EntityIdExport {
 }
 
 impl Api {
-    /// Serializes all entities with a [`Position`] component to JSON.
+    /// Serializes entities that have at least one of [`Position`], [`Velocity`],
+    /// [`Faction`], or [`MoveTarget`] to JSON (schema version 2).
+    ///
+    /// Component fields are omitted from each entity row when that component is
+    /// not present on the entity.
     ///
     /// # Errors
     ///
@@ -65,15 +76,33 @@ impl Api {
 }
 
 fn world_json_from_world(world: &mut World) -> Result<String, ExportError> {
-    let mut query = world.query::<(Entity, &Position)>();
+    let mut query = world.query::<(
+        Entity,
+        Option<&Position>,
+        Option<&Velocity>,
+        Option<&Faction>,
+        Option<&MoveTarget>,
+    )>();
     let entities = query
         .iter(world)
-        .map(|(entity, position)| EntityExport {
-            id: EntityIdExport {
-                index: entity.index_u32(),
-                generation: entity.generation().to_bits(),
-            },
-            position: *position,
+        .filter_map(|(entity, position, velocity, faction, move_target)| {
+            if position.is_none()
+                && velocity.is_none()
+                && faction.is_none()
+                && move_target.is_none()
+            {
+                return None;
+            }
+            Some(EntityExport {
+                id: EntityIdExport {
+                    index: entity.index_u32(),
+                    generation: entity.generation().to_bits(),
+                },
+                position: position.copied(),
+                velocity: velocity.copied(),
+                faction: faction.copied(),
+                move_target: move_target.copied(),
+            })
         })
         .collect();
 
@@ -88,7 +117,7 @@ fn world_json_from_world(world: &mut World) -> Result<String, ExportError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::Position;
+    use crate::components::{Faction, MoveTarget, Position, Velocity};
 
     #[test]
     fn world_json_empty_world() {
@@ -96,7 +125,7 @@ mod tests {
         let json = api.world_json().expect("serialize empty world");
         let value: serde_json::Value =
             serde_json::from_str(&json).expect("exported JSON should parse");
-        assert_eq!(value["version"], 1);
+        assert_eq!(value["version"], 2);
         assert_eq!(value["entities"].as_array().map(Vec::len), Some(0));
     }
 
@@ -111,12 +140,49 @@ mod tests {
         let value: serde_json::Value =
             serde_json::from_str(&json).expect("exported JSON should parse");
 
-        assert_eq!(value["version"], 1);
+        assert_eq!(value["version"], 2);
         let entities = value["entities"].as_array().expect("entities array");
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0]["position"]["x"], 1.0);
         assert_eq!(entities[0]["position"]["y"], 2.0);
         assert!(entities[0]["id"]["index"].is_number());
         assert!(entities[0]["id"]["generation"].is_number());
+    }
+
+    #[test]
+    fn world_json_faction_only_entity() {
+        let mut api = Api::new();
+        api.core_mut().world_mut().spawn(Faction(2));
+
+        let json = api.world_json().expect("serialize world");
+        let value: serde_json::Value =
+            serde_json::from_str(&json).expect("exported JSON should parse");
+
+        assert_eq!(value["version"], 2);
+        let entities = value["entities"].as_array().expect("entities array");
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0]["faction"], 2);
+        assert!(entities[0].get("position").is_none());
+    }
+
+    #[test]
+    fn world_json_partial_components() {
+        let mut api = Api::new();
+        api.core_mut().world_mut().spawn((
+            Position { x: 1.0, y: 2.0 },
+            Velocity { vx: 0.5, vy: -0.5 },
+        ));
+
+        let json = api.world_json().expect("serialize world");
+        let value: serde_json::Value =
+            serde_json::from_str(&json).expect("exported JSON should parse");
+
+        assert_eq!(value["version"], 2);
+        let entities = value["entities"].as_array().expect("entities array");
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0]["position"]["x"], 1.0);
+        assert_eq!(entities[0]["velocity"]["vx"], 0.5);
+        assert!(entities[0].get("faction").is_none());
+        assert!(entities[0].get("move_target").is_none());
     }
 }
