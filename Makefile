@@ -3,10 +3,8 @@
 test:
 	cargo test
 
-EXAMPLE ?= hello
+EXAMPLE ?= world_json
 
 example:
 	cargo run -p open_entities --example $(EXAMPLE)
 
-example-world-json:
-	$(MAKE) example EXAMPLE=world_json
