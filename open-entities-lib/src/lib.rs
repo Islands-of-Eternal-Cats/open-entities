@@ -1,8 +1,13 @@
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
 
+pub use bevy_ecs::prelude::{Component, Entity, Query, World};
+
+pub mod components;
+
 /// Returns the canonical hello-world greeting.
-pub fn hello() -> &'static str {
+#[must_use]
+pub const fn hello() -> &'static str {
     "Hello, world!"
 }
 
