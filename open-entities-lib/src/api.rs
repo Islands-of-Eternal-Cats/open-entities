@@ -1,8 +1,10 @@
 use crate::core::Core;
+use crate::import::EntityTemplates;
 
-/// Public facade over [`Core`] for simulation operations and export.
+/// Public facade over [`Core`] for simulation operations, export, and import.
 pub struct Api {
     core: Core,
+    pub(crate) templates: Option<EntityTemplates>,
 }
 
 impl Api {
@@ -11,6 +13,7 @@ impl Api {
     pub fn new() -> Self {
         Self {
             core: Core::new(),
+            templates: None,
         }
     }
 
