@@ -6,9 +6,9 @@ The library uses [Bevy ECS](https://crates.io/crates/bevy_ecs) (`bevy_ecs` only,
 
 - [`Core`](open-entities-lib/src/core.rs) — owns the ECS [`World`](https://docs.rs/bevy_ecs/latest/bevy_ecs/world/struct.World.html)
 - [`Api`](open-entities-lib/src/api.rs) — facade over `Core` (spawn, systems, export)
-- [`export`](open-entities-lib/src/export/mod.rs) — `Api::world_json()` serializes entities with a [`Position`](open-entities-lib/src/components/position.rs) component to JSON
+- [`export`](open-entities-lib/src/export/mod.rs) — `Api::world_json()` serializes entities that have at least one RTS export component (`Position`, `Velocity`, `Faction`, `MoveTarget`) to JSON schema version 2
 
-Domain components live under `open_entities::components` (currently `Position { x, y }`).
+Domain components live under `open_entities::components`: `Position`, `Velocity`, `Faction`, and `MoveTarget`.
 
 ## Requirements
 
@@ -94,18 +94,24 @@ api.core_mut().world_mut().spawn(Position { x: 1.0, y: 2.0 });
 let json = api.world_json().expect("export world");
 ```
 
-Exported shape (schema version `1`):
+Exported shape (schema version `2`):
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "entities": [
     {
       "id": { "index": 0, "generation": 0 },
-      "position": { "x": 1.0, "y": 2.0 }
+      "position": { "x": 1.0, "y": 2.0 },
+      "velocity": { "vx": 0.5, "vy": -0.5 },
+      "faction": 1
+    },
+    {
+      "id": { "index": 1, "generation": 0 },
+      "faction": 2
     }
   ]
 }
 ```
 
-Only entities that have a `Position` component are included.
+Entities are included if they have at least one of `Position`, `Velocity`, `Faction`, or `MoveTarget`. Keys for components the entity does not have are omitted (not `null`).
