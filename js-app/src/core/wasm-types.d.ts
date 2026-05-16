@@ -53,6 +53,8 @@ declare module "open-entities-wasm" {
      * Optional faction id attaches the `Faction` component.
      */
     spawn_at(typeName: string, x: number, y: number, faction?: number): void;
+    /** Load initial map instances from YAML string (e.g. assets/init_map.yaml). */
+    load_map_yaml(mapYaml: string): void;
     tick(dt: number): void;
     /** Move-to order for snapshot id strings (decimal `Entity::to_bits()`). Target: same `JsPosition` as world coords. */
     order_move_to(entityIds: string[], target: JsPosition): void;

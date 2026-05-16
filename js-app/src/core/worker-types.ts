@@ -3,8 +3,22 @@
  */
 import type { EntitySnapshot } from "./types";
 
+/**
+ * Raw snapshot row as it crosses the worker boundary from WASM.
+ * `faction` may be absent on malformed payloads, so main thread normalizes it to null.
+ */
+export type RawEntitySnapshot = Omit<EntitySnapshot, "faction"> & {
+  faction?: number | null;
+};
+
 export type WorkerInMessage =
-  | { type: "init"; wasmBuffer: ArrayBuffer; entitiesYaml: string }
+  | {
+      type: "init";
+      wasmBuffer: ArrayBuffer;
+      entitiesYaml: string;
+      initMapYaml: string;
+    }
+  | { type: "snapshot" }
   | { type: "tick"; dt: number }
   | {
       type: "spawn_at";
@@ -19,4 +33,5 @@ export type WorkerInMessage =
 export type WorkerOutMessage =
   | { type: "ready" }
   | { type: "error"; message: string }
-  | { type: "entities"; entities: EntitySnapshot[] };
+  | { type: "entities"; entities: RawEntitySnapshot[] }
+  | { type: "spawned"; entity: RawEntitySnapshot };
