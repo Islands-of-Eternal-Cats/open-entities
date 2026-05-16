@@ -1,8 +1,8 @@
 use bevy_ecs::prelude::Component;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// World-space movement goal point.
-#[derive(Component, Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct MoveTarget {
     pub x: f32,
     pub y: f32,

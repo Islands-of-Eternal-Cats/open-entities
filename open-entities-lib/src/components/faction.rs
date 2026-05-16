@@ -1,8 +1,8 @@
 use bevy_ecs::prelude::Component;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Numeric faction / side identifier.
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Faction(pub u32);
 
