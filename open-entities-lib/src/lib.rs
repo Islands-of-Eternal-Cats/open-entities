@@ -1,3 +1,6 @@
+#![warn(clippy::pedantic)]
+#![warn(clippy::nursery)]
+
 /// Returns the canonical hello-world greeting.
 pub fn hello() -> &'static str {
     "Hello, world!"
