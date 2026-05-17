@@ -34,6 +34,8 @@ entities:
 |------|--------|
 | Merge granularity | **Component-level replace**: child `position` fully overrides parent `position`; no deep merge of `x`/`y` |
 | Chain | Allow `a → b → c`; resolve after full parse |
+| Multiple parents | `template: [a, b]` — merge left-to-right; later overrides earlier on same component |
+| Single parent | `template: a` equivalent to `template: [a]` |
 | Cycles | Error (`scout` → `unit` → `scout`) |
 | Missing `template` target | Error |
 | Order in YAML | Irrelevant; resolve by name after parse |
@@ -59,5 +61,4 @@ Resolve inheritance inside `load_templates_yaml` (store flattened templates) or 
 ## Out of scope for this idea
 
 - Cross-file `template` references
-- Multiple inheritance
 - ECS `Parent` / scene graph from YAML
