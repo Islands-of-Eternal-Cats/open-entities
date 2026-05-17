@@ -39,7 +39,7 @@ fn main() {
         return;
     }
 
-    for name in ["unit", "scout", "tank", "heavy_tank", "marker"] {
+    for name in ["marker", "heavy_tank", "tank", "scout", "unit"] {
         match api.spawn_yaml(name) {
             Ok(entity) => println!("spawned {name} -> entity {:?}", entity),
             Err(err) => eprintln!("spawn {name} failed: {err}"),
