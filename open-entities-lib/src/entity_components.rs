@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::components::{Faction, MoveTarget, Position, Velocity};
 
 /// Gameplay components shared by YAML templates, spawn overrides, and export (flattened).
-#[derive(Clone, Default, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Default, PartialEq, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EntityComponents {
     #[serde(skip_serializing_if = "Option::is_none")]

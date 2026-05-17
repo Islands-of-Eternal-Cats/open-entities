@@ -4,7 +4,9 @@ use bevy_ecs::prelude::{Entity, World};
 use serde::Deserialize;
 
 use crate::api::Api;
-use crate::components::{EntityType, Faction, MoveTarget, Position, Velocity};
+use crate::components::EntityType;
+#[cfg(test)]
+use crate::components::{Faction, MoveTarget, Position, Velocity};
 use crate::entity_components::{merge_components, EntityComponents};
 
 /// Errors while loading YAML templates or spawning from them.
@@ -12,7 +14,7 @@ use crate::entity_components::{merge_components, EntityComponents};
 pub enum ImportError {
     /// YAML syntax, type mismatch, or unknown field.
     Yaml(serde_yaml::Error),
-    /// `spawn_yaml` called before a successful `load_templates_yaml`.
+    /// `spawn_entity` called before a successful `load_templates_yaml`.
     TemplatesNotLoaded,
     /// No template with this name in the loaded map.
     UnknownTemplate(String),
@@ -107,7 +109,7 @@ fn resolve_template(
     memo: &mut BTreeMap<String, EntityComponents>,
 ) -> Result<EntityComponents, ImportError> {
     if let Some(resolved) = memo.get(name) {
-        return Ok(resolved.clone());
+        return Ok(*resolved);
     }
     if stack.iter().any(|s| s == name) {
         let mut chain = stack.clone();
@@ -130,7 +132,7 @@ fn resolve_template(
     }
 
     let merged = merge_components(&base, &entry.components);
-    memo.insert(name.to_owned(), merged.clone());
+    memo.insert(name.to_owned(), merged);
     stack.pop();
 
     Ok(merged)
@@ -182,21 +184,28 @@ impl Api {
         Ok(())
     }
 
-    /// Spawns one entity from a previously loaded template by name.
+    /// Spawns one entity from a previously loaded template, applying optional component overrides.
+    ///
+    /// Each `Some` field in `overrides` replaces the template value; `None` fields leave the
+    /// template unchanged. [`EntityComponents::default()`] spawns the template as loaded.
     ///
     /// # Errors
     ///
     /// Returns [`ImportError::TemplatesNotLoaded`] if no successful load yet.
     /// Returns [`ImportError::UnknownTemplate`] if `template_name` is missing.
-    pub fn spawn_yaml(&mut self, template_name: &str) -> Result<Entity, ImportError> {
+    pub fn spawn_entity(
+        &mut self,
+        template_name: &str,
+        overrides: EntityComponents,
+    ) -> Result<Entity, ImportError> {
         let templates = self
             .templates
             .as_ref()
             .ok_or(ImportError::TemplatesNotLoaded)?;
-        let doc = templates
+        let base = *templates
             .get(template_name)
-            .ok_or_else(|| ImportError::UnknownTemplate(template_name.to_owned()))?
-            .clone();
+            .ok_or_else(|| ImportError::UnknownTemplate(template_name.to_owned()))?;
+        let doc = merge_components(&base, &overrides);
         Ok(spawn_from_doc(
             self.core_mut().world_mut(),
             template_name,
@@ -319,6 +328,66 @@ entities:
     }
 
     #[test]
+    fn spawn_entity_overrides_faction() {
+        let mut api = Api::new();
+        load_fixture(&mut api);
+        let entity = api
+            .spawn_entity(
+                "scout",
+                EntityComponents {
+                    faction: Some(Faction(99)),
+                    ..Default::default()
+                },
+            )
+            .expect("spawn with faction override");
+        let world = api.core_mut().world_mut();
+        let faction = world.get::<Faction>(entity).expect("faction");
+        assert_eq!(faction.0, 99);
+        let velocity = world.get::<Velocity>(entity).expect("velocity");
+        assert_eq!(velocity.vx, 2.0);
+        assert_eq!(velocity.vy, 0.0);
+    }
+
+    #[test]
+    fn spawn_entity_overrides_position() {
+        let mut api = Api::new();
+        load_fixture(&mut api);
+        let entity = api
+            .spawn_entity(
+                "scout",
+                EntityComponents {
+                    position: Some(Position { x: 100.0, y: 200.0 }),
+                    ..Default::default()
+                },
+            )
+            .expect("spawn with position override");
+        let world = api.core_mut().world_mut();
+        let position = world.get::<Position>(entity).expect("position");
+        assert_eq!(position.x, 100.0);
+        assert_eq!(position.y, 200.0);
+        let faction = world.get::<Faction>(entity).expect("faction still from template");
+        assert_eq!(faction.0, 1);
+    }
+
+    #[test]
+    fn spawn_entity_no_overrides_matches_template() {
+        let mut api = Api::new();
+        load_fixture(&mut api);
+        let entity = api
+            .spawn_entity("scout", EntityComponents::default())
+            .expect("spawn scout");
+        let world = api.core_mut().world_mut();
+        let position = world.get::<Position>(entity).expect("position");
+        assert_eq!(position.x, 0.0);
+        assert_eq!(position.y, 0.0);
+        let velocity = world.get::<Velocity>(entity).expect("velocity");
+        assert_eq!(velocity.vx, 2.0);
+        assert_eq!(velocity.vy, 0.0);
+        let faction = world.get::<Faction>(entity).expect("faction");
+        assert_eq!(faction.0, 1);
+    }
+
+    #[test]
     fn import_error_unknown_template_parent_display() {
         let err = ImportError::UnknownTemplateParent {
             child: "scout".to_owned(),
@@ -346,9 +415,9 @@ entities:
     }
 
     #[test]
-    fn spawn_yaml_without_load() {
+    fn spawn_entity_without_load() {
         let mut api = Api::new();
-        let err = api.spawn_yaml("scout").unwrap_err();
+        let err = api.spawn_entity("scout", EntityComponents::default()).unwrap_err();
         assert!(matches!(err, ImportError::TemplatesNotLoaded));
     }
 
@@ -361,7 +430,7 @@ entities:
         assert!(matches!(err, ImportError::Yaml(_)));
         assert!(api.templates.is_none());
         assert!(matches!(
-            api.spawn_yaml("scout").unwrap_err(),
+            api.spawn_entity("scout", EntityComponents::default()).unwrap_err(),
             ImportError::TemplatesNotLoaded
         ));
     }
@@ -410,18 +479,18 @@ entities:
     }
 
     #[test]
-    fn spawn_yaml_unknown_template() {
+    fn spawn_entity_unknown_template() {
         let mut api = Api::new();
         load_fixture(&mut api);
-        let err = api.spawn_yaml("nope").unwrap_err();
+        let err = api.spawn_entity("nope", EntityComponents::default()).unwrap_err();
         assert!(matches!(err, ImportError::UnknownTemplate(name) if name == "nope"));
     }
 
     #[test]
-    fn spawn_yaml_scout() {
+    fn spawn_entity_scout() {
         let mut api = Api::new();
         load_fixture(&mut api);
-        let entity = api.spawn_yaml("scout").expect("spawn scout");
+        let entity = api.spawn_entity("scout", EntityComponents::default()).expect("spawn scout");
         let world = api.core_mut().world_mut();
         let position = world.get::<Position>(entity).expect("position");
         assert_eq!(position.x, 0.0);
@@ -437,10 +506,10 @@ entities:
     }
 
     #[test]
-    fn spawn_yaml_base() {
+    fn spawn_entity_base() {
         let mut api = Api::new();
         load_fixture(&mut api);
-        let entity = api.spawn_yaml("base").expect("spawn base");
+        let entity = api.spawn_entity("base", EntityComponents::default()).expect("spawn base");
         let world = api.core_mut().world_mut();
         assert!(world.get::<Position>(entity).is_none());
         assert!(world.get::<Velocity>(entity).is_none());
@@ -451,10 +520,10 @@ entities:
     }
 
     #[test]
-    fn spawn_yaml_marker() {
+    fn spawn_entity_marker() {
         let mut api = Api::new();
         load_fixture(&mut api);
-        let entity = api.spawn_yaml("marker").expect("spawn marker");
+        let entity = api.spawn_entity("marker", EntityComponents::default()).expect("spawn marker");
         let world = api.core_mut().world_mut();
         assert!(world.get::<Position>(entity).is_none());
         assert!(world.get::<Velocity>(entity).is_none());
@@ -477,11 +546,11 @@ entities:
     }
 
     #[test]
-    fn spawn_yaml_twice_same_name() {
+    fn spawn_entity_twice_same_name() {
         let mut api = Api::new();
         load_fixture(&mut api);
-        let e1 = api.spawn_yaml("scout").expect("first scout");
-        let e2 = api.spawn_yaml("scout").expect("second scout");
+        let e1 = api.spawn_entity("scout", EntityComponents::default()).expect("first scout");
+        let e2 = api.spawn_entity("scout", EntityComponents::default()).expect("second scout");
         assert_ne!(e1, e2);
         let world = api.core_mut().world_mut();
         assert!(world.get::<Position>(e1).is_some());
@@ -497,19 +566,19 @@ entities:
             .expect("load A");
         api.load_templates_yaml("entities:\n  b:\n    faction: 2\n")
             .expect("load B");
-        assert!(api.spawn_yaml("a").is_err());
-        let entity = api.spawn_yaml("b").expect("only B remains");
+        assert!(api.spawn_entity("a", EntityComponents::default()).is_err());
+        let entity = api.spawn_entity("b", EntityComponents::default()).expect("only B remains");
         let world = api.core_mut().world_mut();
         assert_eq!(world.get::<Faction>(entity).map(|f| f.0), Some(2));
         assert_eq!(world.get::<EntityType>(entity).map(|t| t.0.as_str()), Some("b"));
     }
 
     #[test]
-    fn spawn_yaml_exports_entity_type_in_world_json() {
+    fn spawn_entity_exports_entity_type_in_world_json() {
         let mut api = Api::new();
         load_fixture(&mut api);
-        api.spawn_yaml("scout").expect("spawn scout");
-        api.spawn_yaml("marker").expect("spawn marker");
+        api.spawn_entity("scout", EntityComponents::default()).expect("spawn scout");
+        api.spawn_entity("marker", EntityComponents::default()).expect("spawn marker");
 
         let json = api.world_json().expect("serialize world");
         let value: serde_json::Value =
@@ -546,7 +615,7 @@ entities:
         let mut api = Api::new();
         api.load_templates_yaml(yaml).expect("load");
 
-        let entity = api.spawn_yaml("scout").expect("spawn scout");
+        let entity = api.spawn_entity("scout", EntityComponents::default()).expect("spawn scout");
         let world = api.core_mut().world_mut();
         assert_eq!(world.get::<Faction>(entity).map(|f| f.0), Some(1));
         let velocity = world.get::<Velocity>(entity).expect("velocity");
@@ -569,7 +638,7 @@ entities:
 ";
         let mut api = Api::new();
         api.load_templates_yaml(yaml).expect("load");
-        let entity = api.spawn_yaml("c").expect("spawn c");
+        let entity = api.spawn_entity("c", EntityComponents::default()).expect("spawn c");
         let world = api.core_mut().world_mut();
         assert_eq!(world.get::<Faction>(entity).map(|f| f.0), Some(1));
         let velocity = world.get::<Velocity>(entity).expect("velocity");
@@ -591,7 +660,7 @@ entities:
 ";
         let mut api = Api::new();
         api.load_templates_yaml(yaml).expect("load");
-        let entity = api.spawn_yaml("scout").expect("spawn scout");
+        let entity = api.spawn_entity("scout", EntityComponents::default()).expect("spawn scout");
         let world = api.core_mut().world_mut();
         let position = world.get::<Position>(entity).expect("position");
         assert_eq!(position.x, 9.0);
@@ -611,8 +680,8 @@ entities:
         let mut api = Api::new();
         api.load_templates_yaml(yaml).expect("load");
 
-        let unit = api.spawn_yaml("unit").expect("spawn unit");
-        let clone = api.spawn_yaml("clone").expect("spawn clone");
+        let unit = api.spawn_entity("unit", EntityComponents::default()).expect("spawn unit");
+        let clone = api.spawn_entity("clone", EntityComponents::default()).expect("spawn clone");
         let world = api.core_mut().world_mut();
         assert_eq!(world.get::<Faction>(unit).map(|f| f.0), Some(1));
         assert_eq!(world.get::<Faction>(clone).map(|f| f.0), Some(1));
@@ -634,7 +703,7 @@ entities:
 ";
         let mut api = Api::new();
         api.load_templates_yaml(yaml).expect("load");
-        let entity = api.spawn_yaml("heavy_tank").expect("spawn");
+        let entity = api.spawn_entity("heavy_tank", EntityComponents::default()).expect("spawn");
         let world = api.core_mut().world_mut();
         assert_eq!(world.get::<Faction>(entity).map(|f| f.0), Some(3));
         let velocity = world.get::<Velocity>(entity).expect("velocity from tank");
@@ -665,8 +734,8 @@ entities:
         let mut api_many = Api::new();
         api_many.load_templates_yaml(yaml_many).expect("load many");
 
-        let e1 = api_one.spawn_yaml("scout").expect("spawn one");
-        let e2 = api_many.spawn_yaml("scout").expect("spawn many");
+        let e1 = api_one.spawn_entity("scout", EntityComponents::default()).expect("spawn one");
+        let e2 = api_many.spawn_entity("scout", EntityComponents::default()).expect("spawn many");
         let w1 = api_one.core_mut().world_mut();
         let w2 = api_many.core_mut().world_mut();
         assert_eq!(w1.get::<Faction>(e1).map(|f| f.0), w2.get::<Faction>(e2).map(|f| f.0));
@@ -691,7 +760,7 @@ entities:
 ";
         let mut api = Api::new();
         api.load_templates_yaml(yaml).expect("load");
-        let entity = api.spawn_yaml("hybrid").expect("spawn");
+        let entity = api.spawn_entity("hybrid", EntityComponents::default()).expect("spawn");
         let world = api.core_mut().world_mut();
         assert_eq!(world.get::<Faction>(entity).map(|f| f.0), Some(9));
     }
@@ -718,8 +787,8 @@ entities:
             .load_templates_yaml(yaml_without)
             .expect("load without");
 
-        let e1 = api_with.spawn_yaml("bare").expect("spawn with");
-        let e2 = api_without.spawn_yaml("bare").expect("spawn without");
+        let e1 = api_with.spawn_entity("bare", EntityComponents::default()).expect("spawn with");
+        let e2 = api_without.spawn_entity("bare", EntityComponents::default()).expect("spawn without");
         let w1 = api_with.core_mut().world_mut();
         let w2 = api_without.core_mut().world_mut();
         assert!(w1.get::<Faction>(e1).is_none());
@@ -791,7 +860,7 @@ entities:
 ";
         let mut api = Api::new();
         api.load_templates_yaml(yaml).expect("load");
-        let entity = api.spawn_yaml("unit").expect("spawn base");
+        let entity = api.spawn_entity("unit", EntityComponents::default()).expect("spawn base");
         let world = api.core_mut().world_mut();
         assert_eq!(world.get::<Faction>(entity).map(|f| f.0), Some(1));
         assert_eq!(
