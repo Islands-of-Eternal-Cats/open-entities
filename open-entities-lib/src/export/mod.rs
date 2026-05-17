@@ -3,6 +3,7 @@ use serde::Serialize;
 
 use crate::api::Api;
 use crate::components::{EntityType, Faction, MoveTarget, Position, Velocity};
+use crate::entity_components::EntityComponents;
 
 const SCHEMA_VERSION: u32 = 2;
 
@@ -44,14 +45,8 @@ struct WorldExport {
 #[derive(Serialize)]
 struct EntityExport {
     id: EntityIdExport,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    position: Option<Position>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    velocity: Option<Velocity>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    faction: Option<Faction>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    move_target: Option<MoveTarget>,
+    #[serde(flatten)]
+    components: EntityComponents,
     #[serde(skip_serializing_if = "Option::is_none")]
     entity_type: Option<EntityType>,
 }
@@ -103,10 +98,12 @@ fn world_json_from_world(world: &mut World) -> Result<String, ExportError> {
                         index: entity.index_u32(),
                         generation: entity.generation().to_bits(),
                     },
-                    position: position.copied(),
-                    velocity: velocity.copied(),
-                    faction: faction.copied(),
-                    move_target: move_target.copied(),
+                    components: EntityComponents {
+                        position: position.copied(),
+                        velocity: velocity.copied(),
+                        faction: faction.copied(),
+                        move_target: move_target.copied(),
+                    },
                     entity_type: entity_type.cloned(),
                 })
             },
