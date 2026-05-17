@@ -1,34 +1,11 @@
-use serde::{Deserialize, Serialize};
-
-use crate::components::{Faction, MoveTarget, Position, Velocity};
-
-/// Gameplay components shared by YAML templates, spawn overrides, and export (flattened).
-#[derive(Clone, Copy, Default, PartialEq, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct EntityComponents {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub position: Option<Position>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub velocity: Option<Velocity>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub faction: Option<Faction>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub move_target: Option<MoveTarget>,
-}
-
-/// Component-level merge: `child` wins when `Some`.
-pub fn merge_components(parent: &EntityComponents, child: &EntityComponents) -> EntityComponents {
-    EntityComponents {
-        position: child.position.or(parent.position),
-        velocity: child.velocity.or(parent.velocity),
-        faction: child.faction.or(parent.faction),
-        move_target: child.move_target.or(parent.move_target),
-    }
-}
+pub use crate::component_registry::{
+    entity_components_has_any, merge_components, EntityComponents,
+};
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::components::{Faction, Velocity};
 
     #[test]
     fn merge_child_wins_over_parent() {

@@ -40,7 +40,7 @@ macro_rules! define_registered_components {
 
         /// Inserts each `Some` registered component on the entity under construction.
         pub fn spawn_registered_components(
-            entity: &mut bevy_ecs::prelude::EntityCommands<'_>,
+            entity: &mut bevy_ecs::prelude::EntityWorldMut<'_>,
             doc: &EntityComponents,
         ) {
             $(
