@@ -1,8 +1,8 @@
 use bevy_ecs::prelude::Component;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// 2D velocity in world/simulation space.
-#[derive(Component, Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Velocity {
     pub vx: f32,
     pub vy: f32,
