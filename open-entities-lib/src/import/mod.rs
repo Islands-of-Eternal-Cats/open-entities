@@ -339,6 +339,68 @@ entities:
     }
 
     #[test]
+    fn spawn_entity_overrides_health() {
+        use crate::components::Health;
+
+        let mut api = Api::new();
+        api.load_templates_yaml(
+            r#"
+entities:
+  grunt:
+    health:
+      current: 50
+      max: 100
+"#,
+        )
+        .expect("load templates");
+        let entity = api
+            .spawn_entity(
+                "grunt",
+                EntityComponents {
+                    health: Some(Health {
+                        current: 10,
+                        max: 10,
+                    }),
+                    ..Default::default()
+                },
+            )
+            .expect("spawn with health override");
+        let world = api.core_mut().world_mut();
+        let health = world.get::<Health>(entity).expect("health");
+        assert_eq!(health.current, 10);
+        assert_eq!(health.max, 10);
+    }
+
+    #[test]
+    fn inherit_health_via_template() {
+        use crate::components::Health;
+
+        let mut api = Api::new();
+        api.load_templates_yaml(
+            r#"
+entities:
+  base_unit:
+    health:
+      current: 100
+      max: 100
+  elite:
+    template: base_unit
+    health:
+      current: 80
+      max: 100
+"#,
+        )
+        .expect("load templates");
+        let entity = api
+            .spawn_entity("elite", EntityComponents::default())
+            .expect("spawn elite");
+        let world = api.core_mut().world_mut();
+        let health = world.get::<Health>(entity).expect("health");
+        assert_eq!(health.current, 80);
+        assert_eq!(health.max, 100);
+    }
+
+    #[test]
     fn spawn_entity_overrides_position() {
         let mut api = Api::new();
         load_fixture(&mut api);
