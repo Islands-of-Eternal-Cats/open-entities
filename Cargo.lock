@@ -615,6 +615,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "open_entities_wasm"
+version = "0.1.0"
+dependencies = [
+ "open_entities",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "parking"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
