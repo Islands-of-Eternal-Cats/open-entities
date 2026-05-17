@@ -3,7 +3,7 @@
 test:
 	cargo test
 
-EXAMPLE ?= spawn_yaml
+EXAMPLE ?= spawn_entity
 
 example:
 	cargo run -p open_entities --example $(EXAMPLE)

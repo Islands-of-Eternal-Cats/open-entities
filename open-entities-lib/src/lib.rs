@@ -9,9 +9,12 @@ pub mod core;
 pub mod export;
 pub mod import;
 
+mod entity_components;
+
 pub use api::Api;
 pub use core::Core;
 pub use export::ExportError;
+pub use entity_components::EntityComponents;
 pub use import::ImportError;
 
 /// Returns the canonical hello-world greeting.
