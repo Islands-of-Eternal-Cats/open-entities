@@ -50,12 +50,6 @@ macro_rules! define_registered_components {
             )*
         }
 
-        /// True if any registered field is `Some`.
-        #[allow(dead_code)] // public helper for tests and downstream callers
-        pub const fn entity_components_has_any(doc: &EntityComponents) -> bool {
-            false $(|| doc.$field.is_some())*
-        }
-
         /// Bevy `Query` tuple for export: registered `Option<&T>` plus `EntityType`.
         pub type WorldExportQuery<'w> = (
             bevy_ecs::prelude::Entity,
@@ -65,13 +59,6 @@ macro_rules! define_registered_components {
             Option<&'w $crate::components::EntityType>,
         );
 
-        /// True if the entity has at least one registered gameplay component.
-        pub const fn registered_components_present(
-            $($field: Option<&$ty>,)*
-        ) -> bool {
-            false $(|| $field.is_some())*
-        }
-
         /// Builds export row `EntityComponents` from query `Option` references.
         pub const fn entity_components_from_query(
             $($field: Option<&$ty>,)*
@@ -79,6 +66,30 @@ macro_rules! define_registered_components {
             EntityComponents {
                 $($field: $field.copied(),)*
             }
+        }
+
+        /// One entity row collected from the world for JSON/binary export.
+        pub struct WorldExportRow {
+            pub entity: bevy_ecs::prelude::Entity,
+            pub components: EntityComponents,
+            pub entity_type: Option<$crate::components::EntityType>,
+        }
+
+        /// Walks the world once and returns registered components per entity.
+        pub fn collect_world_export_rows(
+            world: &mut bevy_ecs::prelude::World,
+        ) -> Vec<WorldExportRow> {
+            let mut query = world.query::<WorldExportQuery<'_>>();
+            query
+                .iter(world)
+                .map(
+                    |(entity, $($field,)* entity_type)| WorldExportRow {
+                        entity,
+                        components: entity_components_from_query($($field),*),
+                        entity_type: entity_type.cloned(),
+                    },
+                )
+                .collect()
         }
     };
 }
