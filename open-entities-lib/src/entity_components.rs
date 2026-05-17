@@ -1,3 +1,4 @@
+#[allow(unused_imports)] // re-exported for public API
 pub use crate::component_registry::{
     entity_components_has_any, merge_components, EntityComponents,
 };
@@ -36,5 +37,33 @@ mod tests {
         let merged = merge_components(&parent, &child);
         assert_eq!(merged.faction, Some(Faction(1)));
         assert_eq!(merged.velocity, Some(Velocity { vx: 2.0, vy: 0.0 }));
+    }
+
+    #[test]
+    fn merge_health_child_wins() {
+        use crate::components::Health;
+
+        let parent = EntityComponents {
+            health: Some(Health {
+                current: 50,
+                max: 100,
+            }),
+            ..Default::default()
+        };
+        let child = EntityComponents {
+            health: Some(Health {
+                current: 10,
+                max: 10,
+            }),
+            ..Default::default()
+        };
+        let merged = merge_components(&parent, &child);
+        assert_eq!(
+            merged.health,
+            Some(Health {
+                current: 10,
+                max: 10,
+            })
+        );
     }
 }
