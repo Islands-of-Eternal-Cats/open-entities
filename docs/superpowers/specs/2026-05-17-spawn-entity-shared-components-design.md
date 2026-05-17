@@ -14,7 +14,7 @@ This increment:
 1. Moves **`EntityComponents`** to a dedicated module, public, with **`Serialize` + `Deserialize`** and the same four optional fields as export v2 / YAML templates.
 2. Refactors **`EntityExport`** to `#[serde(flatten)]` the shared bundle (no behavioral change to `world_json` JSON shape).
 3. Renames **`spawn_yaml` → `spawn_entity`**, taking `overrides: EntityComponents`.
-4. Applies overrides with existing **component-level merge** semantics: each `Some` field in `overrides` replaces the template value; `None` leaves the template unchanged.
+4. Applies overrides with **component-level merge**: each `Some` field in `overrides` replaces the template value; `None` fields leave the template unchanged.
 
 `entity_type` remains spawn-injected from the template name, not part of `EntityComponents`. `EntityExport::id` remains export-only.
 
@@ -164,7 +164,7 @@ Unchanged `ImportError` variants. No new error for “partial position” — `P
 | `spawn_entity_overrides_position` | Template position replaced |
 | `spawn_entity_marker_empty` | `{}` template still works |
 | `spawn_entity_twice_same_name` | Two entities |
-| Existing inheritance / load tests | Rename `spawn_yaml` calls → `spawn_entity(..., Default::default())` |
+| Existing inheritance / load tests | Rename `spawn_yaml` calls → `spawn_entity(..., EntityComponents::default())` |
 | Export regression | `world_json` tests unchanged (JSON byte-for-byte equivalent) |
 | `merge_components` unit tests | Move with type or stay in import `merge_tests` module |
 
@@ -172,11 +172,12 @@ Unchanged `ImportError` variants. No new error for “partial position” — `P
 
 ```rust
 // wasm-bindings (later)
-let overrides: EntityComponents = serde_wasm_bindgen::from_value(opts)?;
+let overrides: EntityComponents = serde_wasm_bindgen::from_value(opts)
+    .unwrap_or_default(); // empty object → Default
 api.spawn_entity(&template_name, overrides)?;
 ```
 
-JS shape matches export: `{ faction: 2, position: { x: 10, y: 5 } }`. Template name remains a separate argument (or a future `SpawnEntityRequest` with `#[serde(flatten)]`).
+JS shape matches export: `{ faction: 2, position: { x: 10, y: 5 } }` or `{}` for no overrides. Template name remains a separate argument (or a future `SpawnEntityRequest` with `#[serde(flatten)]`).
 
 ## Rejected alternatives
 
