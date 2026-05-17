@@ -1,11 +1,14 @@
-use bevy_ecs::prelude::{Entity, World};
+use bevy_ecs::prelude::World;
 use serde::Serialize;
 
 use crate::api::Api;
-use crate::components::{EntityType, Faction, MoveTarget, Position, Velocity};
+use crate::component_registry::{
+    entity_components_from_query, registered_components_present, WorldExportQuery,
+};
+use crate::components::EntityType;
 use crate::entity_components::EntityComponents;
 
-const SCHEMA_VERSION: u32 = 2;
+const SCHEMA_VERSION: u32 = 3;
 
 /// Errors while serializing a world snapshot to JSON.
 #[derive(Debug)]
@@ -58,8 +61,8 @@ struct EntityIdExport {
 }
 
 impl Api {
-    /// Serializes entities that have at least one of [`Position`], [`Velocity`],
-    /// [`Faction`], [`MoveTarget`], or [`EntityType`] to JSON (schema version 2).
+    /// Serializes entities that have at least one registered gameplay component or
+    /// [`EntityType`] to JSON (schema version 3).
     ///
     /// Component fields are omitted from each entity row when that component is
     /// not present on the entity.
@@ -73,23 +76,18 @@ impl Api {
 }
 
 fn world_json_from_world(world: &mut World) -> Result<String, ExportError> {
-    let mut query = world.query::<(
-        Entity,
-        Option<&Position>,
-        Option<&Velocity>,
-        Option<&Faction>,
-        Option<&MoveTarget>,
-        Option<&EntityType>,
-    )>();
+    let mut query = world.query::<WorldExportQuery<'_>>();
     let entities = query
         .iter(world)
         .filter_map(
-            |(entity, position, velocity, faction, move_target, entity_type)| {
-                if position.is_none()
-                    && velocity.is_none()
-                    && faction.is_none()
-                    && move_target.is_none()
-                    && entity_type.is_none()
+            |(entity, position, velocity, faction, move_target, health, entity_type)| {
+                if !registered_components_present(
+                    position,
+                    velocity,
+                    faction,
+                    move_target,
+                    health,
+                ) && entity_type.is_none()
                 {
                     return None;
                 }
@@ -98,12 +96,13 @@ fn world_json_from_world(world: &mut World) -> Result<String, ExportError> {
                         index: entity.index_u32(),
                         generation: entity.generation().to_bits(),
                     },
-                    components: EntityComponents {
-                        position: position.copied(),
-                        velocity: velocity.copied(),
-                        faction: faction.copied(),
-                        move_target: move_target.copied(),
-                    },
+                    components: entity_components_from_query(
+                        position,
+                        velocity,
+                        faction,
+                        move_target,
+                        health,
+                    ),
                     entity_type: entity_type.cloned(),
                 })
             },
@@ -121,7 +120,7 @@ fn world_json_from_world(world: &mut World) -> Result<String, ExportError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::{EntityType, Faction, Position, Velocity};
+    use crate::components::{EntityType, Faction, Health, Position, Velocity};
 
     #[test]
     fn world_json_empty_world() {
@@ -129,8 +128,17 @@ mod tests {
         let json = api.world_json().expect("serialize empty world");
         let value: serde_json::Value =
             serde_json::from_str(&json).expect("exported JSON should parse");
-        assert_eq!(value["version"], 2);
+        assert_eq!(value["version"], 3);
         assert_eq!(value["entities"].as_array().map(Vec::len), Some(0));
+    }
+
+    #[test]
+    fn world_json_v3_version() {
+        let mut api = Api::new();
+        let json = api.world_json().expect("serialize empty world");
+        let value: serde_json::Value =
+            serde_json::from_str(&json).expect("exported JSON should parse");
+        assert_eq!(value["version"], 3);
     }
 
     #[test]
@@ -144,7 +152,7 @@ mod tests {
         let value: serde_json::Value =
             serde_json::from_str(&json).expect("exported JSON should parse");
 
-        assert_eq!(value["version"], 2);
+        assert_eq!(value["version"], 3);
         let entities = value["entities"].as_array().expect("entities array");
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0]["position"]["x"], 1.0);
@@ -162,7 +170,7 @@ mod tests {
         let value: serde_json::Value =
             serde_json::from_str(&json).expect("exported JSON should parse");
 
-        assert_eq!(value["version"], 2);
+        assert_eq!(value["version"], 3);
         let entities = value["entities"].as_array().expect("entities array");
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0]["faction"], 2);
@@ -181,7 +189,7 @@ mod tests {
         let value: serde_json::Value =
             serde_json::from_str(&json).expect("exported JSON should parse");
 
-        assert_eq!(value["version"], 2);
+        assert_eq!(value["version"], 3);
         let entities = value["entities"].as_array().expect("entities array");
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0]["position"]["x"], 1.0);
@@ -201,7 +209,7 @@ mod tests {
         let value: serde_json::Value =
             serde_json::from_str(&json).expect("exported JSON should parse");
 
-        assert_eq!(value["version"], 2);
+        assert_eq!(value["version"], 3);
         let entities = value["entities"].as_array().expect("entities array");
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0]["entity_type"], "marker");
@@ -221,5 +229,42 @@ mod tests {
         let entities = value["entities"].as_array().expect("entities array");
         assert_eq!(entities.len(), 1);
         assert!(entities[0].get("entity_type").is_none());
+    }
+
+    #[test]
+    fn world_json_v3_health_only_entity() {
+        let mut api = Api::new();
+        api.core_mut().world_mut().spawn(Health {
+            current: 80,
+            max: 100,
+        });
+
+        let json = api.world_json().expect("serialize world");
+        let value: serde_json::Value =
+            serde_json::from_str(&json).expect("exported JSON should parse");
+
+        assert_eq!(value["version"], 3);
+        let entities = value["entities"].as_array().expect("entities array");
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0]["health"]["current"], 80);
+        assert_eq!(entities[0]["health"]["max"], 100);
+        assert!(entities[0].get("position").is_none());
+    }
+
+    #[test]
+    fn world_json_v3_optional_keys() {
+        let mut api = Api::new();
+        api.core_mut()
+            .world_mut()
+            .spawn(Position { x: 1.0, y: 2.0 });
+
+        let json = api.world_json().expect("serialize world");
+        let value: serde_json::Value =
+            serde_json::from_str(&json).expect("exported JSON should parse");
+
+        let entities = value["entities"].as_array().expect("entities array");
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0]["position"]["x"], 1.0);
+        assert!(entities[0].get("health").is_none());
     }
 }
