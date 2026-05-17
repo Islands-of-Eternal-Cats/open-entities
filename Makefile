@@ -3,7 +3,7 @@
 test:
 	cargo test
 
-EXAMPLE ?= world_json
+EXAMPLE ?= spawn_yaml
 
 example:
 	cargo run -p open_entities --example $(EXAMPLE)
