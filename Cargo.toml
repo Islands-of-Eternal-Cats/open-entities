@@ -1,5 +1,5 @@
 [workspace]
-members = ["open-entities-lib"]
+members = ["open-entities-lib", "wasm-bindings"]
 resolver = "2"
 
 [workspace.package]
