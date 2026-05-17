@@ -67,5 +67,29 @@ macro_rules! define_registered_components {
                 $($field: $field.copied(),)*
             }
         }
+
+        /// One entity row collected from the world for JSON/binary export.
+        pub struct WorldExportRow {
+            pub entity: bevy_ecs::prelude::Entity,
+            pub components: EntityComponents,
+            pub entity_type: Option<$crate::components::EntityType>,
+        }
+
+        /// Walks the world once and returns registered components per entity.
+        pub fn collect_world_export_rows(
+            world: &mut bevy_ecs::prelude::World,
+        ) -> Vec<WorldExportRow> {
+            let mut query = world.query::<WorldExportQuery<'_>>();
+            query
+                .iter(world)
+                .map(
+                    |(entity, $($field,)* entity_type)| WorldExportRow {
+                        entity,
+                        components: entity_components_from_query($($field),*),
+                        entity_type: entity_type.cloned(),
+                    },
+                )
+                .collect()
+        }
     };
 }

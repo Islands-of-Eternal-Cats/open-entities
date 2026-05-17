@@ -2,7 +2,7 @@ use bevy_ecs::prelude::World;
 use serde::Serialize;
 
 use crate::api::Api;
-use crate::component_registry::{entity_components_from_query, WorldExportQuery};
+use crate::component_registry::collect_world_export_rows;
 use crate::components::EntityType;
 use crate::entity_components::EntityComponents;
 
@@ -73,27 +73,16 @@ impl Api {
 }
 
 fn world_json_from_world(world: &mut World) -> Result<String, ExportError> {
-    let mut query = world.query::<WorldExportQuery<'_>>();
-    let entities = query
-        .iter(world)
-        .map(
-            |(entity, position, velocity, faction, move_target, health, entity_type)| {
-                EntityExport {
-                    id: EntityIdExport {
-                        index: entity.index_u32(),
-                        generation: entity.generation().to_bits(),
-                    },
-                    components: entity_components_from_query(
-                        position,
-                        velocity,
-                        faction,
-                        move_target,
-                        health,
-                    ),
-                    entity_type: entity_type.cloned(),
-                }
+    let entities = collect_world_export_rows(world)
+        .into_iter()
+        .map(|row| EntityExport {
+            id: EntityIdExport {
+                index: row.entity.index_u32(),
+                generation: row.entity.generation().to_bits(),
             },
-        )
+            components: row.components,
+            entity_type: row.entity_type,
+        })
         .collect();
 
     let payload = WorldExport {
