@@ -2,9 +2,7 @@ use bevy_ecs::prelude::World;
 use serde::Serialize;
 
 use crate::api::Api;
-use crate::component_registry::{
-    entity_components_from_query, registered_components_present, WorldExportQuery,
-};
+use crate::component_registry::{entity_components_from_query, WorldExportQuery};
 use crate::components::EntityType;
 use crate::entity_components::EntityComponents;
 
@@ -61,11 +59,10 @@ struct EntityIdExport {
 }
 
 impl Api {
-    /// Serializes entities that have at least one registered gameplay component or
-    /// [`EntityType`] to JSON (schema version 3).
+    /// Serializes every entity in the world to JSON (schema version 3).
     ///
-    /// Component fields are omitted from each entity row when that component is
-    /// not present on the entity.
+    /// Registered gameplay component fields are omitted from each entity row when
+    /// that component is not present on the entity.
     ///
     /// # Errors
     ///
@@ -79,19 +76,9 @@ fn world_json_from_world(world: &mut World) -> Result<String, ExportError> {
     let mut query = world.query::<WorldExportQuery<'_>>();
     let entities = query
         .iter(world)
-        .filter_map(
+        .map(
             |(entity, position, velocity, faction, move_target, health, entity_type)| {
-                if !registered_components_present(
-                    position,
-                    velocity,
-                    faction,
-                    move_target,
-                    health,
-                ) && entity_type.is_none()
-                {
-                    return None;
-                }
-                Some(EntityExport {
+                EntityExport {
                     id: EntityIdExport {
                         index: entity.index_u32(),
                         generation: entity.generation().to_bits(),
@@ -104,7 +91,7 @@ fn world_json_from_world(world: &mut World) -> Result<String, ExportError> {
                         health,
                     ),
                     entity_type: entity_type.cloned(),
-                })
+                }
             },
         )
         .collect();
@@ -249,6 +236,26 @@ mod tests {
         assert_eq!(entities[0]["health"]["current"], 80);
         assert_eq!(entities[0]["health"]["max"], 100);
         assert!(entities[0].get("position").is_none());
+    }
+
+    #[test]
+    fn world_json_includes_entity_with_no_components() {
+        let mut api = Api::new();
+        api.core_mut().world_mut().spawn_empty();
+
+        let json = api.world_json().expect("serialize world");
+        let value: serde_json::Value =
+            serde_json::from_str(&json).expect("exported JSON should parse");
+
+        assert_eq!(value["version"], 3);
+        let entities = value["entities"].as_array().expect("entities array");
+        assert_eq!(entities.len(), 1);
+        assert!(entities[0].get("position").is_none());
+        assert!(entities[0].get("faction").is_none());
+        assert!(entities[0].get("health").is_none());
+        assert!(entities[0].get("entity_type").is_none());
+        assert!(entities[0]["id"]["index"].is_number());
+        assert!(entities[0]["id"]["generation"].is_number());
     }
 
     #[test]

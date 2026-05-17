@@ -50,12 +50,6 @@ macro_rules! define_registered_components {
             )*
         }
 
-        /// True if any registered field is `Some`.
-        #[allow(dead_code)] // public helper for tests and downstream callers
-        pub const fn entity_components_has_any(doc: &EntityComponents) -> bool {
-            false $(|| doc.$field.is_some())*
-        }
-
         /// Bevy `Query` tuple for export: registered `Option<&T>` plus `EntityType`.
         pub type WorldExportQuery<'w> = (
             bevy_ecs::prelude::Entity,
@@ -64,13 +58,6 @@ macro_rules! define_registered_components {
             )*
             Option<&'w $crate::components::EntityType>,
         );
-
-        /// True if the entity has at least one registered gameplay component.
-        pub const fn registered_components_present(
-            $($field: Option<&$ty>,)*
-        ) -> bool {
-            false $(|| $field.is_some())*
-        }
 
         /// Builds export row `EntityComponents` from query `Option` references.
         pub const fn entity_components_from_query(
