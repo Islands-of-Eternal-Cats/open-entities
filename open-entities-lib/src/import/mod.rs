@@ -4,7 +4,7 @@ use bevy_ecs::prelude::{Entity, World};
 use serde::Deserialize;
 
 use crate::api::Api;
-use crate::components::{Faction, MoveTarget, Position, Velocity};
+use crate::components::{EntityType, Faction, MoveTarget, Position, Velocity};
 
 /// Errors while loading YAML templates or spawning from them.
 #[derive(Debug)]
@@ -58,7 +58,7 @@ struct TemplatesFileRoot {
     entities: EntityTemplates,
 }
 
-fn spawn_from_doc(world: &mut World, doc: &EntitySpawnYaml) -> Entity {
+fn spawn_from_doc(world: &mut World, template_name: &str, doc: &EntitySpawnYaml) -> Entity {
     let mut entity = world.spawn_empty();
     if let Some(position) = doc.position {
         entity.insert(position);
@@ -72,6 +72,7 @@ fn spawn_from_doc(world: &mut World, doc: &EntitySpawnYaml) -> Entity {
     if let Some(move_target) = doc.move_target {
         entity.insert(move_target);
     }
+    entity.insert(EntityType(template_name.to_owned()));
     entity.id()
 }
 
@@ -107,7 +108,11 @@ impl Api {
             .get(template_name)
             .ok_or_else(|| ImportError::UnknownTemplate(template_name.to_owned()))?
             .clone();
-        Ok(spawn_from_doc(self.core_mut().world_mut(), &doc))
+        Ok(spawn_from_doc(
+            self.core_mut().world_mut(),
+            template_name,
+            &doc,
+        ))
     }
 }
 
@@ -219,6 +224,8 @@ entities:
         let faction = world.get::<Faction>(entity).expect("faction");
         assert_eq!(faction.0, 1);
         assert!(world.get::<MoveTarget>(entity).is_none());
+        let entity_type = world.get::<EntityType>(entity).expect("entity_type");
+        assert_eq!(entity_type.0, "scout");
     }
 
     #[test]
@@ -231,6 +238,8 @@ entities:
         assert!(world.get::<Velocity>(entity).is_none());
         let faction = world.get::<Faction>(entity).expect("faction");
         assert_eq!(faction.0, 2);
+        let entity_type = world.get::<EntityType>(entity).expect("entity_type");
+        assert_eq!(entity_type.0, "base");
     }
 
     #[test]
@@ -243,6 +252,20 @@ entities:
         assert!(world.get::<Velocity>(entity).is_none());
         assert!(world.get::<Faction>(entity).is_none());
         assert!(world.get::<MoveTarget>(entity).is_none());
+        let entity_type = world.get::<EntityType>(entity).expect("entity_type");
+        assert_eq!(entity_type.0, "marker");
+    }
+
+    #[test]
+    fn load_templates_yaml_rejects_entity_type_in_yaml() {
+        let mut api = Api::new();
+        let yaml = r"
+entities:
+  scout:
+    entity_type: scout
+";
+        let err = api.load_templates_yaml(yaml).unwrap_err();
+        assert!(matches!(err, ImportError::Yaml(_)));
     }
 
     #[test]
@@ -255,6 +278,8 @@ entities:
         let world = api.core_mut().world_mut();
         assert!(world.get::<Position>(e1).is_some());
         assert!(world.get::<Position>(e2).is_some());
+        assert_eq!(world.get::<EntityType>(e1).map(|t| t.0.as_str()), Some("scout"));
+        assert_eq!(world.get::<EntityType>(e2).map(|t| t.0.as_str()), Some("scout"));
     }
 
     #[test]
@@ -268,5 +293,35 @@ entities:
         let entity = api.spawn_yaml("b").expect("only B remains");
         let world = api.core_mut().world_mut();
         assert_eq!(world.get::<Faction>(entity).map(|f| f.0), Some(2));
+        assert_eq!(world.get::<EntityType>(entity).map(|t| t.0.as_str()), Some("b"));
+    }
+
+    #[test]
+    fn spawn_yaml_exports_entity_type_in_world_json() {
+        let mut api = Api::new();
+        load_fixture(&mut api);
+        api.spawn_yaml("scout").expect("spawn scout");
+        api.spawn_yaml("marker").expect("spawn marker");
+
+        let json = api.world_json().expect("serialize world");
+        let value: serde_json::Value =
+            serde_json::from_str(&json).expect("exported JSON should parse");
+
+        let entities = value["entities"].as_array().expect("entities array");
+        assert_eq!(entities.len(), 2);
+
+        let scout = entities
+            .iter()
+            .find(|row| row["entity_type"] == "scout")
+            .expect("scout row");
+        assert_eq!(scout["position"]["x"], 0.0);
+        assert_eq!(scout["faction"], 1);
+
+        let marker = entities
+            .iter()
+            .find(|row| row["entity_type"] == "marker")
+            .expect("marker row");
+        assert!(marker.get("position").is_none());
+        assert!(marker.get("faction").is_none());
     }
 }
