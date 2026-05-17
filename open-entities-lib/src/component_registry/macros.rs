@@ -51,7 +51,8 @@ macro_rules! define_registered_components {
         }
 
         /// True if any registered field is `Some`.
-        pub fn entity_components_has_any(doc: &EntityComponents) -> bool {
+        #[allow(dead_code)] // public helper for tests and downstream callers
+        pub const fn entity_components_has_any(doc: &EntityComponents) -> bool {
             false $(|| doc.$field.is_some())*
         }
 
@@ -61,18 +62,18 @@ macro_rules! define_registered_components {
             $(
                 Option<&'w $ty>,
             )*
-            Option<&'w crate::components::EntityType>,
+            Option<&'w $crate::components::EntityType>,
         );
 
         /// True if the entity has at least one registered gameplay component.
-        pub fn registered_components_present(
+        pub const fn registered_components_present(
             $($field: Option<&$ty>,)*
         ) -> bool {
             false $(|| $field.is_some())*
         }
 
         /// Builds export row `EntityComponents` from query `Option` references.
-        pub fn entity_components_from_query(
+        pub const fn entity_components_from_query(
             $($field: Option<&$ty>,)*
         ) -> EntityComponents {
             EntityComponents {
