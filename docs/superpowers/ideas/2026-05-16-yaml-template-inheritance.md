@@ -1,7 +1,7 @@
 # Idea: YAML template inheritance (`template`)
 
 **Date:** 2026-05-16  
-**Status:** Deferred (not in yaml-spawn-import PR)  
+**Status:** Spec written — [YAML Template Inheritance](../specs/2026-05-17-yaml-template-inheritance-design.md)  
 **Related spec:** [YAML Component Spawn Import](../specs/2026-05-16-yaml-spawn-import-design.md)
 
 ## Summary
