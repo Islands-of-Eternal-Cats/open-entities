@@ -1,11 +1,12 @@
-//! Loads RTS entity templates from YAML (with template inheritance), spawns by name,
-//! and prints world JSON.
+//! Loads RTS entity templates from YAML (with template inheritance), spawns by name
+//! with optional component overrides, and prints world JSON.
 //!
 //! Inheritance is resolved at load time:
 //! - `template: unit` — single parent
 //! - `template: [unit, tank]` — multiple parents (later entries win on conflict)
 
-use open_entities::Api;
+use open_entities::components::Position;
+use open_entities::{Api, EntityComponents};
 
 const TEMPLATES_YAML: &str = r"
 entities:
@@ -40,7 +41,15 @@ fn main() {
     }
 
     for name in ["marker", "heavy_tank", "tank", "scout", "unit"] {
-        match api.spawn_yaml(name) {
+        let overrides = if name == "scout" {
+            EntityComponents {
+                position: Some(Position { x: 50.0, y: 25.0 }),
+                ..Default::default()
+            }
+        } else {
+            EntityComponents::default()
+        };
+        match api.spawn_entity(name, overrides) {
             Ok(entity) => println!("spawned {name} -> entity {:?}", entity),
             Err(err) => eprintln!("spawn {name} failed: {err}"),
         }
