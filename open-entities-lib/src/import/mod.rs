@@ -7,6 +7,7 @@ use crate::api::Api;
 use crate::components::EntityType;
 #[cfg(test)]
 use crate::components::{Faction, MoveTarget, Position, Velocity};
+use crate::component_registry::spawn_registered_components;
 use crate::entity_components::{merge_components, EntityComponents};
 
 /// Errors while loading YAML templates or spawning from them.
@@ -150,18 +151,7 @@ fn resolve_all_templates(
 
 fn spawn_from_doc(world: &mut World, template_name: &str, doc: &EntityComponents) -> Entity {
     let mut entity = world.spawn_empty();
-    if let Some(position) = doc.position {
-        entity.insert(position);
-    }
-    if let Some(velocity) = doc.velocity {
-        entity.insert(velocity);
-    }
-    if let Some(faction) = doc.faction {
-        entity.insert(faction);
-    }
-    if let Some(move_target) = doc.move_target {
-        entity.insert(move_target);
-    }
+    spawn_registered_components(&mut entity, doc);
     entity.insert(EntityType(template_name.to_owned()));
     entity.id()
 }
