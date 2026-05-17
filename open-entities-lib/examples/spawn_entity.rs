@@ -5,29 +5,41 @@
 //! - `template: unit` — single parent
 //! - `template: [unit, tank]` — multiple parents (later entries win on conflict)
 
-use open_entities::components::Position;
+use open_entities::components::{Health, Position};
 use open_entities::{Api, EntityComponents};
 
 const TEMPLATES_YAML: &str = r"
 entities:
   unit:
     faction: 1
+    health:
+      current: 100
+      max: 100
 
   scout:
     template: unit
     position: { x: 10.0, y: 5.0 }
     velocity: { vx: 2.0, vy: 0.0 }
     move_target: { x: 20.0, y: 0.0 }
+    health:
+      current: 80
+      max: 100
 
   tank:
     template: unit
     faction: 2
     velocity: { vx: 0.5, vy: 0.0 }
+    health:
+      current: 200
+      max: 200
 
   heavy_tank:
     template: [unit, tank]
     faction: 3
     position: { x: 0.0, y: 0.0 }
+    health:
+      current: 150
+      max: 300
 
   marker: {}
 ";
@@ -44,6 +56,10 @@ fn main() {
         let overrides = if name == "scout" {
             EntityComponents {
                 position: Some(Position { x: 50.0, y: 25.0 }),
+                health: Some(Health {
+                    current: 40,
+                    max: 100,
+                }),
                 ..Default::default()
             }
         } else {
