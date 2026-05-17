@@ -15,6 +15,10 @@ pub enum ImportError {
     TemplatesNotLoaded,
     /// No template with this name in the loaded map.
     UnknownTemplate(String),
+    /// Referenced parent name missing from `entities` map.
+    UnknownTemplateParent { child: String, parent: String },
+    /// Circular `template` chain detected during load.
+    TemplateCycle { chain: Vec<String> },
 }
 
 impl std::fmt::Display for ImportError {
@@ -27,6 +31,15 @@ impl std::fmt::Display for ImportError {
             Self::UnknownTemplate(name) => {
                 write!(f, "unknown template name: {name}")
             }
+            Self::UnknownTemplateParent { child, parent } => {
+                write!(
+                    f,
+                    r#"template "{parent}" not found (referenced from "{child}")"#
+                )
+            }
+            Self::TemplateCycle { chain } => {
+                write!(f, "template inheritance cycle: {}", chain.join(" -> "))
+            }
         }
     }
 }
@@ -35,7 +48,10 @@ impl std::error::Error for ImportError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Yaml(err) => Some(err),
-            Self::TemplatesNotLoaded | Self::UnknownTemplate(_) => None,
+            Self::TemplatesNotLoaded
+            | Self::UnknownTemplate(_)
+            | Self::UnknownTemplateParent { .. }
+            | Self::TemplateCycle { .. } => None,
         }
     }
 }
@@ -43,22 +59,112 @@ impl std::error::Error for ImportError {
 /// In-memory map of template name → component bundle (private).
 pub(crate) type EntityTemplates = BTreeMap<String, EntitySpawnYaml>;
 
-#[derive(Deserialize, Clone)]
+/// Shared component bundle — single place to add new importable components.
+#[derive(Deserialize, Clone, Default, PartialEq, Debug)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct EntitySpawnYaml {
+pub(crate) struct EntityComponents {
     position: Option<Position>,
     velocity: Option<Velocity>,
     faction: Option<Faction>,
     move_target: Option<MoveTarget>,
 }
 
+/// Flattened template stored on Api and used at spawn.
+pub(crate) type EntitySpawnYaml = EntityComponents;
+
+/// One parent name or an ordered list (serde untagged).
+#[derive(Deserialize, Clone, Default, PartialEq, Debug)]
+#[serde(untagged)]
+enum TemplateParents {
+    #[default]
+    None,
+    One(String),
+    Many(Vec<String>),
+}
+
+impl TemplateParents {
+    fn into_vec(self) -> Vec<String> {
+        match self {
+            Self::None => Vec::new(),
+            Self::One(name) => vec![name],
+            Self::Many(names) => names,
+        }
+    }
+}
+
+/// Parsed template entry (load only); `template` is stripped after resolve.
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+struct EntityTemplateRaw {
+    #[serde(default)]
+    template: TemplateParents,
+    #[serde(flatten)]
+    components: EntityComponents,
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct TemplatesFileRoot {
-    entities: EntityTemplates,
+    entities: BTreeMap<String, EntityTemplateRaw>,
 }
 
-fn spawn_from_doc(world: &mut World, template_name: &str, doc: &EntitySpawnYaml) -> Entity {
+fn merge_components(parent: &EntityComponents, child: &EntityComponents) -> EntityComponents {
+    EntityComponents {
+        position: child.position.or(parent.position),
+        velocity: child.velocity.or(parent.velocity),
+        faction: child.faction.or(parent.faction),
+        move_target: child.move_target.or(parent.move_target),
+    }
+}
+
+fn resolve_template(
+    name: &str,
+    child: &str,
+    raw: &BTreeMap<String, EntityTemplateRaw>,
+    stack: &mut Vec<String>,
+    memo: &mut BTreeMap<String, EntityComponents>,
+) -> Result<EntityComponents, ImportError> {
+    if let Some(resolved) = memo.get(name) {
+        return Ok(resolved.clone());
+    }
+    if stack.iter().any(|s| s == name) {
+        let mut chain = stack.clone();
+        chain.push(name.to_owned());
+        return Err(ImportError::TemplateCycle { chain });
+    }
+
+    let entry = raw.get(name).ok_or_else(|| ImportError::UnknownTemplateParent {
+        child: child.to_owned(),
+        parent: name.to_owned(),
+    })?;
+
+    stack.push(name.to_owned());
+
+    let mut base = EntityComponents::default();
+    let parent_names = entry.template.clone().into_vec();
+    for parent_name in parent_names {
+        let parent_doc = resolve_template(&parent_name, child, raw, stack, memo)?;
+        base = merge_components(&base, &parent_doc);
+    }
+
+    let merged = merge_components(&base, &entry.components);
+    memo.insert(name.to_owned(), merged.clone());
+    stack.pop();
+
+    Ok(merged)
+}
+
+fn resolve_all_templates(
+    raw: &BTreeMap<String, EntityTemplateRaw>,
+) -> Result<EntityTemplates, ImportError> {
+    let mut memo = BTreeMap::new();
+    for name in raw.keys() {
+        resolve_template(name, name, raw, &mut Vec::new(), &mut memo)?;
+    }
+    Ok(memo)
+}
+
+fn spawn_from_doc(world: &mut World, template_name: &str, doc: &EntityComponents) -> Entity {
     let mut entity = world.spawn_empty();
     if let Some(position) = doc.position {
         entity.insert(position);
@@ -89,7 +195,8 @@ impl Api {
     pub fn load_templates_yaml(&mut self, yaml: &str) -> Result<(), ImportError> {
         let parsed: TemplatesFileRoot =
             serde_yaml::from_str(yaml).map_err(ImportError::Yaml)?;
-        self.templates = Some(parsed.entities);
+        let flattened = resolve_all_templates(&parsed.entities)?;
+        self.templates = Some(flattened);
         Ok(())
     }
 
@@ -117,6 +224,134 @@ impl Api {
 }
 
 #[cfg(test)]
+mod merge_tests {
+    use super::*;
+
+    #[test]
+    fn merge_child_wins_over_parent() {
+        let parent = EntityComponents {
+            faction: Some(Faction(1)),
+            velocity: Some(Velocity { vx: 1.0, vy: 0.0 }),
+            ..Default::default()
+        };
+        let child = EntityComponents {
+            faction: Some(Faction(2)),
+            ..Default::default()
+        };
+        let merged = merge_components(&parent, &child);
+        assert_eq!(merged.faction, Some(Faction(2)));
+        assert_eq!(merged.velocity, Some(Velocity { vx: 1.0, vy: 0.0 }));
+    }
+
+    #[test]
+    fn merge_fills_missing_from_parent() {
+        let parent = EntityComponents {
+            faction: Some(Faction(1)),
+            ..Default::default()
+        };
+        let child = EntityComponents {
+            velocity: Some(Velocity { vx: 2.0, vy: 0.0 }),
+            ..Default::default()
+        };
+        let merged = merge_components(&parent, &child);
+        assert_eq!(merged.faction, Some(Faction(1)));
+        assert_eq!(merged.velocity, Some(Velocity { vx: 2.0, vy: 0.0 }));
+    }
+}
+
+#[cfg(test)]
+mod resolve_tests {
+    use super::*;
+
+    fn raw_map(pairs: &[(&str, EntityTemplateRaw)]) -> BTreeMap<String, EntityTemplateRaw> {
+        pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), v.clone()))
+            .collect()
+    }
+
+    fn entry(template: TemplateParents, components: EntityComponents) -> EntityTemplateRaw {
+        EntityTemplateRaw {
+            template,
+            components,
+        }
+    }
+
+    #[test]
+    fn resolve_single_parent() {
+        let raw = raw_map(&[
+            (
+                "unit",
+                entry(
+                    TemplateParents::None,
+                    EntityComponents {
+                        faction: Some(Faction(1)),
+                        ..Default::default()
+                    },
+                ),
+            ),
+            (
+                "scout",
+                entry(
+                    TemplateParents::One("unit".to_owned()),
+                    EntityComponents {
+                        velocity: Some(Velocity { vx: 2.0, vy: 0.0 }),
+                        ..Default::default()
+                    },
+                ),
+            ),
+        ]);
+        let resolved = resolve_all_templates(&raw).expect("resolve");
+        let scout = resolved.get("scout").expect("scout");
+        assert_eq!(scout.faction, Some(Faction(1)));
+        assert_eq!(scout.velocity, Some(Velocity { vx: 2.0, vy: 0.0 }));
+    }
+
+    #[test]
+    fn resolve_unknown_parent() {
+        let raw = raw_map(&[(
+            "scout",
+            entry(
+                TemplateParents::One("ghost".to_owned()),
+                EntityComponents::default(),
+            ),
+        )]);
+        let err = resolve_all_templates(&raw).unwrap_err();
+        assert!(matches!(
+            err,
+            ImportError::UnknownTemplateParent { child, parent }
+            if child == "scout" && parent == "ghost"
+        ));
+    }
+
+    #[test]
+    fn resolve_cycle() {
+        let raw = raw_map(&[
+            (
+                "scout",
+                entry(
+                    TemplateParents::One("unit".to_owned()),
+                    EntityComponents::default(),
+                ),
+            ),
+            (
+                "unit",
+                entry(
+                    TemplateParents::One("scout".to_owned()),
+                    EntityComponents::default(),
+                ),
+            ),
+        ]);
+        let err = resolve_all_templates(&raw).unwrap_err();
+        assert!(matches!(
+            err,
+            ImportError::TemplateCycle { chain }
+            if chain == ["scout", "unit", "scout"]
+        ));
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::api::Api;
@@ -135,6 +370,33 @@ entities:
     fn load_fixture(api: &mut Api) {
         api.load_templates_yaml(FIXTURE_YAML)
             .expect("fixture YAML should load");
+    }
+
+    #[test]
+    fn import_error_unknown_template_parent_display() {
+        let err = ImportError::UnknownTemplateParent {
+            child: "scout".to_owned(),
+            parent: "ghost".to_owned(),
+        };
+        assert_eq!(
+            err.to_string(),
+            r#"template "ghost" not found (referenced from "scout")"#
+        );
+    }
+
+    #[test]
+    fn import_error_template_cycle_display() {
+        let err = ImportError::TemplateCycle {
+            chain: vec![
+                "scout".to_owned(),
+                "unit".to_owned(),
+                "scout".to_owned(),
+            ],
+        };
+        assert_eq!(
+            err.to_string(),
+            "template inheritance cycle: scout -> unit -> scout"
+        );
     }
 
     #[test]
@@ -323,5 +585,272 @@ entities:
             .expect("marker row");
         assert!(marker.get("position").is_none());
         assert!(marker.get("faction").is_none());
+    }
+
+    #[test]
+    fn inherit_single_level() {
+        let yaml = r"
+entities:
+  unit:
+    faction: 1
+  scout:
+    template: unit
+    velocity: { vx: 2, vy: 0 }
+";
+        let mut api = Api::new();
+        api.load_templates_yaml(yaml).expect("load");
+
+        let entity = api.spawn_yaml("scout").expect("spawn scout");
+        let world = api.core_mut().world_mut();
+        assert_eq!(world.get::<Faction>(entity).map(|f| f.0), Some(1));
+        let velocity = world.get::<Velocity>(entity).expect("velocity");
+        assert_eq!(velocity.vx, 2.0);
+        assert_eq!(velocity.vy, 0.0);
+    }
+
+    #[test]
+    fn inherit_chain() {
+        let yaml = r"
+entities:
+  a:
+    faction: 1
+  b:
+    template: a
+    velocity: { vx: 1, vy: 0 }
+  c:
+    template: b
+    position: { x: 0, y: 0 }
+";
+        let mut api = Api::new();
+        api.load_templates_yaml(yaml).expect("load");
+        let entity = api.spawn_yaml("c").expect("spawn c");
+        let world = api.core_mut().world_mut();
+        assert_eq!(world.get::<Faction>(entity).map(|f| f.0), Some(1));
+        let velocity = world.get::<Velocity>(entity).expect("velocity");
+        assert_eq!(velocity.vx, 1.0);
+        let position = world.get::<Position>(entity).expect("position");
+        assert_eq!(position.x, 0.0);
+        assert_eq!(position.y, 0.0);
+    }
+
+    #[test]
+    fn inherit_override_component() {
+        let yaml = r"
+entities:
+  unit:
+    position: { x: 1, y: 1 }
+  scout:
+    template: unit
+    position: { x: 9, y: 9 }
+";
+        let mut api = Api::new();
+        api.load_templates_yaml(yaml).expect("load");
+        let entity = api.spawn_yaml("scout").expect("spawn scout");
+        let world = api.core_mut().world_mut();
+        let position = world.get::<Position>(entity).expect("position");
+        assert_eq!(position.x, 9.0);
+        assert_eq!(position.y, 9.0);
+    }
+
+    #[test]
+    fn inherit_child_only_template() {
+        let yaml = r"
+entities:
+  unit:
+    faction: 1
+    velocity: { vx: 0.5, vy: 0 }
+  clone:
+    template: unit
+";
+        let mut api = Api::new();
+        api.load_templates_yaml(yaml).expect("load");
+
+        let unit = api.spawn_yaml("unit").expect("spawn unit");
+        let clone = api.spawn_yaml("clone").expect("spawn clone");
+        let world = api.core_mut().world_mut();
+        assert_eq!(world.get::<Faction>(unit).map(|f| f.0), Some(1));
+        assert_eq!(world.get::<Faction>(clone).map(|f| f.0), Some(1));
+        assert!(world.get::<Velocity>(clone).is_some());
+    }
+
+    #[test]
+    fn inherit_multiple_templates() {
+        let yaml = r"
+entities:
+  unit:
+    faction: 1
+  tank:
+    template: unit
+    velocity: { vx: 0.5, vy: 0 }
+  heavy_tank:
+    template: [unit, tank]
+    faction: 3
+";
+        let mut api = Api::new();
+        api.load_templates_yaml(yaml).expect("load");
+        let entity = api.spawn_yaml("heavy_tank").expect("spawn");
+        let world = api.core_mut().world_mut();
+        assert_eq!(world.get::<Faction>(entity).map(|f| f.0), Some(3));
+        let velocity = world.get::<Velocity>(entity).expect("velocity from tank");
+        assert_eq!(velocity.vx, 0.5);
+        assert_eq!(velocity.vy, 0.0);
+    }
+
+    #[test]
+    fn inherit_multiple_string_equivalent() {
+        let yaml_one = r"
+entities:
+  unit:
+    faction: 1
+  scout:
+    template: unit
+    velocity: { vx: 2, vy: 0 }
+";
+        let yaml_many = r"
+entities:
+  unit:
+    faction: 1
+  scout:
+    template: [unit]
+    velocity: { vx: 2, vy: 0 }
+";
+        let mut api_one = Api::new();
+        api_one.load_templates_yaml(yaml_one).expect("load one");
+        let mut api_many = Api::new();
+        api_many.load_templates_yaml(yaml_many).expect("load many");
+
+        let e1 = api_one.spawn_yaml("scout").expect("spawn one");
+        let e2 = api_many.spawn_yaml("scout").expect("spawn many");
+        let w1 = api_one.core_mut().world_mut();
+        let w2 = api_many.core_mut().world_mut();
+        assert_eq!(w1.get::<Faction>(e1).map(|f| f.0), w2.get::<Faction>(e2).map(|f| f.0));
+        assert_eq!(
+            w1.get::<Velocity>(e1).map(|v| (v.vx, v.vy)),
+            w2.get::<Velocity>(e2).map(|v| (v.vx, v.vy))
+        );
+    }
+
+    #[test]
+    fn inherit_multiple_then_child_override() {
+        let yaml = r"
+entities:
+  unit:
+    faction: 1
+  tank:
+    template: unit
+    faction: 2
+  hybrid:
+    template: [unit, tank]
+    faction: 9
+";
+        let mut api = Api::new();
+        api.load_templates_yaml(yaml).expect("load");
+        let entity = api.spawn_yaml("hybrid").expect("spawn");
+        let world = api.core_mut().world_mut();
+        assert_eq!(world.get::<Faction>(entity).map(|f| f.0), Some(9));
+    }
+
+    #[test]
+    fn inherit_empty_template_list() {
+        let yaml_with = r"
+entities:
+  unit:
+    faction: 1
+  bare:
+    template: []
+";
+        let yaml_without = r"
+entities:
+  unit:
+    faction: 1
+  bare: {}
+";
+        let mut api_with = Api::new();
+        api_with.load_templates_yaml(yaml_with).expect("load with");
+        let mut api_without = Api::new();
+        api_without
+            .load_templates_yaml(yaml_without)
+            .expect("load without");
+
+        let e1 = api_with.spawn_yaml("bare").expect("spawn with");
+        let e2 = api_without.spawn_yaml("bare").expect("spawn without");
+        let w1 = api_with.core_mut().world_mut();
+        let w2 = api_without.core_mut().world_mut();
+        assert!(w1.get::<Faction>(e1).is_none());
+        assert!(w2.get::<Faction>(e2).is_none());
+    }
+
+    #[test]
+    fn load_unknown_template_parent() {
+        let mut api = Api::new();
+        let yaml = r"
+entities:
+  scout:
+    template: ghost
+";
+        let err = api.load_templates_yaml(yaml).unwrap_err();
+        assert!(matches!(
+            err,
+            ImportError::UnknownTemplateParent { child, parent }
+            if child == "scout" && parent == "ghost"
+        ));
+        assert!(api.templates.is_none());
+    }
+
+    #[test]
+    fn load_template_cycle() {
+        let mut api = Api::new();
+        let yaml = r"
+entities:
+  scout:
+    template: unit
+  unit:
+    template: scout
+";
+        let err = api.load_templates_yaml(yaml).unwrap_err();
+        assert!(matches!(
+            err,
+            ImportError::TemplateCycle { chain }
+            if chain == ["scout", "unit", "scout"]
+        ));
+        assert!(api.templates.is_none());
+    }
+
+    #[test]
+    fn load_failed_resolve_keeps_previous() {
+        let mut api = Api::new();
+        api.load_templates_yaml("entities:\n  a:\n    faction: 1\n")
+            .expect("first load");
+        let err = api
+            .load_templates_yaml("entities:\n  bad:\n    template: missing\n")
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            ImportError::UnknownTemplateParent { .. }
+        ));
+        let templates = api.templates.as_ref().expect("first map kept");
+        assert!(templates.contains_key("a"));
+        assert!(!templates.contains_key("bad"));
+    }
+
+    #[test]
+    fn spawn_base_template() {
+        let yaml = r"
+entities:
+  unit:
+    faction: 1
+  scout:
+    template: unit
+    velocity: { vx: 2, vy: 0 }
+";
+        let mut api = Api::new();
+        api.load_templates_yaml(yaml).expect("load");
+        let entity = api.spawn_yaml("unit").expect("spawn base");
+        let world = api.core_mut().world_mut();
+        assert_eq!(world.get::<Faction>(entity).map(|f| f.0), Some(1));
+        assert_eq!(
+            world.get::<EntityType>(entity).map(|t| t.0.as_str()),
+            Some("unit")
+        );
     }
 }

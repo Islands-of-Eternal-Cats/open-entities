@@ -1,17 +1,32 @@
-//! Loads RTS entity templates from YAML, spawns instances by name, and prints world JSON.
+//! Loads RTS entity templates from YAML (with template inheritance), spawns by name,
+//! and prints world JSON.
+//!
+//! Inheritance is resolved at load time:
+//! - `template: unit` — single parent
+//! - `template: [unit, tank]` — multiple parents (later entries win on conflict)
 
 use open_entities::Api;
 
 const TEMPLATES_YAML: &str = r"
 entities:
-  scout:
-    position: { x: 10.0, y: 5.0 }
-    velocity: { vx: 1.0, vy: 0.0 }
+  unit:
     faction: 1
+
+  scout:
+    template: unit
+    position: { x: 10.0, y: 5.0 }
+    velocity: { vx: 2.0, vy: 0.0 }
     move_target: { x: 20.0, y: 0.0 }
 
-  base:
+  tank:
+    template: unit
     faction: 2
+    velocity: { vx: 0.5, vy: 0.0 }
+
+  heavy_tank:
+    template: [unit, tank]
+    faction: 3
+    position: { x: 0.0, y: 0.0 }
 
   marker: {}
 ";
@@ -24,7 +39,7 @@ fn main() {
         return;
     }
 
-    for name in ["scout", "scout", "base", "marker"] {
+    for name in ["unit", "scout", "tank", "heavy_tank", "marker"] {
         match api.spawn_yaml(name) {
             Ok(entity) => println!("spawned {name} -> entity {:?}", entity),
             Err(err) => eprintln!("spawn {name} failed: {err}"),
