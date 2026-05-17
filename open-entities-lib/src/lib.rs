@@ -9,6 +9,7 @@ pub mod core;
 pub mod export;
 pub mod import;
 
+mod component_registry;
 mod entity_components;
 
 pub use api::Api;
