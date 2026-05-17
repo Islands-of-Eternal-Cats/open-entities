@@ -5,6 +5,7 @@ use serde::Deserialize;
 
 use crate::api::Api;
 use crate::components::{EntityType, Faction, MoveTarget, Position, Velocity};
+use crate::entity_components::{merge_components, EntityComponents};
 
 /// Errors while loading YAML templates or spawning from them.
 #[derive(Debug)]
@@ -59,16 +60,6 @@ impl std::error::Error for ImportError {
 /// In-memory map of template name → component bundle (private).
 pub(crate) type EntityTemplates = BTreeMap<String, EntitySpawnYaml>;
 
-/// Shared component bundle — single place to add new importable components.
-#[derive(Deserialize, Clone, Default, PartialEq, Debug)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct EntityComponents {
-    position: Option<Position>,
-    velocity: Option<Velocity>,
-    faction: Option<Faction>,
-    move_target: Option<MoveTarget>,
-}
-
 /// Flattened template stored on Api and used at spawn.
 pub(crate) type EntitySpawnYaml = EntityComponents;
 
@@ -106,15 +97,6 @@ struct EntityTemplateRaw {
 #[serde(deny_unknown_fields)]
 struct TemplatesFileRoot {
     entities: BTreeMap<String, EntityTemplateRaw>,
-}
-
-fn merge_components(parent: &EntityComponents, child: &EntityComponents) -> EntityComponents {
-    EntityComponents {
-        position: child.position.or(parent.position),
-        velocity: child.velocity.or(parent.velocity),
-        faction: child.faction.or(parent.faction),
-        move_target: child.move_target.or(parent.move_target),
-    }
 }
 
 fn resolve_template(
@@ -220,42 +202,6 @@ impl Api {
             template_name,
             &doc,
         ))
-    }
-}
-
-#[cfg(test)]
-mod merge_tests {
-    use super::*;
-
-    #[test]
-    fn merge_child_wins_over_parent() {
-        let parent = EntityComponents {
-            faction: Some(Faction(1)),
-            velocity: Some(Velocity { vx: 1.0, vy: 0.0 }),
-            ..Default::default()
-        };
-        let child = EntityComponents {
-            faction: Some(Faction(2)),
-            ..Default::default()
-        };
-        let merged = merge_components(&parent, &child);
-        assert_eq!(merged.faction, Some(Faction(2)));
-        assert_eq!(merged.velocity, Some(Velocity { vx: 1.0, vy: 0.0 }));
-    }
-
-    #[test]
-    fn merge_fills_missing_from_parent() {
-        let parent = EntityComponents {
-            faction: Some(Faction(1)),
-            ..Default::default()
-        };
-        let child = EntityComponents {
-            velocity: Some(Velocity { vx: 2.0, vy: 0.0 }),
-            ..Default::default()
-        };
-        let merged = merge_components(&parent, &child);
-        assert_eq!(merged.faction, Some(Faction(1)));
-        assert_eq!(merged.velocity, Some(Velocity { vx: 2.0, vy: 0.0 }));
     }
 }
 
