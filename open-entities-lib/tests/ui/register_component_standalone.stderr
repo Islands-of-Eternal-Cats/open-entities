@@ -1,0 +1,13 @@
+error: register_component! must only appear inside define_registered_components! { ... }
+ --> tests/ui/register_component_standalone.rs:3:1
+  |
+3 | register_component!(foo, open_entities::components::Position);
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the macro `register_component` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0601]: `main` function not found in crate `$CRATE`
+ --> tests/ui/register_component_standalone.rs:3:63
+  |
+3 | register_component!(foo, open_entities::components::Position);
+  |                                                               ^ consider adding a `main` function to `$DIR/tests/ui/register_component_standalone.rs`
