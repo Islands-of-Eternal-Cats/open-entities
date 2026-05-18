@@ -1,4 +1,4 @@
-.PHONY: test example example-world-json wasm-demo
+.PHONY: test example example-world-json wasm-demo wasm-test wasm-check
 
 test:
 	cargo test
@@ -13,3 +13,9 @@ wasm-demo:
 	@command -v wasm-pack >/dev/null 2>&1 || { echo "wasm-pack not found. Install with: cargo install wasm-pack"; exit 1; }
 	wasm-pack build wasm-bindings --target nodejs
 	cd wasm-bindings && node demo/run.mjs
+
+wasm-test:
+	@command -v wasm-pack >/dev/null 2>&1 || { echo "wasm-pack not found. Install with: cargo install wasm-pack"; exit 1; }
+	wasm-pack test --node wasm-bindings
+
+wasm-check: wasm-demo wasm-test
