@@ -8,41 +8,8 @@
 use open_entities::components::{Health, Position};
 use open_entities::{Api, EntityComponents};
 
-const TEMPLATES_YAML: &str = r"
-entities:
-  unit:
-    faction: 1
-    health:
-      current: 100
-      max: 100
-
-  scout:
-    template: unit
-    position: { x: 10.0, y: 5.0 }
-    velocity: { vx: 2.0, vy: 0.0 }
-    move_target: { x: 20.0, y: 0.0 }
-    health:
-      current: 80
-      max: 100
-
-  tank:
-    template: unit
-    faction: 2
-    velocity: { vx: 0.5, vy: 0.0 }
-    health:
-      current: 200
-      max: 200
-
-  heavy_tank:
-    template: [unit, tank]
-    faction: 3
-    position: { x: 0.0, y: 0.0 }
-    health:
-      current: 150
-      max: 300
-
-  marker: {}
-";
+const TEMPLATES_YAML: &str =
+    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/spawn_entity_templates.yaml"));
 
 fn main() {
     let mut api = Api::new();
