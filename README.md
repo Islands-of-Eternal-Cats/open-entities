@@ -77,6 +77,48 @@ cargo test
 
 Includes a trybuild compile-fail test for macro misuse (`register_component!` outside the registry wrapper).
 
+## WASM (Node)
+
+The [`wasm-bindings/`](wasm-bindings/) crate exposes the same spawn → export cycle as the Rust library through [`wasm-bindgen`](https://github.com/rustwasm/wasm-bindgen), built for Node with [`wasm-pack`](https://rustwasm.github.io/wasm-pack/).
+
+**Prerequisites** (one-time):
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo install wasm-pack
+```
+
+**Demo** — build WASM, run the Node script (loads [`fixtures/spawn_entity_templates.yaml`](fixtures/spawn_entity_templates.yaml), spawns entities, asserts on `world_json`):
+
+```bash
+make wasm-demo
+```
+
+**WASM unit tests** (`#[wasm_bindgen_test]` in `wasm-bindings/src/lib.rs`):
+
+```bash
+make wasm-test
+```
+
+**Both** demo and wasm tests:
+
+```bash
+make wasm-check
+```
+
+### JavaScript API
+
+`Simulation` mirrors `Api` with camelCase method names:
+
+| JavaScript | Rust |
+|------------|------|
+| `loadTemplatesYaml(yaml)` | `load_templates_yaml` |
+| `spawnEntity(name, overrides)` | `spawn_entity` → `SpawnedEntity` |
+| `getWorldAsJson()` | `world_json` |
+| `hello()` | `hello` |
+
+Override objects use the same snake_case keys as YAML and export (`position`, `move_target`, etc.). See [`wasm-bindings/demo/run.mjs`](wasm-bindings/demo/run.mjs) for a full example.
+
 ## Examples
 
 ### Spawn from YAML (default)

@@ -1,6 +1,6 @@
 # WASM Spawn + YAML (Node) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking. *(Plan completed — all steps checked.)*
 
 **Goal:** Extend `wasm-bindings` so Node/JS can run the full `spawn_entity` cycle (load YAML → spawn with overrides → `getWorldAsJson`), with shared root `fixtures/`, camelCase JS method names, and `make wasm-test` guarding `wasm32`.
 
@@ -42,7 +42,7 @@ cargo install wasm-pack
 - Create: `fixtures/spawn_entity_templates.yaml`
 - Modify: `open-entities-lib/examples/spawn_entity.rs`
 
-- [ ] **Step 1: Create fixture file**
+- [x] **Step 1: Create fixture file**
 
 Create `fixtures/spawn_entity_templates.yaml` with this exact content (leading blank line matches the raw string in `spawn_entity.rs` today):
 
@@ -83,7 +83,7 @@ entities:
   marker: {}
 ```
 
-- [ ] **Step 2: Point example at fixture**
+- [x] **Step 2: Point example at fixture**
 
 In `open-entities-lib/examples/spawn_entity.rs`, replace lines 11–45 (`const TEMPLATES_YAML: &str = r"..."`) with:
 
@@ -92,7 +92,7 @@ const TEMPLATES_YAML: &str =
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/spawn_entity_templates.yaml"));
 ```
 
-- [ ] **Step 3: Verify example still runs**
+- [x] **Step 3: Verify example still runs**
 
 Run:
 
@@ -102,7 +102,7 @@ cargo run -p open_entities --example spawn_entity
 
 Expected: prints five `spawned …` lines and pretty JSON with `"version": 3` and five entities; no load/spawn errors on stderr.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add fixtures/spawn_entity_templates.yaml open-entities-lib/examples/spawn_entity.rs
@@ -116,7 +116,7 @@ git commit -m "chore: extract spawn entity YAML to workspace fixtures"
 **Files:**
 - Modify: `wasm-bindings/Cargo.toml`
 
-- [ ] **Step 1: Add dependencies**
+- [x] **Step 1: Add dependencies**
 
 Replace the `[dependencies]` and add `[dev-dependencies]`:
 
@@ -131,7 +131,7 @@ wasm-bindgen-test = "0.3"
 serde_json = { workspace = true }
 ```
 
-- [ ] **Step 2: Verify host check compiles**
+- [x] **Step 2: Verify host check compiles**
 
 Run:
 
@@ -141,7 +141,7 @@ cargo check -p open_entities_wasm
 
 Expected: success (bindings not added yet; only dependency graph change).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add wasm-bindings/Cargo.toml
@@ -155,7 +155,7 @@ git commit -m "chore(wasm): add serde-wasm-bindgen and wasm-bindgen-test"
 **Files:**
 - Modify: `wasm-bindings/src/lib.rs`
 
-- [ ] **Step 1: Add `SpawnedEntity` struct**
+- [x] **Step 1: Add `SpawnedEntity` struct**
 
 After the `use` lines at the top of `wasm-bindings/src/lib.rs`, extend imports and add:
 
@@ -186,7 +186,7 @@ impl SpawnedEntity {
 }
 ```
 
-- [ ] **Step 2: Build WASM**
+- [x] **Step 2: Build WASM**
 
 Run:
 
@@ -196,7 +196,7 @@ wasm-pack build wasm-bindings --target nodejs
 
 Expected: success.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add wasm-bindings/src/lib.rs
@@ -210,7 +210,7 @@ git commit -m "feat(wasm): add SpawnedEntity return type"
 **Files:**
 - Modify: `wasm-bindings/src/lib.rs` (`impl Simulation`)
 
-- [ ] **Step 1: Add `load_templates_yaml`**
+- [x] **Step 1: Add `load_templates_yaml`**
 
 Inside `impl Simulation`, add:
 
@@ -224,7 +224,7 @@ pub fn load_templates_yaml(&mut self, yaml: &str) -> Result<(), JsValue> {
 }
 ```
 
-- [ ] **Step 2: Add `spawn_entity`**
+- [x] **Step 2: Add `spawn_entity`**
 
 Still in `impl Simulation`, add:
 
@@ -249,7 +249,7 @@ pub fn spawn_entity(
 }
 ```
 
-- [ ] **Step 3: Build WASM**
+- [x] **Step 3: Build WASM**
 
 Run:
 
@@ -259,7 +259,7 @@ wasm-pack build wasm-bindings --target nodejs
 
 Expected: success.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add wasm-bindings/src/lib.rs
@@ -273,7 +273,7 @@ git commit -m "feat(wasm): loadTemplatesYaml and spawnEntity bindings"
 **Files:**
 - Modify: `wasm-bindings/src/lib.rs`
 
-- [ ] **Step 1: Add `js_name` to `world_json`**
+- [x] **Step 1: Add `js_name` to `world_json`**
 
 Change the existing method to:
 
@@ -287,7 +287,7 @@ pub fn world_json(&mut self) -> Result<String, JsValue> {
 }
 ```
 
-- [ ] **Step 2: Build WASM**
+- [x] **Step 2: Build WASM**
 
 Run:
 
@@ -297,7 +297,7 @@ wasm-pack build wasm-bindings --target nodejs
 
 Expected: success.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add wasm-bindings/src/lib.rs
@@ -315,7 +315,7 @@ git commit -m "feat(wasm): expose getWorldAsJson js_name for world_json"
 - Not loaded: `templates not loaded; call load_templates_yaml first`
 - Unknown template: `unknown template name: nope`
 
-- [ ] **Step 1: Add test module at bottom of `lib.rs`**
+- [x] **Step 1: Add test module at bottom of `lib.rs`**
 
 ```rust
 #[cfg(test)]
@@ -417,7 +417,7 @@ mod wasm_tests {
 }
 ```
 
-- [ ] **Step 2: Run wasm tests**
+- [x] **Step 2: Run wasm tests**
 
 Run:
 
@@ -427,7 +427,7 @@ wasm-pack test wasm-bindings --node
 
 Expected: 4 tests pass (`load_and_spawn_from_fixture`, `spawn_scout_with_overrides`, `spawn_without_load_fails`, `unknown_template_fails`).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add wasm-bindings/src/lib.rs wasm-bindings/Cargo.toml
@@ -441,7 +441,7 @@ git commit -m "test(wasm): spawn and YAML fixture coverage"
 **Files:**
 - Modify: `wasm-bindings/demo/run.mjs`
 
-- [ ] **Step 1: Replace demo with full spawn cycle**
+- [x] **Step 1: Replace demo with full spawn cycle**
 
 Replace entire `wasm-bindings/demo/run.mjs` with:
 
@@ -508,7 +508,7 @@ for (const { index, generation } of spawnedIds) {
 console.log("wasm spawn demo ok");
 ```
 
-- [ ] **Step 2: Run demo**
+- [x] **Step 2: Run demo**
 
 Run:
 
@@ -518,7 +518,7 @@ make wasm-demo
 
 Expected: `wasm-pack build` succeeds; demo prints `hello`, five `spawned …` lines, and `wasm spawn demo ok`; exit code 0.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add wasm-bindings/demo/run.mjs
@@ -532,7 +532,7 @@ git commit -m "feat(wasm): demo loadTemplatesYaml spawn cycle"
 **Files:**
 - Modify: `Makefile`
 
-- [ ] **Step 1: Extend `.PHONY` and add targets**
+- [x] **Step 1: Extend `.PHONY` and add targets**
 
 Change line 1 to:
 
@@ -550,7 +550,7 @@ wasm-test:
 wasm-check: wasm-demo wasm-test
 ```
 
-- [ ] **Step 2: Verify aggregate target**
+- [x] **Step 2: Verify aggregate target**
 
 Run:
 
@@ -560,7 +560,7 @@ make wasm-check
 
 Expected: demo and all four wasm tests pass.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add Makefile
@@ -571,7 +571,7 @@ git commit -m "chore: add make wasm-test and wasm-check"
 
 ### Task 9: Final verification
 
-- [ ] **Step 1: Native tests**
+- [x] **Step 1: Native tests**
 
 Run:
 
@@ -581,7 +581,7 @@ cargo test
 
 Expected: all workspace tests pass (lib unchanged except example path).
 
-- [ ] **Step 2: WASM gate**
+- [x] **Step 2: WASM gate**
 
 Run:
 
@@ -591,7 +591,7 @@ make wasm-check
 
 Expected: demo + wasm tests pass.
 
-- [ ] **Step 3: Optional single-target smoke**
+- [x] **Step 3: Optional single-target smoke**
 
 Run:
 
