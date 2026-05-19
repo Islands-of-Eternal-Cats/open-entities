@@ -58,3 +58,38 @@ for (const { index, generation } of spawnedIds) {
 }
 
 console.log("wasm spawn demo ok");
+
+// --- Tick demo: scout walks to move_target (fixture pose, no override) ---
+const tickSim = new Simulation();
+tickSim.loadTemplatesYaml(yaml);
+tickSim.spawnEntity("scout", {});
+
+const maxTicks = 1000;
+for (let i = 0; i < maxTicks; i++) {
+  tickSim.tick(16);
+  if (i > 0 && i % 30 === 0) {
+    console.log(`tick ${i}`);
+  }
+}
+
+const tickJson = JSON.parse(tickSim.getWorldAsJson());
+const tickScout = tickJson.entities.find((e) => e.entity_type === "scout");
+if (!tickScout) {
+  throw new Error("tick demo: scout missing");
+}
+if (tickScout.move_target !== undefined) {
+  throw new Error(
+    `tick demo: scout still has move_target after ${maxTicks} ticks`,
+  );
+}
+const tx = 20.0;
+const ty = 0.0;
+const px = tickScout.position?.x;
+const py = tickScout.position?.y;
+if (Math.abs(px - tx) > 0.01 || Math.abs(py - ty) > 0.01) {
+  throw new Error(
+    `tick demo: expected position near (${tx}, ${ty}), got (${px}, ${py})`,
+  );
+}
+
+console.log("wasm tick demo ok");

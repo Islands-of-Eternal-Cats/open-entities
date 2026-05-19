@@ -9,7 +9,17 @@ The library uses [Bevy ECS](https://crates.io/crates/bevy_ecs) (`bevy_ecs` only,
 - [`export`](open-entities-lib/src/export/mod.rs) — `Api::world_json()` serializes **every entity** in the world to JSON **schema version 3**; registered gameplay fields are omitted when absent (not `null`)
 - [`EntityComponents`](open-entities-lib/src/entity_components.rs) — shared struct for YAML templates, `spawn_entity` overrides, and flattened export rows
 
-Domain components live under `open_entities::components`: `Position`, `Velocity`, `Faction`, `MoveTarget`, and `Health`.
+Domain components live under `open_entities::components`: `Position`, `Velocity`, `Faction`, `MoveTarget`, `BaseMoveSpeed`, and `Health`.
+
+## Simulation tick
+
+`Api::tick(dt_ms)` advances the ECS schedule: `seek_system` (entities with `MoveTarget` + `BaseMoveSpeed` + `Velocity`) then `movement_system` (all `Position` + `Velocity`). Delta is unsigned milliseconds; `0` returns `TickError::ZeroDeltaTime`; values above **100 ms** are clamped.
+
+Arrival (distance ≤ 0.1): snap to target, remove `MoveTarget`, zero `Velocity`, skip movement that frame.
+
+```rust
+api.tick(16)?; // ~60 Hz step
+```
 
 ## Import and spawn
 
@@ -115,7 +125,10 @@ make wasm-check
 | `loadTemplatesYaml(yaml)` | `load_templates_yaml` |
 | `spawnEntity(name, overrides)` | `spawn_entity` → `SpawnedEntity` |
 | `getWorldAsJson()` | `world_json` |
+| `tick(dtMs)` | `tick` |
 | `hello()` | `hello` |
+
+`tick(0)`, non-integer, NaN, or non-finite `dtMs` are rejected in JavaScript before Rust runs.
 
 Override objects use the same snake_case keys as YAML and export (`position`, `move_target`, etc.). See [`wasm-bindings/demo/run.mjs`](wasm-bindings/demo/run.mjs) for a full example.
 
@@ -184,7 +197,8 @@ Every entity in the world appears in `entities`. Component keys are omitted when
     {
       "id": { "index": 0, "generation": 0 },
       "position": { "x": 1.0, "y": 2.0 },
-      "velocity": { "vx": 0.5, "vy": -0.5 }
+      "velocity": { "vx": 0.5, "vy": -0.5 },
+      "base_move_speed": 2.0
     },
     {
       "id": { "index": 1, "generation": 0 },

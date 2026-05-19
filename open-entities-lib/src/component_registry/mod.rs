@@ -12,7 +12,7 @@ pub use registered::{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::{Health, Position};
+    use crate::components::{BaseMoveSpeed, Health, Position};
     use bevy_ecs::prelude::World;
 
     fn entity_components_has_any(doc: &EntityComponents) -> bool {
@@ -20,7 +20,17 @@ mod tests {
             || doc.velocity.is_some()
             || doc.faction.is_some()
             || doc.move_target.is_some()
+            || doc.base_move_speed.is_some()
             || doc.health.is_some()
+    }
+
+    #[test]
+    fn entity_components_has_any_detects_base_move_speed() {
+        let doc = EntityComponents {
+            base_move_speed: Some(BaseMoveSpeed(1.5)),
+            ..Default::default()
+        };
+        assert!(entity_components_has_any(&doc));
     }
 
     #[test]
