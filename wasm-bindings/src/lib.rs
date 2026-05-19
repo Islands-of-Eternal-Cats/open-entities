@@ -71,6 +71,23 @@ impl Simulation {
             .world_json()
             .map_err(|e: ExportError| JsValue::from_str(&e.to_string()))
     }
+
+    /// JS: `tick(dtMs)` — positive integer milliseconds only.
+    #[wasm_bindgen(js_name = tick)]
+    pub fn tick(&mut self, dt_ms: f64) -> Result<(), JsValue> {
+        if !dt_ms.is_finite() || dt_ms <= 0.0 || dt_ms.fract() != 0.0 {
+            return Err(JsValue::from_str(
+                "tick(dtMs) requires a positive finite integer",
+            ));
+        }
+        if dt_ms > f64::from(u32::MAX) {
+            return Err(JsValue::from_str("tick(dtMs) exceeds u32::MAX"));
+        }
+        let dt_ms = dt_ms as u32;
+        self.api
+            .tick(dt_ms)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
 }
 
 #[cfg(test)]
@@ -155,6 +172,54 @@ mod wasm_tests {
         assert!(
             msg.contains("templates not loaded"),
             "expected TemplatesNotLoaded message, got: {msg}"
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn tick_advances_scout() {
+        let mut sim = Simulation::new();
+        sim.load_templates_yaml(FIXTURE_YAML)
+            .expect("load fixture");
+        sim.spawn_entity("scout", scout_overrides())
+            .expect("spawn scout");
+
+        let before = sim.world_json().expect("export before");
+        let before_val: serde_json::Value =
+            serde_json::from_str(&before).expect("parse JSON");
+        let scout_before = before_val["entities"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|e| e["entity_type"] == "scout")
+            .expect("scout row");
+        let x0 = scout_before["position"]["x"].as_f64().unwrap();
+
+        for _ in 0..60 {
+            sim.tick(16.0).expect("tick");
+        }
+
+        let after = sim.world_json().expect("export after");
+        let after_val: serde_json::Value =
+            serde_json::from_str(&after).expect("parse JSON");
+        let scout_after = after_val["entities"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|e| e["entity_type"] == "scout")
+            .expect("scout row");
+        let x1 = scout_after["position"]["x"].as_f64().unwrap();
+
+        assert_ne!(x0, x1, "position should change after ticks");
+    }
+
+    #[wasm_bindgen_test]
+    fn tick_zero_rejected() {
+        let mut sim = Simulation::new();
+        let err = sim.tick(0.0).unwrap_err();
+        let msg = err.as_string().expect("string error");
+        assert!(
+            msg.contains("positive finite integer"),
+            "expected JS validation error for tick(0), got: {msg}"
         );
     }
 

@@ -9,7 +9,8 @@ entities:
   scout:
     template: unit
     position: { x: 10.0, y: 5.0 }
-    velocity: { vx: 2.0, vy: 0.0 }
+    velocity: { vx: 0.0, vy: 0.0 }
+    base_move_speed: 2.0
     move_target: { x: 20.0, y: 0.0 }
     health:
       current: 80

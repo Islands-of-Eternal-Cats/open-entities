@@ -96,7 +96,7 @@ fn world_json_from_world(world: &mut World) -> Result<String, ExportError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::{EntityType, Faction, Health, Position, Velocity};
+    use crate::components::{BaseMoveSpeed, EntityType, Faction, Health, Position, Velocity};
 
     #[test]
     fn world_json_empty_world() {
@@ -262,5 +262,22 @@ mod tests {
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0]["position"]["x"], 1.0);
         assert!(entities[0].get("health").is_none());
+    }
+
+    #[test]
+    fn world_json_v3_base_move_speed() {
+        let mut api = Api::new();
+        api.core_mut()
+            .world_mut()
+            .spawn((
+                Position { x: 1.0, y: 2.0 },
+                BaseMoveSpeed(2.5),
+            ));
+
+        let json = api.world_json().expect("serialize world");
+        let value: serde_json::Value =
+            serde_json::from_str(&json).expect("exported JSON should parse");
+        let entity = &value["entities"][0];
+        assert_eq!(entity["base_move_speed"], 2.5);
     }
 }

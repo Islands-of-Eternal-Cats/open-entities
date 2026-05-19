@@ -1,3 +1,4 @@
+pub mod base_move_speed;
 pub mod entity_type;
 pub mod faction;
 pub mod health;
@@ -5,6 +6,7 @@ pub mod move_target;
 pub mod position;
 pub mod velocity;
 
+pub use base_move_speed::BaseMoveSpeed;
 pub use entity_type::EntityType;
 pub use faction::Faction;
 pub use health::Health;
