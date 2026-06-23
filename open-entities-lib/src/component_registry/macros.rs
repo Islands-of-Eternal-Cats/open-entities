@@ -59,6 +59,9 @@ macro_rules! define_registered_components {
             Option<&'w $crate::components::EntityType>,
         );
 
+        /// Query filter: exclude resource entities (internal bevy entities).
+        pub type WorldExportFilter = bevy_ecs::query::Without<bevy_ecs::resource::IsResource>;
+
         /// Builds export row `EntityComponents` from query `Option` references.
         pub const fn entity_components_from_query(
             $($field: Option<&$ty>,)*
@@ -79,7 +82,7 @@ macro_rules! define_registered_components {
         pub fn collect_world_export_rows(
             world: &mut bevy_ecs::prelude::World,
         ) -> Vec<WorldExportRow> {
-            let mut query = world.query::<WorldExportQuery<'_>>();
+            let mut query = world.query_filtered::<WorldExportQuery<'_>, WorldExportFilter>();
             query
                 .iter(world)
                 .map(

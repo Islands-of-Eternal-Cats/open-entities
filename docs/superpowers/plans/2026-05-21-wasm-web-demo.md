@@ -4,7 +4,7 @@
 
 **Goal:** Add a browser interactive demo under `wasm-bindings/web/` (Vite + canvas + Play/Pause) wired to existing `Simulation` WASM (`bundler` target), with `make wasm-web-demo`, Playwright e2e in `make wasm-check`, and a one-time committed web fixture copy.
 
-**Architecture:** Vite serves static `public/fixtures/` and bundles TS that imports `../pkg/open_entities_wasm.js` after `wasm-pack build --target bundler`. `main.ts` runs the fixed spawn scenario from `demo/run.mjs`, drives `tick(16)` via `requestAnimationFrame` while playing, and `render.ts` projects world JSON to canvas. Playwright polls `window.__openEntitiesDemo.getWorld()` against the **web** fixture.
+**Architecture:** Vite serves static `public/fixtures/` and bundles TS that imports `../pkg/open_entities_wasm.js` after `wasm-pack build --target bundler`. `main.ts` runs the fixed spawn scenario from `demo/run.mjs`, drives `tick(16)` via `requestAnimationFrame` while playing, and `render.ts` projects world JSON to canvas. Playwright polls `window.__openEntitiesDemo.getWorld()` against the **web** fixture at `wasm-bindings/web/public/fixtures/spawn_entity_templates.yaml`.
 
 **Tech Stack:** Rust `wasm-pack` (`bundler` target), Vite 6, `vite-plugin-wasm`, `vite-plugin-top-level-await`, TypeScript, `@playwright/test`.
 
@@ -18,49 +18,54 @@ cargo install wasm-pack
 # Node 20+ and npm
 ```
 
+**Out of scope (do not implement):** Changes to `open-entities-lib/`, `wasm-bindings/src/lib.rs`, `wasm-bindings/demo/run.mjs`, repo-root `fixtures/`, Node `--target nodejs` demo, sandbox UI, CI workflows.
+
 ---
 
 ## File map
 
 | File | Responsibility |
 |------|----------------|
-| `wasm-bindings/web/package.json` | npm scripts, dev deps |
+| `wasm-bindings/web/package.json` | npm scripts, dev deps, optional `predev` pkg check |
+| `wasm-bindings/web/package-lock.json` | Locked deps for `npm ci` in Make targets |
 | `wasm-bindings/web/vite.config.ts` | Vite + wasm plugins, `@wasm` alias |
 | `wasm-bindings/web/tsconfig.json` | TS for `src/` |
 | `wasm-bindings/web/index.html` | canvas, Play/Pause, `#status` |
 | `wasm-bindings/web/src/main.ts` | WASM init, spawn, loop, test hook |
 | `wasm-bindings/web/src/render.ts` | viewport + canvas draw |
+| `wasm-bindings/web/src/vite-env.d.ts` | `@wasm` module types |
 | `wasm-bindings/web/public/fixtures/spawn_entity_templates.yaml` | Web-owned YAML (one-time copy from repo `fixtures/`) |
-| `wasm-bindings/web/playwright.config.ts` | e2e + `webServer: preview` |
+| `wasm-bindings/web/playwright.config.ts` | e2e + `webServer: preview` on 4173 |
 | `wasm-bindings/web/e2e/demo.spec.ts` | headless scout arrival |
 | `Makefile` | `wasm-web-build`, `wasm-web-demo`, `wasm-web-check`; extend `wasm-check` |
 | `.gitignore` | `web/node_modules`, `web/dist`, playwright artifacts |
-| `README.md` | Web demo subsection |
+| `README.md` | Web demo subsection after WASM (Node) |
+
+**Already gitignored:** `wasm-bindings/pkg/` (both `nodejs` and `bundler` builds share this directory).
 
 **Unchanged:** `wasm-bindings/src/lib.rs`, `wasm-bindings/demo/run.mjs`, `fixtures/spawn_entity_templates.yaml` (repo canonical).
 
 ---
 
-### Task 1: Scaffold `wasm-bindings/web` and web fixture
+### Task 1: Web fixture (one-time copy)
 
 **Files:**
 - Create: `wasm-bindings/web/public/fixtures/spawn_entity_templates.yaml`
-- Create: `wasm-bindings/web/.gitkeep` (optional; dir exists via fixture)
 
-- [ ] **Step 1: Create directory and copy fixture once**
+- [ ] **Step 1: Copy canonical fixture**
 
 ```bash
 mkdir -p wasm-bindings/web/public/fixtures
 cp fixtures/spawn_entity_templates.yaml wasm-bindings/web/public/fixtures/
 ```
 
-- [ ] **Step 2: Verify copy matches repo fixture**
+- [ ] **Step 2: Verify copy**
 
 ```bash
 diff -u fixtures/spawn_entity_templates.yaml wasm-bindings/web/public/fixtures/spawn_entity_templates.yaml
 ```
 
-Expected: no output (files identical at setup).
+Expected: no output (identical at setup). Scout template includes `move_target: { x: 20.0, y: 0.0 }` — e2e asserts against **this** file, not repo `fixtures/` after divergence.
 
 - [ ] **Step 3: Commit**
 
@@ -87,6 +92,7 @@ git commit -m "chore: add web demo fixture copy for wasm-bindings/web"
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "node -e \"const fs=require('fs'); if(!fs.existsSync('../pkg/open_entities_wasm.js')) { console.error('Missing ../pkg/. Run: wasm-pack build wasm-bindings --target bundler'); process.exit(1); }\"",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
@@ -169,19 +175,19 @@ export default defineConfig({
 </html>
 ```
 
-- [ ] **Step 5: Install deps (smoke)**
+- [ ] **Step 5: Install and lock dependencies**
 
 ```bash
 cd wasm-bindings/web && npm install
 ```
 
-Expected: `node_modules/` created, no errors.
+Expected: `node_modules/` and `package-lock.json` created.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add wasm-bindings/web/package.json wasm-bindings/web/vite.config.ts \
-  wasm-bindings/web/tsconfig.json wasm-bindings/web/index.html
+git add wasm-bindings/web/package.json wasm-bindings/web/package-lock.json \
+  wasm-bindings/web/vite.config.ts wasm-bindings/web/tsconfig.json wasm-bindings/web/index.html
 git commit -m "chore: scaffold Vite web demo project"
 ```
 
@@ -199,6 +205,7 @@ export type WorldEntity = {
   entity_type?: string;
   faction?: number;
   position?: { x: number; y: number };
+  move_target?: { x: number; y: number };
 };
 
 export type WorldJson = {
@@ -280,7 +287,9 @@ export function drawWorld(
     if (!e.position) continue;
     const { sx, sy } = worldToScreen(e.position.x, e.position.y, vp);
     const color =
-      e.faction != null ? (FACTION_COLORS[e.faction] ?? DEFAULT_COLOR) : DEFAULT_COLOR;
+      e.faction != null
+        ? (FACTION_COLORS[e.faction] ?? DEFAULT_COLOR)
+        : DEFAULT_COLOR;
     ctx.beginPath();
     ctx.arc(sx, sy, RADIUS, 0, Math.PI * 2);
     ctx.fillStyle = color;
@@ -303,13 +312,109 @@ git commit -m "feat(web): add canvas renderer for world JSON"
 
 ---
 
-### Task 4: Main app — WASM init, spawn, Play/Pause
+### Task 4: Playwright config and failing e2e (RED)
 
 **Files:**
-- Create: `wasm-bindings/web/src/main.ts`
-- Create: `wasm-bindings/web/src/vite-env.d.ts` (WASM module types)
+- Create: `wasm-bindings/web/playwright.config.ts`
+- Create: `wasm-bindings/web/e2e/demo.spec.ts`
 
-- [ ] **Step 1: Add minimal WASM import types**
+- [ ] **Step 1: Install Playwright browser (one-time per machine)**
+
+```bash
+cd wasm-bindings/web && npx playwright install chromium
+```
+
+- [ ] **Step 2: Create `playwright.config.ts`**
+
+```ts
+import { defineConfig } from "@playwright/test";
+
+export default defineConfig({
+  testDir: "./e2e",
+  timeout: 60_000,
+  use: { headless: true },
+  webServer: {
+    command: "npm run preview",
+    port: 4173,
+    reuseExistingServer: false,
+  },
+});
+```
+
+- [ ] **Step 3: Create `e2e/demo.spec.ts`**
+
+```ts
+import { test, expect } from "@playwright/test";
+
+type DemoWindow = {
+  __openEntitiesDemo?: {
+    getWorld: () => {
+      entities: {
+        entity_type?: string;
+        position?: { x: number; y: number };
+        move_target?: unknown;
+      }[];
+    };
+    isPlaying: () => boolean;
+  };
+};
+
+test("scout reaches move target after play", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("#world")).toBeVisible();
+
+  await page.waitForFunction(() => {
+    const w = (window as unknown as DemoWindow).__openEntitiesDemo;
+    return w
+      ?.getWorld()
+      ?.entities?.some(
+        (e) => e.entity_type === "scout" && e.position?.x === 50,
+      );
+  });
+
+  await page.getByRole("button", { name: "Play" }).click();
+
+  await page.waitForFunction(
+    () => {
+      const w = (window as unknown as DemoWindow).__openEntitiesDemo;
+      const scout = w?.getWorld()?.entities?.find((e) => e.entity_type === "scout");
+      if (!scout) return false;
+      return (
+        scout.move_target === undefined &&
+        Math.abs((scout.position?.x ?? 999) - 20) < 0.1 &&
+        Math.abs((scout.position?.y ?? 999) - 0) < 0.1
+      );
+    },
+    { timeout: 30_000 },
+  );
+});
+```
+
+- [ ] **Step 4: Build bundler WASM + production bundle, run e2e (expect FAIL)**
+
+```bash
+wasm-pack build wasm-bindings --target bundler
+cd wasm-bindings/web && npm run build && npx playwright test
+```
+
+Expected: FAIL — app not functional yet (`main.ts` missing or hook absent). Confirms RED before Task 5.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add wasm-bindings/web/playwright.config.ts wasm-bindings/web/e2e/demo.spec.ts
+git commit -m "test(web): add Playwright e2e for scout arrival (red)"
+```
+
+---
+
+### Task 5: Main app — WASM init, spawn, Play/Pause (GREEN)
+
+**Files:**
+- Create: `wasm-bindings/web/src/vite-env.d.ts`
+- Create: `wasm-bindings/web/src/main.ts`
+
+- [ ] **Step 1: Add WASM import types**
 
 `wasm-bindings/web/src/vite-env.d.ts`:
 
@@ -325,6 +430,8 @@ declare module "@wasm" {
   }
 }
 ```
+
+Note: Rust methods return `Result<_, JsValue>`; wasm-bindgen surfaces failures as **thrown** exceptions in JS (same as `demo/run.mjs`).
 
 - [ ] **Step 2: Implement `main.ts`**
 
@@ -443,19 +550,29 @@ bootstrap()
   .catch((e) => {
     setStatus(String(e));
     console.error(e);
+    playBtn.disabled = true;
+    pauseBtn.disabled = true;
   });
 ```
 
-- [ ] **Step 3: Build WASM bundler target and run dev smoke**
+- [ ] **Step 3: Run e2e (expect PASS)**
 
 ```bash
 wasm-pack build wasm-bindings --target bundler
-cd wasm-bindings/web && npm run dev
+cd wasm-bindings/web && npm run build && npx playwright test
 ```
 
-Expected: Vite starts; open `http://localhost:5173` — canvas shows entities; Play moves scout. Ctrl+C to stop.
+Expected: 1 passed.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Manual smoke (optional)**
+
+```bash
+make wasm-web-demo
+```
+
+Expected: browser opens; canvas shows entities; Play animates scout toward (20, 0); Pause freezes. Ctrl+C to stop dev server.
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add wasm-bindings/web/src/main.ts wasm-bindings/web/src/vite-env.d.ts
@@ -464,15 +581,13 @@ git commit -m "feat(web): WASM init, spawn scenario, Play/Pause loop"
 
 ---
 
-### Task 5: Makefile and `.gitignore`
+### Task 6: Makefile and `.gitignore`
 
 **Files:**
 - Modify: `Makefile`
 - Modify: `.gitignore`
 
-- [ ] **Step 1: Extend `.gitignore`**
-
-Append:
+- [ ] **Step 1: Append to `.gitignore`**
 
 ```
 wasm-bindings/web/node_modules/
@@ -481,13 +596,21 @@ wasm-bindings/web/test-results/
 wasm-bindings/web/playwright-report/
 ```
 
-- [ ] **Step 2: Add Makefile targets**
+(Do not duplicate `wasm-bindings/pkg/` — already ignored.)
 
-Replace `.PHONY` line and append (keep existing `wasm-demo` / `wasm-test`):
+- [ ] **Step 2: Update `Makefile`**
+
+Change line 1 `.PHONY` to include `wasm-web-build wasm-web-demo wasm-web-check`.
+
+Replace line 21:
 
 ```makefile
-.PHONY: test example example-world-json wasm-demo wasm-test wasm-check wasm-web-build wasm-web-demo wasm-web-check
+wasm-check: wasm-demo wasm-test
+```
 
+with:
+
+```makefile
 wasm-web-build:
 	@command -v wasm-pack >/dev/null 2>&1 || { echo "wasm-pack not found. Install with: cargo install wasm-pack"; exit 1; }
 	wasm-pack build wasm-bindings --target bundler
@@ -508,15 +631,16 @@ wasm-web-check:
 wasm-check: wasm-demo wasm-test wasm-web-check
 ```
 
-(Update existing `wasm-check: wasm-demo wasm-test` line to include `wasm-web-check`.)
+`wasm-check` order: Node demo (`nodejs` target) → wasm tests → web e2e (`bundler` rebuild). Both targets write to `wasm-bindings/pkg/`; order is intentional.
 
 - [ ] **Step 3: Verify Make targets**
 
 ```bash
 make wasm-web-build
+make wasm-web-check
 ```
 
-Expected: `wasm-bindings/web/dist/` created.
+Expected: `dist/` created; Playwright passes.
 
 - [ ] **Step 4: Commit**
 
@@ -527,99 +651,19 @@ git commit -m "chore: add wasm-web-demo Make targets and web gitignore"
 
 ---
 
-### Task 6: Playwright e2e
-
-**Files:**
-- Create: `wasm-bindings/web/playwright.config.ts`
-- Create: `wasm-bindings/web/e2e/demo.spec.ts`
-
-- [ ] **Step 1: Install Playwright browser (one-time per machine)**
-
-```bash
-cd wasm-bindings/web && npx playwright install chromium
-```
-
-- [ ] **Step 2: Create `playwright.config.ts`**
-
-```ts
-import { defineConfig } from "@playwright/test";
-
-export default defineConfig({
-  testDir: "./e2e",
-  timeout: 60_000,
-  use: { headless: true },
-  webServer: {
-    command: "npm run preview",
-    port: 4173,
-    reuseExistingServer: false,
-  },
-});
-```
-
-- [ ] **Step 3: Create `e2e/demo.spec.ts`**
-
-```ts
-import { test, expect } from "@playwright/test";
-
-test("scout reaches move target after play", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.locator("#world")).toBeVisible();
-
-  await page.waitForFunction(() => {
-    const w = (window as unknown as { __openEntitiesDemo?: { getWorld: () => { entities: { entity_type?: string; position?: { x: number } }[] } } }).__openEntitiesDemo;
-    return w?.getWorld()?.entities?.some(
-      (e) => e.entity_type === "scout" && e.position?.x === 50,
-    );
-  });
-
-  await page.getByRole("button", { name: "Play" }).click();
-
-  await page.waitForFunction(
-    () => {
-      const w = (window as unknown as { __openEntitiesDemo?: { getWorld: () => { entities: { entity_type?: string; position?: { x: number; y: number }; move_target?: unknown }[] } } }).__openEntitiesDemo;
-      const scout = w?.getWorld()?.entities?.find((e) => e.entity_type === "scout");
-      if (!scout) return false;
-      const atTarget =
-        scout.move_target === undefined &&
-        Math.abs((scout.position?.x ?? 999) - 20) < 0.1 &&
-        Math.abs((scout.position?.y ?? 999) - 0) < 0.1;
-      return atTarget;
-    },
-    { timeout: 30_000 },
-  );
-});
-```
-
-- [ ] **Step 4: Run e2e**
-
-```bash
-make wasm-web-check
-```
-
-Expected: Playwright passes.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add wasm-bindings/web/playwright.config.ts wasm-bindings/web/e2e/demo.spec.ts
-git commit -m "test(web): Playwright e2e for scout movement"
-```
-
----
-
 ### Task 7: README
 
 **Files:**
-- Modify: `README.md`
+- Modify: `README.md` (after **WASM (Node)** section, before **Examples**)
 
-- [ ] **Step 1: Add **Web demo** subsection after **WASM (Node)****
+- [ ] **Step 1: Insert Web demo subsection**
 
 ```markdown
 ## Web demo (browser)
 
 Interactive canvas demo under [`wasm-bindings/web/`](wasm-bindings/web/). Uses its own fixture copy at `wasm-bindings/web/public/fixtures/` (may diverge from repo [`fixtures/`](fixtures/) over time).
 
-**Prerequisites:** wasm32 target, `wasm-pack`, Node 20+, npm. For e2e: `cd wasm-bindings/web && npx playwright install chromium`.
+**Prerequisites:** wasm32 target, `wasm-pack`, Node 20+, npm. For e2e (first time on a machine): `cd wasm-bindings/web && npx playwright install chromium`.
 
 ```bash
 make wasm-web-demo
@@ -650,9 +694,15 @@ git commit -m "docs: add web demo section to README"
 make wasm-check
 ```
 
-Expected: `wasm-demo` ok, `wasm-test` ok, Playwright e2e ok.
+Expected: `wasm-demo` ok (Node spawn + tick assertions in `run.mjs`), `wasm-test` ok (`#[wasm_bindgen_test]`), Playwright e2e ok.
 
-- [ ] **Step 2: Mark plan checkboxes** (optional housekeeping commit or edit plan in PR branch)
+- [ ] **Step 2: Confirm Node demo unchanged in isolation**
+
+```bash
+make wasm-demo
+```
+
+Expected: `wasm spawn demo ok` and `wasm tick demo ok`.
 
 ---
 
@@ -662,19 +712,23 @@ Expected: `wasm-demo` ok, `wasm-test` ok, Playwright e2e ok.
 |------------------|------|
 | Vite + wasm plugins | Task 2 |
 | One-time committed web fixture | Task 1 |
-| Fixed spawn + scout overrides | Task 4 |
-| Canvas circles / faction / labels | Task 3 |
-| Play/Pause + tick(16) rAF | Task 4 |
-| `window.__openEntitiesDemo` | Task 4 |
-| `make wasm-web-demo` (--open) | Task 5 |
-| `make wasm-web-check` | Task 5, 6 |
-| `wasm-check` extended | Task 5 |
+| Fixed spawn + scout overrides (match `run.mjs`) | Task 5 |
+| Canvas circles / faction / labels / Y invert | Task 3 |
+| Play/Pause + `tick(16)` rAF | Task 5 |
+| `window.__openEntitiesDemo` | Task 5 |
+| `make wasm-web-demo` (`--open`) | Task 6 |
+| `make wasm-web-build` | Task 6 |
+| `make wasm-web-check` | Task 4, 6 |
+| `wasm-check` extended | Task 6 |
+| Playwright port 4173 + preview | Task 4 |
+| Error UI (`#status`, disable Play) | Task 5 |
 | No Rust/Node demo changes | — |
 | README | Task 7 |
+| Optional `predev` pkg check | Task 2 |
 
 ## Success criteria (from spec)
 
 - [ ] `make wasm-web-demo` opens browser; scout animates toward (20, 0)
 - [ ] `make wasm-web-check` passes headless
 - [ ] `make wasm-check` passes (nodejs demo + wasm tests + web e2e)
-- [ ] `make wasm-demo` unchanged
+- [ ] `make wasm-demo` unchanged and passing in isolation
