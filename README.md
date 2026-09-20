@@ -4,10 +4,22 @@ Rust workspace with the core library crate `open_entities` in `open-entities-lib
 
 The library uses [Bevy ECS](https://crates.io/crates/bevy_ecs) (`bevy_ecs` only, not the full Bevy engine) for entity simulation. Public entry points:
 
-- [`Core`](open-entities-lib/src/core.rs) — owns the ECS [`World`](https://docs.rs/bevy_ecs/latest/bevy_ecs/world/struct.World.html)
-- [`Api`](open-entities-lib/src/api.rs) — facade over `Core` (spawn, import, export)
+- [`Api`](open-entities-lib/src/api.rs) — the facade: spawn, orders, lifecycle, import, export
+- [`EntityId`](open-entities-lib/src/orders.rs) — how every call names an entity: an `{index, generation}` pair
+- [`Core`](open-entities-lib/src/core.rs) — owns the ECS [`World`](https://docs.rs/bevy_ecs/latest/bevy_ecs/world/struct.World.html); reachable through `Api::core()` / `core_mut()`
 - [`export`](open-entities-lib/src/export/mod.rs) — `Api::world_json()` serializes **every entity** in the world to JSON **schema version 3**; registered gameplay fields are omitted when absent (not `null`)
 - [`EntityComponents`](open-entities-lib/src/entity_components.rs) — shared struct for YAML templates, `spawn_entity` overrides, and flattened export rows
+
+## Where bevy stops
+
+No `bevy_ecs` type appears in the normal path: `spawn_entity`, `load_map_yaml`, the orders and the
+lifecycle calls all speak `EntityId`, and the world comes out as JSON. The crate root re-exports
+nothing from `bevy_ecs`, so the ECS version is not part of this library's public contract and a
+consumer on a different `bevy_ecs` can still depend on it.
+
+`Api::core()` and `Api::core_mut()` are the deliberate exception: they hand out the `World` for
+anyone who wants to write systems or queries directly. That is a door, not an oversight — but step
+through it and your code is tied to the `bevy_ecs` version this crate builds against.
 
 Domain components live under `open_entities::components`: `Position`, `Velocity`, `Faction`, `MoveTarget`, `BaseMoveSpeed`, and `Health`.
 
@@ -183,7 +195,7 @@ make wasm-check
 | JavaScript | Rust |
 |------------|------|
 | `loadTemplatesYaml(yaml)` | `load_templates_yaml` |
-| `spawnEntity(name, overrides)` | `spawn_entity` → `SpawnedEntity` |
+| `spawnEntity(name, overrides)` | `spawn_entity` → id `{index, generation}` |
 | `getWorldAsJson()` | `world_json` |
 | `tick(dtMs)` | `tick` |
 | `orderMoveTo(ids, x, y)` | `order_move_to` |

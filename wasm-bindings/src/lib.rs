@@ -3,25 +3,6 @@ use open_entities::{Api, EntityComponents, EntityId, ExportError, ImportError, h
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
-pub struct SpawnedEntity {
-    index: u32,
-    generation: u32,
-}
-
-#[wasm_bindgen]
-impl SpawnedEntity {
-    #[wasm_bindgen(getter)]
-    pub fn index(&self) -> u32 {
-        self.index
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn generation(&self) -> u32 {
-        self.generation
-    }
-}
-
-#[wasm_bindgen]
 pub struct Simulation {
     api: Api,
 }
@@ -52,23 +33,24 @@ impl Simulation {
             .map_err(|e: ImportError| JsValue::from_str(&e.to_string()))
     }
 
-    /// JS: `spawnEntity(templateName, overrides)`
+    /// JS: `spawnEntity(templateName, overrides)` — returns the new entity's id.
+    ///
+    /// The id is an `{index, generation}` object, the same shape `getWorldAsJson()` reports and
+    /// `orderMoveTo`, `orderStop`, `despawn` and `isAlive` accept.
     #[wasm_bindgen(js_name = spawnEntity)]
     pub fn spawn_entity(
         &mut self,
         template_name: &str,
         overrides: JsValue,
-    ) -> Result<SpawnedEntity, JsValue> {
+    ) -> Result<JsValue, JsValue> {
         let overrides: EntityComponents = serde_wasm_bindgen::from_value(overrides)
             .map_err(|e| JsValue::from_str(&format!("invalid overrides: {e}")))?;
-        let entity = self
+        let id = self
             .api
             .spawn_entity(template_name, overrides)
             .map_err(|e: ImportError| JsValue::from_str(&e.to_string()))?;
-        Ok(SpawnedEntity {
-            index: entity.index_u32(),
-            generation: entity.generation().to_bits(),
-        })
+        serde_wasm_bindgen::to_value(&id)
+            .map_err(|e| JsValue::from_str(&format!("failed to serialize id: {e}")))
     }
 
     /// JS: `getWorldAsJson()`
@@ -113,8 +95,7 @@ impl Simulation {
             .api
             .load_map_yaml(yaml)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        let ids: Vec<EntityId> = spawned.into_iter().map(EntityId::of).collect();
-        serde_wasm_bindgen::to_value(&ids)
+        serde_wasm_bindgen::to_value(&spawned)
             .map_err(|e| JsValue::from_str(&format!("failed to serialize ids: {e}")))
     }
 
@@ -214,7 +195,7 @@ mod wasm_tests {
         .expect("scout overrides")
     }
 
-    fn err_string(result: Result<SpawnedEntity, JsValue>) -> String {
+    fn err_string(result: Result<JsValue, JsValue>) -> String {
         match result {
             Err(e) => e.as_string().expect("JsValue error should be a string"),
             Ok(_) => panic!("expected error"),
@@ -315,12 +296,9 @@ mod wasm_tests {
         let spawned = sim
             .spawn_entity("scout", empty_overrides())
             .expect("spawn scout");
+        let id: EntityId = serde_wasm_bindgen::from_value(spawned).expect("id");
 
-        let ids = serde_wasm_bindgen::to_value(&vec![EntityId::new(
-            spawned.index(),
-            spawned.generation(),
-        )])
-        .expect("ids");
+        let ids = serde_wasm_bindgen::to_value(&vec![id]).expect("ids");
         // Scout starts at (10, 5) with base_move_speed 2.0: two units take about one second.
         let ordered = sim.order_move_to(ids, 10.0, 7.0).expect("order accepted");
         assert_eq!(ordered, 1);
@@ -372,7 +350,7 @@ mod wasm_tests {
         let spawned = sim
             .spawn_entity("marker", empty_overrides())
             .expect("spawn marker");
-        let id = EntityId::new(spawned.index(), spawned.generation());
+        let id: EntityId = serde_wasm_bindgen::from_value(spawned).expect("id");
         let id_js = serde_wasm_bindgen::to_value(&id).expect("id");
         let ids_js = serde_wasm_bindgen::to_value(&vec![id]).expect("ids");
 

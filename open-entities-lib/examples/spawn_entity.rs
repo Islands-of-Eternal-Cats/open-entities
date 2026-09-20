@@ -35,7 +35,7 @@ fn main() {
             EntityComponents::default()
         };
         match api.spawn_entity(name, overrides) {
-            Ok(entity) => println!("spawned {name} -> entity {:?}", entity),
+            Ok(id) => println!("spawned {name} -> {id:?}"),
             Err(err) => eprintln!("spawn {name} failed: {err}"),
         }
     }

@@ -5,12 +5,12 @@
 //! `template` key. The loader inserts **only** what the template and the entry ask for: an entity
 //! that names no `velocity` gets no [`Velocity`](crate::components::Velocity) component.
 
-use bevy_ecs::prelude::Entity;
 use serde::{Deserialize, Serialize};
 
 use crate::api::Api;
 use crate::entity_components::EntityComponents;
 use crate::import::ImportError;
+use crate::orders::EntityId;
 
 /// Extent of the playable area in world units, for hosts that need to frame or clamp a view.
 ///
@@ -89,7 +89,7 @@ impl Api {
     ///
     /// [`MapError::Yaml`] for invalid YAML, [`MapError::TemplatesNotLoaded`] when no templates are
     /// loaded, [`MapError::UnknownTemplate`] when an entry names a template that does not exist.
-    pub fn load_map_yaml(&mut self, yaml: &str) -> Result<Vec<Entity>, MapError> {
+    pub fn load_map_yaml(&mut self, yaml: &str) -> Result<Vec<EntityId>, MapError> {
         let file: MapFile = serde_yaml::from_str(yaml).map_err(MapError::Yaml)?;
 
         {
@@ -185,13 +185,13 @@ spawns:
         );
 
         let world = api.core_mut().world();
-        let marker = spawned[0];
+        let marker = spawned[0].to_entity().expect("live entity");
         let position = world.get::<Position>(marker).expect("position override");
         assert_eq!(position.x, 20.0);
         assert_eq!(position.y, 20.0);
         assert_eq!(world.get::<Faction>(marker), Some(&Faction(1)));
 
-        let scout = spawned[1];
+        let scout = spawned[1].to_entity().expect("live entity");
         let position = world.get::<Position>(scout).expect("position override");
         assert_eq!(position.x, 30.0);
         // Not overridden, so the template's own faction survives.
@@ -214,7 +214,8 @@ spawns:
 
         // `marker` declares no velocity, so it must not receive one: in this engine a Velocity is
         // movement, and an entity that never asked to move would drift forever.
-        assert!(api.core_mut().world().get::<Velocity>(spawned[0]).is_none());
+        let marker = spawned[0].to_entity().expect("live entity");
+        assert!(api.core_mut().world().get::<Velocity>(marker).is_none());
     }
 
     #[test]

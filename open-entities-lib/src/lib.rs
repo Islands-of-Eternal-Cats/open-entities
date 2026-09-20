@@ -3,8 +3,6 @@
 // either happened or it did not. Epsilon comparisons there would stop testing what is being tested.
 #![cfg_attr(test, allow(clippy::float_cmp))]
 
-pub use bevy_ecs::prelude::{Component, Entity, Query, World};
-
 pub mod api;
 pub mod components;
 pub mod core;

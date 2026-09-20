@@ -147,7 +147,9 @@ mod tests {
         api.load_templates_yaml(FIXTURE_YAML).expect("load fixture");
         let entity = api
             .spawn_entity("scout", EntityComponents::default())
-            .expect("spawn scout");
+            .expect("spawn scout")
+            .to_entity()
+            .expect("live entity");
 
         for _ in 0..1000 {
             api.tick(16).expect("tick");
