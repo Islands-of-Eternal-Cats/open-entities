@@ -8,6 +8,7 @@ pub mod components;
 pub mod core;
 pub mod export;
 pub mod import;
+pub mod orders;
 pub mod simulation;
 pub mod systems;
 
@@ -19,6 +20,7 @@ pub use core::Core;
 pub use export::ExportError;
 pub use entity_components::EntityComponents;
 pub use import::ImportError;
+pub use orders::{EntityId, OrderReport};
 pub use simulation::TickError;
 
 /// Returns the canonical hello-world greeting.

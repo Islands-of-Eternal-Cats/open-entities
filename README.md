@@ -21,6 +21,20 @@ Arrival (distance ≤ 0.1): snap to target, remove `MoveTarget`, zero `Velocity`
 api.tick(16)?; // ~60 Hz step
 ```
 
+## Move orders
+
+`Api::order_move_to(ids, target)` gives a group of entities a destination. Ids are
+[`EntityId`](open-entities-lib/src/orders.rs) — the `{index, generation}` pair `world_json` reports
+as each entity's `id`, so a host can feed them straight back from a snapshot.
+
+Entities without `Position` or `BaseMoveSpeed` are skipped: immobile things cannot take a move
+order. With more than one id the destinations are spread over a grid around the point, so the group
+does not pile onto one spot. The returned `OrderReport` says how many took the order.
+
+```rust
+api.order_move_to(&[id], MoveTarget { x: 20.0, y: 0.0 });
+```
+
 ## Import and spawn
 
 Load named entity templates from YAML, then spawn by template name with optional overrides:
@@ -126,6 +140,7 @@ make wasm-check
 | `spawnEntity(name, overrides)` | `spawn_entity` → `SpawnedEntity` |
 | `getWorldAsJson()` | `world_json` |
 | `tick(dtMs)` | `tick` |
+| `orderMoveTo(ids, x, y)` | `order_move_to` |
 | `hello()` | `hello` |
 
 `tick(0)`, non-integer, NaN, or non-finite `dtMs` are rejected in JavaScript before Rust runs.

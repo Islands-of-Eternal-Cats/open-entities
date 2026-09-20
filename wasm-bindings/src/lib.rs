@@ -1,4 +1,5 @@
-use open_entities::{hello, Api, EntityComponents, ExportError, ImportError};
+use open_entities::components::MoveTarget;
+use open_entities::{hello, Api, EntityComponents, EntityId, ExportError, ImportError};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -70,6 +71,30 @@ impl Simulation {
         self.api
             .world_json()
             .map_err(|e: ExportError| JsValue::from_str(&e.to_string()))
+    }
+
+    /// JS: `orderMoveTo(ids, x, y)` — move order for a group of entities.
+    ///
+    /// `ids` is an array of `{index, generation}` objects, exactly as `getWorldAsJson()` reports
+    /// each entity's `id`. Returns how many entities took the order; immobile and unknown ids are
+    /// skipped. Destinations are spread over a grid so a group does not pile onto one point.
+    #[wasm_bindgen(js_name = orderMoveTo)]
+    pub fn order_move_to(&mut self, ids: JsValue, x: f32, y: f32) -> Result<u32, JsValue> {
+        let ids: Vec<EntityId> = serde_wasm_bindgen::from_value(ids)
+            .map_err(|e| JsValue::from_str(&format!("invalid entity ids: {e}")))?;
+        if ids.is_empty() {
+            return Err(JsValue::from_str(
+                "orderMoveTo(ids, x, y) requires at least one id",
+            ));
+        }
+        if !x.is_finite() || !y.is_finite() {
+            return Err(JsValue::from_str(
+                "orderMoveTo(ids, x, y) requires finite coordinates",
+            ));
+        }
+        let report = self.api.order_move_to(&ids, MoveTarget { x, y });
+        u32::try_from(report.ordered)
+            .map_err(|_| JsValue::from_str("orderMoveTo ordered more entities than u32 can hold"))
     }
 
     /// JS: `tick(dtMs)` — positive integer milliseconds only.
@@ -220,6 +245,52 @@ mod wasm_tests {
         assert!(
             msg.contains("positive finite integer"),
             "expected JS validation error for tick(0), got: {msg}"
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn order_move_to_moves_a_spawned_entity() {
+        let mut sim = Simulation::new();
+        sim.load_templates_yaml(FIXTURE_YAML)
+            .expect("load fixture");
+        let spawned = sim
+            .spawn_entity("scout", empty_overrides())
+            .expect("spawn scout");
+
+        let ids = serde_wasm_bindgen::to_value(&vec![EntityId::new(
+            spawned.index(),
+            spawned.generation(),
+        )])
+        .expect("ids");
+        // Scout starts at (10, 5) with base_move_speed 2.0: two units take about one second.
+        let ordered = sim.order_move_to(ids, 10.0, 7.0).expect("order accepted");
+        assert_eq!(ordered, 1);
+
+        for _ in 0..200 {
+            sim.tick(16.0).expect("tick");
+        }
+
+        let json = sim.world_json().expect("export world");
+        let value: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+        let scout = value["entities"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|e| e["entity_type"] == "scout")
+            .expect("scout row");
+        assert!((scout["position"]["x"].as_f64().unwrap() - 10.0).abs() < 0.1);
+        assert!((scout["position"]["y"].as_f64().unwrap() - 7.0).abs() < 0.1);
+    }
+
+    #[wasm_bindgen_test]
+    fn order_move_to_rejects_empty_ids() {
+        let mut sim = Simulation::new();
+        let ids = serde_wasm_bindgen::to_value(&Vec::<EntityId>::new()).expect("ids");
+        let err = sim.order_move_to(ids, 1.0, 1.0).unwrap_err();
+        let msg = err.as_string().expect("string error");
+        assert!(
+            msg.contains("at least one id"),
+            "expected empty-ids validation error, got: {msg}"
         );
     }
 
