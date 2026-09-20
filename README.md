@@ -51,6 +51,32 @@ api.order_move_to(&[id], MoveTarget { x: 20.0, y: 0.0 });
 **not** require a `BaseMoveSpeed`, because in this engine a `Velocity` alone is movement — an entity
 that carries one without a move speed drifts until something stops it.
 
+## Groups
+
+A group is an entity of its own, created for one faction; membership lives on the units, so there
+is one place to read it and one place to change it.
+
+```rust
+let group = api.create_group(1);
+api.add_to_group(group, unit)?;
+api.order_group_move_to(group, MoveTarget { x: 50.0, y: 50.0 })?;
+```
+
+A unit belongs to at most one group — joining a second one leaves the first — and a group commands
+only units of its own faction. An empty group stays alive: it can be refilled and ordered again.
+
+A group order steers every member that will take it, spread over the same grid a multi-unit order
+uses, and leaves the group **manually controlled**. Automation must leave a manual group alone
+until `Api::clear_group_manual(group)` hands it back; nothing releases it on its own, because a
+player who cannot tell who is steering has lost the thread.
+
+Members already following a **personal** order keep it. Orders carry an `OrderSource` —
+`MissionSteering < GroupSteering < PlayerUnit` — and a weaker source never overwrites a stronger
+one. The claim is released when the unit arrives or is stopped.
+
+See [`docs/design/group-mission-contract.md`](docs/design/group-mission-contract.md) for the full
+behaviour; missions and the replanner are not implemented yet.
+
 ## Entity lifecycle
 
 `Api::despawn(ids)` removes entities and returns how many were actually removed — unknown, stale

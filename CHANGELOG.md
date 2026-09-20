@@ -14,6 +14,14 @@ to a click on the canvas.
 
 ### Added
 
+- **Groups.** `Api::create_group`, `add_to_group`, `remove_from_group`, `group_of`,
+  `group_members`, `order_group_move_to`, `is_group_manual`, `clear_group_manual`. A unit belongs
+  to at most one group, a group commands one faction, and an empty group stays alive. A group
+  order marks the group manually controlled, and only an explicit call hands it back to
+  automation.
+- **Order priority.** Orders carry an `OrderSource` — `MissionSteering < GroupSteering <
+  PlayerUnit` — and a weaker source never overwrites a stronger one, so a unit pulled out of its
+  group's advance by hand stays pulled out. The claim is released on arrival or on stop.
 - **Move orders.** `Api::order_move_to(ids, target)` sends a group to a world point, spreading
   destinations over a `ceil(sqrt(n))` grid so the group does not pile onto one spot.
   `Api::order_stop(ids)` is the counterpart: it zeroes velocity and drops the target, and does not

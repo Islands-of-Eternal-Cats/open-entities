@@ -1,6 +1,6 @@
 use bevy_ecs::prelude::*;
 
-use crate::components::{BaseMoveSpeed, MoveTarget, Position, Velocity};
+use crate::components::{BaseMoveSpeed, MoveTarget, OrderSource, Position, Velocity};
 use crate::simulation::{ArrivedThisTick, SimDelta};
 
 use super::ARRIVAL_THRESHOLD;
@@ -9,7 +9,8 @@ use super::ARRIVAL_THRESHOLD;
 ///
 /// An entity arrives when it is already within [`ARRIVAL_THRESHOLD`] of the target, or when the
 /// step it would take this tick (`speed * dt`) reaches it. Either way the position snaps to the
-/// target, velocity is zeroed, [`MoveTarget`] is removed and the entity is recorded in
+/// target, velocity is zeroed, [`MoveTarget`] and its [`OrderSource`] are removed, and the
+/// entity is recorded in
 /// [`ArrivedThisTick`] so [`movement_system`](super::movement_system) skips it this frame.
 ///
 /// Without the step check, a unit faster than `2 * ARRIVAL_THRESHOLD / dt` overshoots the target
@@ -39,7 +40,10 @@ pub fn seek_system(
             position.y = target.y;
             velocity.vx = 0.0;
             velocity.vy = 0.0;
-            commands.entity(entity).remove::<MoveTarget>();
+            // Arrival releases the claim too: whoever gave this order is done with it.
+            commands
+                .entity(entity)
+                .remove::<(MoveTarget, OrderSource)>();
             arrived.0.insert(entity);
             continue;
         }

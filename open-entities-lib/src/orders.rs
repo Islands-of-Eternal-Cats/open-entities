@@ -5,10 +5,11 @@
 //! ids straight back from a snapshot.
 
 use bevy_ecs::entity::{Entity, EntityGeneration, EntityIndex};
+use bevy_ecs::prelude::World;
 use serde::{Deserialize, Serialize};
 
 use crate::api::Api;
-use crate::components::{BaseMoveSpeed, MoveTarget, Position, Velocity};
+use crate::components::{BaseMoveSpeed, MoveTarget, OrderSource, Position, Velocity};
 
 /// World units between adjacent slots of a group move destination.
 const MOVE_GROUP_GRID_SPACING: f32 = 5.0;
@@ -68,7 +69,7 @@ pub struct OrderReport {
 ///
 /// Columns are `ceil(sqrt(count))`, so the extent around the clicked point grows with about `√n`
 /// instead of linearly as it would on a single ring.
-fn group_slot(target: MoveTarget, index: usize, count: usize) -> MoveTarget {
+pub(crate) fn group_slot(target: MoveTarget, index: usize, count: usize) -> MoveTarget {
     if count <= 1 {
         return target;
     }
@@ -91,6 +92,48 @@ fn group_slot(target: MoveTarget, index: usize, count: usize) -> MoveTarget {
     }
 }
 
+/// `true` when the entity is something a move order can reach: it exists, it has a place in the
+/// world, and it has a speed to travel at.
+pub(crate) fn can_take_a_move_order(world: &World, entity: Entity) -> bool {
+    world.get::<Position>(entity).is_some() && world.get::<BaseMoveSpeed>(entity).is_some()
+}
+
+/// Points entities at `target`, spread over a grid, and records who gave the order.
+///
+/// An entity already following a stronger order keeps it: see [`OrderSource::may_override`]. That
+/// is the whole priority rule, in one place, so group steering and mission steering cannot quietly
+/// undo what the player told a single unit to do.
+///
+/// Returns how many entities took the order.
+pub(crate) fn steer(
+    world: &mut World,
+    entities: &[Entity],
+    target: MoveTarget,
+    source: OrderSource,
+) -> usize {
+    let count = entities.len();
+    let mut ordered = 0;
+
+    for (slot, entity) in entities.iter().copied().enumerate() {
+        if let Some(current) = world.get::<OrderSource>(entity).copied()
+            && !source.may_override(current)
+        {
+            continue;
+        }
+        if world.get::<Velocity>(entity).is_none() {
+            world
+                .entity_mut(entity)
+                .insert(Velocity { vx: 0.0, vy: 0.0 });
+        }
+        world
+            .entity_mut(entity)
+            .insert((group_slot(target, slot, count), source));
+        ordered += 1;
+    }
+
+    ordered
+}
+
 impl Api {
     /// Orders the given entities to move to a world point.
     ///
@@ -111,30 +154,17 @@ impl Api {
             if movable.contains(&entity) {
                 continue;
             }
-            if world.get::<Position>(entity).is_none() {
-                continue;
-            }
-            if world.get::<BaseMoveSpeed>(entity).is_none() {
+            if !can_take_a_move_order(world, entity) {
                 continue;
             }
             movable.push(entity);
         }
 
-        let count = movable.len();
-        for (slot, entity) in movable.iter().copied().enumerate() {
-            if world.get::<Velocity>(entity).is_none() {
-                world
-                    .entity_mut(entity)
-                    .insert(Velocity { vx: 0.0, vy: 0.0 });
-            }
-            world
-                .entity_mut(entity)
-                .insert(group_slot(target, slot, count));
-        }
+        let ordered = steer(world, &movable, target, OrderSource::PlayerUnit);
 
         OrderReport {
-            ordered: count,
-            skipped: ids.len() - count,
+            ordered,
+            skipped: ids.len() - ordered,
         }
     }
 
@@ -143,6 +173,9 @@ impl Api {
     /// Unlike [`Api::order_move_to`] this does not require a [`BaseMoveSpeed`]. In this engine a
     /// `Velocity` is movement, so an entity that carries one without a move speed drifts until
     /// something stops it — and this is that something.
+    ///
+    /// The [`OrderSource`] is dropped along with the target, so a later order from automation
+    /// is free to take the entity.
     ///
     /// Ids without a `Velocity`, and repeats within one call, are reported as skipped.
     pub fn order_stop(&mut self, ids: &[EntityId]) -> OrderReport {
@@ -163,7 +196,11 @@ impl Api {
                 velocity.vx = 0.0;
                 velocity.vy = 0.0;
             }
-            world.entity_mut(entity).remove::<MoveTarget>();
+            // The source goes with the target: a leftover PlayerUnit claim on an entity that
+            // is no longer going anywhere would block every later group or mission order.
+            world
+                .entity_mut(entity)
+                .remove::<(MoveTarget, OrderSource)>();
             stopped.push(entity);
         }
 
