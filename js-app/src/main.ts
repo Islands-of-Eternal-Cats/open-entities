@@ -201,12 +201,30 @@ function syncSelectionUi(): void {
  * The faction comes from the first selected unit; a group commands one faction, so units of
  * another are refused by the core and the call fails loudly rather than half-forming a group.
  */
+/** Says why nothing happened, where the player is already looking. */
+function reportGroupProblem(message: string): void {
+  if (groupStateEl) groupStateEl.textContent = message;
+  console.warn(message);
+}
+
 async function formGroupFromSelection(): Promise<void> {
   if (!isWasmReady() || !pixiApi) return;
   const ids = [...pixiApi.getSelectedIds()];
-  if (ids.length === 0) return;
+  if (ids.length === 0) {
+    reportGroupProblem("Select some units first");
+    return;
+  }
   const first = lastEntities.find((entity) => entity.id === ids[0]);
-  if (!first || first.faction === null) return;
+  if (!first) {
+    reportGroupProblem("The selected unit is gone");
+    return;
+  }
+  if (first.faction === null) {
+    reportGroupProblem(
+      `${first.entityType} has no faction, so it cannot lead a group`
+    );
+    return;
+  }
 
   try {
     activeGroup = await createGroupWith(first.faction, ids);
@@ -214,7 +232,8 @@ async function formGroupFromSelection(): Promise<void> {
     groupOrdersOn = true;
     syncSelectionUi();
   } catch (e) {
-    console.error("createGroupWith error:", e);
+    const message = e instanceof Error ? e.message : String(e);
+    reportGroupProblem(`Could not form a group: ${message}`);
   }
 }
 
@@ -297,9 +316,14 @@ async function run(): Promise<void> {
           if (!isWasmReady()) return;
           try {
             if (groupOrdersOn && activeGroup !== null) {
-              const entities = await orderGroupTo(activeGroup, world);
-              pixi.showMoveTarget(world);
-              render(entities);
+              try {
+                const entities = await orderGroupTo(activeGroup, world);
+                pixi.showMoveTarget(world);
+                render(entities);
+              } catch (e) {
+                const message = e instanceof Error ? e.message : String(e);
+                reportGroupProblem(`Group order failed: ${message}`);
+              }
               return;
             }
             const ids = [...pixi.getSelectedIds()];
