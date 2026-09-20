@@ -19,5 +19,11 @@ spawns:
     position: { x: 34.0, y: 24.0 }
     faction: 1
 
+  # Parked next to the mover and out of reach of the other one: one can board on the spot, the
+  # other has to be walked over first.
+  - template: truck
+    position: { x: 32.0, y: 21.0 }
+    faction: 1
+
   - template: static_obstacle
     position: { x: 60.0, y: 60.0 }

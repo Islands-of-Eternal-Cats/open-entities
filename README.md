@@ -145,6 +145,8 @@ If the vehicle is despawned, its passengers are let off where they stand: a comp
 an entity that no longer exists is a leak waiting to be read.
 
 `Api::passengers(vehicle)`, `Api::vehicle_of(unit)` and `Api::free_seats(vehicle)` read the state.
+All five are exposed to JavaScript as `board`, `unboard`, `passengers`, `vehicleOf` and
+`freeSeats`, and the browser demo drives them with **B** and **U**.
 
 ## Map layout
 
@@ -318,6 +320,11 @@ Press **G** or hit **Form group** to make a group out of the selection, then tog
 orders**: a click on empty ground becomes a group order instead of a personal one. Give one unit a
 personal order first and watch it keep its own course while the rest of the group turns — that is
 the priority rule, visible.
+
+The map starts with a truck parked beside one of the movers. Select the truck together with units
+standing next to it and press **B** to load them; **U** lets them off again. Riders fade into the
+truck and travel with it, and the second mover is deliberately parked out of reach, so it has to be
+walked over before it can board — boarding is not a move order.
 
 WASM rebuilds automatically when a `.rs` file under `open-entities-lib/` or `wasm-bindings/`
 changes. The boundary between the WASM core and the visualization — message protocol, id packing,

@@ -3,8 +3,30 @@ import type { EntitySnapshot, Pos } from "./core/types";
 
 const state = vi.hoisted(() => {
   const selectedIds = new Set<string>(["u1"]);
+  /** A unit on foot and a truck beside it: what the transport buttons read. */
+  const world: EntitySnapshot[] = [
+    {
+      id: "u1",
+      entityType: "mover",
+      pos: { x: 0, y: 0 },
+      velocity: null,
+      faction: 1,
+      seats: null,
+      aboard: null,
+    },
+    {
+      id: "v1",
+      entityType: "truck",
+      pos: { x: 1, y: 0 },
+      velocity: null,
+      faction: 1,
+      seats: 4,
+      aboard: null,
+    },
+  ];
   return {
     selectedIds,
+    world,
     onMoveOrder: null as ((world: Pos) => void | Promise<void>) | null,
     clearSelection: vi.fn(() => {
       selectedIds.clear();
@@ -12,6 +34,8 @@ const state = vi.hoisted(() => {
     showMoveTarget: vi.fn(),
     createGroupWith: vi.fn(async () => ({ index: 7, generation: 0 })),
     orderGroupTo: vi.fn(async () => [] as EntitySnapshot[]),
+    boardUnits: vi.fn(async () => [] as EntitySnapshot[]),
+    unboardUnits: vi.fn(async () => [] as EntitySnapshot[]),
     moveSelectedTo: vi.fn(async () => [
       {
         id: "u1",
@@ -19,6 +43,8 @@ const state = vi.hoisted(() => {
         pos: { x: 12, y: 24 },
         velocity: null,
         faction: null,
+        seats: null,
+        aboard: null,
       } satisfies EntitySnapshot,
     ]),
     renderEntities: vi.fn(),
@@ -31,18 +57,12 @@ vi.mock("./core/wasm", () => ({
   moveSelectedTo: state.moveSelectedTo,
   createGroupWith: state.createGroupWith,
   orderGroupTo: state.orderGroupTo,
+  boardUnits: state.boardUnits,
+  unboardUnits: state.unboardUnits,
   tick: vi.fn(async () => [] as EntitySnapshot[]),
   // main.ts imports these two as well; leaving them out made run() throw on the first
   // `await snapshot()` and swallow the rest of the wiring.
-  snapshot: vi.fn(async () => [
-    {
-      id: "u1",
-      entityType: "mover",
-      pos: { x: 0, y: 0 },
-      velocity: null,
-      faction: 1,
-    } satisfies EntitySnapshot,
-  ]),
+  snapshot: vi.fn(async () => state.world),
   spawnRandomAt: vi.fn(async () => [] as EntitySnapshot[]),
   spawnAt: vi.fn(async () => [] as EntitySnapshot[]),
 }));
@@ -88,6 +108,9 @@ function mountMainDom(): void {
     <button id="form-group" hidden disabled></button>
     <button id="group-mode" hidden disabled></button>
     <p id="group-state"></p>
+    <button id="board-units" hidden disabled></button>
+    <button id="unboard-units" hidden disabled></button>
+    <p id="transport-state"></p>
   `;
 }
 
@@ -107,7 +130,10 @@ describe("main input wiring", () => {
     state.moveSelectedTo.mockClear();
     state.createGroupWith.mockClear();
     state.orderGroupTo.mockClear();
+    state.boardUnits.mockClear();
+    state.unboardUnits.mockClear();
     state.renderEntities.mockClear();
+    for (const entity of state.world) entity.aboard = null;
     vi.stubGlobal("requestAnimationFrame", vi.fn());
     mountMainDom();
   });
@@ -148,6 +174,56 @@ describe("main input wiring", () => {
       { x: 10, y: 20 }
     );
     expect(state.moveSelectedTo).not.toHaveBeenCalled();
+  });
+
+  it("boards the selected units onto the one selected vehicle", async () => {
+    state.selectedIds.add("v1");
+    await import("./main");
+    await flush();
+    await flush();
+
+    const board = document.getElementById("board-units") as HTMLButtonElement;
+    expect(board.hidden).toBe(false);
+    board.click();
+    await flush();
+
+    // The truck is the vehicle, not cargo: it must not be in the list of units boarding it.
+    expect(state.boardUnits).toHaveBeenCalledWith(["u1"], "v1");
+  });
+
+  it("unboards everyone the selected vehicle carries", async () => {
+    state.world[0].aboard = "v1";
+    state.selectedIds.clear();
+    state.selectedIds.add("v1");
+    await import("./main");
+    await flush();
+    await flush();
+
+    const unboard = document.getElementById(
+      "unboard-units"
+    ) as HTMLButtonElement;
+    expect(unboard.hidden).toBe(false);
+    unboard.click();
+    await flush();
+
+    expect(state.unboardUnits).toHaveBeenCalledWith(["u1"]);
+  });
+
+  it("says why boarding did nothing instead of logging it", async () => {
+    state.selectedIds.add("v1");
+    state.boardUnits.mockRejectedValueOnce(
+      new Error("the unit is more than 3 units away")
+    );
+    await import("./main");
+    await flush();
+
+    (document.getElementById("board-units") as HTMLButtonElement).click();
+    await flush();
+    await flush();
+
+    expect(document.getElementById("transport-state")?.textContent).toContain(
+      "more than 3 units away"
+    );
   });
 
   it("keeps move-order flow active via onMoveOrder callback", async () => {

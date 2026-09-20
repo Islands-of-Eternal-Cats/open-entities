@@ -33,6 +33,13 @@
                     <button type="button" id="group-mode" class="rts-btn rts-btn--ghost" hidden disabled
                         aria-pressed="false">Group orders: off</button>
                     <p id="group-state" class="selection-empty">No group</p>
+                    <button type="button" id="board-units" class="rts-btn" hidden disabled
+                        aria-label="Board the selected units onto the selected vehicle">Board <span
+                            class="hotkey-hint">(B)</span></button>
+                    <button type="button" id="unboard-units" class="rts-btn rts-btn--ghost" hidden disabled
+                        aria-label="Let the selected passengers off">Unboard <span
+                            class="hotkey-hint">(U)</span></button>
+                    <p id="transport-state" class="selection-empty">No vehicle selected</p>
                 </section>
                 <section class="rts-panel" aria-labelledby="forces-heading">
                     <h2 id="forces-heading">Forces</h2>
@@ -45,7 +52,9 @@
             <p id="command-hints" class="command-hints">
                 <strong>Orders:</strong> drag a box or click units to select ·
                 <kbd>Shift</kbd> add/remove · with a selection, click empty ground to <strong>move</strong> ·
-                <kbd>Esc</kbd> clears selection.
+                <kbd>Esc</kbd> clears selection ·
+                select a truck together with units next to it and press <kbd>B</kbd> to
+                <strong>board</strong>, <kbd>U</kbd> to let them off.
                 <strong>Minimap</strong> (corner): click with selection — move order; without selection — center view on that point (white frame = visible area).
             </p>
             <div class="train-bar" role="group" aria-label="Hire units">
@@ -59,6 +68,11 @@
                     aria-label="Hire another mover unit">
                     <span class="train-title">Mover B</span>
                     <span class="train-sub">another_mover</span>
+                </button>
+                <button type="button" class="rts-btn train-btn" data-train-type="truck"
+                    aria-label="Hire truck, a vehicle with four seats">
+                    <span class="train-title">Truck</span>
+                    <span class="train-sub">4 seats</span>
                 </button>
                 <button type="button" class="rts-btn train-btn" data-train-type="static_obstacle"
                     aria-label="Place static obstacle">

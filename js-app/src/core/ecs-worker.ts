@@ -1,6 +1,7 @@
 /**
  * ECS web worker: loads WASM and runs the simulation.
- * Listens for init/snapshot/tick/spawn_at/move_to; posts back ready/entities/error.
+ * Listens for init/snapshot/tick/spawn_at/move_to/group and boarding messages; posts back
+ * ready/entities/spawned/id/error.
  *
  * The world crosses the boundary as JSON (`getWorldAsJson`), which this module adapts into the
  * flat `EntitySnapshot` rows the visualization layer expects.
@@ -33,7 +34,31 @@ function toSnapshot(row: WorldExportRow): EntitySnapshot | null {
     pos: { x: row.position.x, y: row.position.y },
     velocity: row.velocity ? { ...row.velocity } : null,
     faction: row.faction ?? null,
+    seats: row.boardable ?? null,
+    aboard: null,
   };
+}
+
+/**
+ * Fills in who is riding what.
+ *
+ * `PassengerOf` is not an exported component — it holds an entity, which no YAML file has any
+ * business writing — so the link is read back through `passengers()`, once per vehicle. Vehicles
+ * are few, and this saves the main thread a round trip per frame.
+ */
+function markPassengers(
+  simulation: Simulation,
+  snapshots: EntitySnapshot[]
+): void {
+  const byKey = new Map<string, EntitySnapshot>();
+  for (const entity of snapshots) byKey.set(entity.id, entity);
+  for (const vehicle of snapshots) {
+    if (vehicle.seats === null) continue;
+    for (const passenger of simulation.passengers(keyToEntityId(vehicle.id))) {
+      const rider = byKey.get(entityIdToKey(passenger));
+      if (rider) rider.aboard = vehicle.id;
+    }
+  }
 }
 
 function readWorld(simulation: Simulation): EntitySnapshot[] {
@@ -43,6 +68,7 @@ function readWorld(simulation: Simulation): EntitySnapshot[] {
     const snapshot = toSnapshot(row);
     if (snapshot) snapshots.push(snapshot);
   }
+  markPassengers(simulation, snapshots);
   return snapshots;
 }
 
@@ -140,6 +166,26 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         post({ type: "error", message });
+        return;
+      }
+      post(entitiesMessage(sim));
+      return;
+    }
+
+    if (msg.type === "board" || msg.type === "unboard") {
+      const vehicle = msg.type === "board" ? keyToEntityId(msg.vehicle) : null;
+      const refused: string[] = [];
+      for (const key of msg.units) {
+        try {
+          if (vehicle) sim.board(keyToEntityId(key), vehicle);
+          else sim.unboard(keyToEntityId(key));
+        } catch (err) {
+          refused.push(err instanceof Error ? err.message : String(err));
+        }
+      }
+      // Whoever made it is aboard either way; the refusals say why the rest did not.
+      if (refused.length > 0) {
+        post({ type: "error", message: refused.join("; ") });
         return;
       }
       post(entitiesMessage(sim));

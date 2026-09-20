@@ -57,7 +57,7 @@ declare module "open_entities_wasm" {
     /** True while the entity behind this id is spawned. */
     isAlive(id: EntityId): boolean;
 
-    /** Whole world as JSON (schema version 3). */
+    /** Whole world as JSON (schema version 4). */
     getWorldAsJson(): string;
 
     /** A new empty group for that faction. */
@@ -95,6 +95,21 @@ declare module "open_entities_wasm" {
 
     /** True once somebody reached the mission. */
     isMissionCompleted(mission: EntityId): boolean;
+
+    /** Put a unit standing next to a vehicle inside it; throws when it cannot go. */
+    board(unit: EntityId, vehicle: EntityId): void;
+
+    /** Let a passenger off, beside the vehicle. */
+    unboard(unit: EntityId): void;
+
+    /** What the unit is riding, or null. */
+    vehicleOf(unit: EntityId): EntityId | null;
+
+    /** Who is aboard the vehicle right now. */
+    passengers(vehicle: EntityId): EntityId[];
+
+    /** Seats still empty, or null when the entity has no seats at all. */
+    freeSeats(vehicle: EntityId): number | null;
 
     /** Advance the simulation; delta is a positive integer number of milliseconds. */
     tick(dtMs: number): void;

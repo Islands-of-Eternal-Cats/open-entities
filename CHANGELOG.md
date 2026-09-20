@@ -14,6 +14,11 @@ to a click on the canvas.
 
 ### Added
 
+- **Transport in the browser demo.** `board`, `unboard`, `vehicleOf`, `passengers` and `freeSeats`
+  are exposed through `Simulation`, the snapshot carries `seats` and `aboard`, and the demo starts
+  with a truck parked beside one mover and out of reach of the other. **B** loads the selected
+  units, **U** lets them off, and a refusal — too far away, no seats left — is shown in the HUD
+  instead of the console, because that refusal is the rule worth seeing.
 - **Carrying units.** `Api::board`, `unboard`, `passengers`, `vehicle_of`, `free_seats`, plus a
   `boardable: <seats>` template field. A passenger's position belongs to its vehicle: the movement
   systems skip passengers and a sync system copies the vehicle's position onto them after it moves,

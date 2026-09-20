@@ -569,6 +569,9 @@ export async function initPixiCanvas(
       const { x, y } = worldToScreen(entity.pos.x, entity.pos.y);
       g.x = x;
       g.y = y;
+      // A passenger sits exactly where its vehicle is; faded, it reads as cargo rather than as
+      // two units standing in the same spot.
+      g.alpha = entity.aboard === null ? 1 : 0.35;
     });
 
     redrawSelectionRings();

@@ -25,6 +25,15 @@ entities:
     velocity: { vx: 0.0, vy: 0.0 }
     base_move_speed: 30.0
 
+  # Four seats. Units standing within boarding range can climb aboard and ride along; while they
+  # do, the truck owns their position and their own move orders do nothing.
+  truck:
+    template: unit
+    position: { x: 0.0, y: 0.0 }
+    velocity: { vx: 0.0, vy: 0.0 }
+    base_move_speed: 25.0
+    boardable: 4
+
   # No velocity and no move speed: cannot be ordered anywhere, and never drifts.
   static_obstacle:
     position: { x: 10.0, y: 10.0 }

@@ -14,6 +14,8 @@ describe("selection-logic", () => {
     pos: { x: 5, y: 5 },
     velocity: null,
     faction: null,
+    seats: null,
+    aboard: null,
   };
   const b: EntitySnapshot = {
     id: "2",
@@ -21,6 +23,8 @@ describe("selection-logic", () => {
     pos: { x: 90, y: 90 },
     velocity: null,
     faction: null,
+    seats: null,
+    aboard: null,
   };
 
   it("marquee includes only entities inside world AABB", () => {

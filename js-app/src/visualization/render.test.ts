@@ -11,6 +11,8 @@ function mockEntity(
     pos: { x: 0, y: 0 },
     velocity: { vx: 0, vy: 0 },
     faction: null,
+    seats: null,
+    aboard: null,
     ...overrides,
   };
 }
@@ -44,6 +46,18 @@ describe("renderEntities", () => {
     expect(container.innerHTML).toContain("-0.50");
     expect(container.innerHTML).toContain("mover ·");
     expect(container.querySelectorAll(".entity").length).toBe(1);
+  });
+
+  it("says who is riding what, since the map cannot show it", () => {
+    renderEntities(
+      [
+        mockEntity({ id: "7", entityType: "truck", seats: 4 }),
+        mockEntity({ id: "8", aboard: "7" }),
+      ],
+      container
+    );
+    expect(container.innerHTML).toContain("4 seats");
+    expect(container.innerHTML).toContain("aboard 7");
   });
 
   it("renders multiple entities", () => {

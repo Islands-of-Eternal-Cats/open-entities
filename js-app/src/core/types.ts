@@ -26,6 +26,14 @@ export interface EntitySnapshot {
   velocity: Velocity | null;
   /** ECS `Faction` id when present; null if the entity has no faction component. */
   faction: number | null;
+  /** Seats from the `Boardable` component; null when this entity is not a vehicle. */
+  seats: number | null;
+  /**
+   * Key of the vehicle this unit is riding, or null when it is on its own feet.
+   *
+   * A passenger's position is the vehicle's, so the two rows always report the same point.
+   */
+  aboard: string | null;
 }
 
 /** Entity identity as the WASM side spells it. */

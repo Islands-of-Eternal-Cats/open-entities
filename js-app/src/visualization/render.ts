@@ -37,6 +37,13 @@ export function renderEntities(
         e.velocity != null
           ? `v (${formatCoord(e.velocity.vx)}, ${formatCoord(e.velocity.vy)})`
           : "static";
+      // Transport is invisible on the map — a rider sits inside its vehicle — so the row says it.
+      const transport =
+        e.aboard !== null
+          ? ` · aboard ${escapeHtml(e.aboard)}`
+          : e.seats !== null
+            ? ` · ${e.seats} seats`
+            : "";
       const idAttr = escapeAttr(e.id);
       const idHtml = escapeHtml(e.id);
       const typeHtml = escapeHtml(e.entityType);
@@ -47,7 +54,7 @@ export function renderEntities(
       const ariaCurrent = selected ? ' aria-current="true"' : "";
       return `<button type="button" class="${rowClass}" data-entity-id="${idAttr}" aria-label="Select entity ${idAttr}"${ariaCurrent}>
         <strong>Entity ${idHtml}</strong>
-        <span class="entity-meta">${typeHtml} · (${formatCoord(e.pos.x)}, ${formatCoord(e.pos.y)}) · ${vel}</span>
+        <span class="entity-meta">${typeHtml} · (${formatCoord(e.pos.x)}, ${formatCoord(e.pos.y)}) · ${vel}${transport}</span>
       </button>`;
     })
     .join("");

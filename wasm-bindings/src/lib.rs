@@ -1,6 +1,6 @@
 use open_entities::components::MoveTarget;
 use open_entities::{Api, EntityComponents, EntityId, ExportError, ImportError, hello};
-use open_entities::{GroupError, MissionError};
+use open_entities::{BoardError, GroupError, MissionError};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -284,6 +284,65 @@ impl Simulation {
         Ok(self.api.is_mission_completed(mission))
     }
 
+    /// JS: `board(unitId, vehicleId)` — put a unit standing next to a vehicle inside it.
+    ///
+    /// Fails when the vehicle has no seats, none are left, or the unit is further away than
+    /// `BOARDING_RANGE`. A passenger's move target is dropped: while aboard it goes where the
+    /// vehicle goes.
+    #[wasm_bindgen(js_name = board)]
+    pub fn board(&mut self, unit: JsValue, vehicle: JsValue) -> Result<(), JsValue> {
+        let unit: EntityId = serde_wasm_bindgen::from_value(unit)
+            .map_err(|e| JsValue::from_str(&format!("invalid entity id: {e}")))?;
+        let vehicle: EntityId = serde_wasm_bindgen::from_value(vehicle)
+            .map_err(|e| JsValue::from_str(&format!("invalid vehicle id: {e}")))?;
+        self.api
+            .board(unit, vehicle)
+            .map_err(|e: BoardError| JsValue::from_str(&e.to_string()))
+    }
+
+    /// JS: `unboard(unitId)` — step off, beside the vehicle.
+    #[wasm_bindgen(js_name = unboard)]
+    pub fn unboard(&mut self, unit: JsValue) -> Result<(), JsValue> {
+        let unit: EntityId = serde_wasm_bindgen::from_value(unit)
+            .map_err(|e| JsValue::from_str(&format!("invalid entity id: {e}")))?;
+        self.api
+            .unboard(unit)
+            .map_err(|e: BoardError| JsValue::from_str(&e.to_string()))
+    }
+
+    /// JS: `vehicleOf(unitId)` — what the unit is riding, or `null`.
+    #[wasm_bindgen(js_name = vehicleOf)]
+    pub fn vehicle_of(&self, unit: JsValue) -> Result<JsValue, JsValue> {
+        let unit: EntityId = serde_wasm_bindgen::from_value(unit)
+            .map_err(|e| JsValue::from_str(&format!("invalid entity id: {e}")))?;
+        match self.api.vehicle_of(unit) {
+            Some(vehicle) => serde_wasm_bindgen::to_value(&vehicle)
+                .map_err(|e| JsValue::from_str(&format!("failed to serialize id: {e}"))),
+            None => Ok(JsValue::NULL),
+        }
+    }
+
+    /// JS: `passengers(vehicleId)` — who is aboard right now.
+    #[wasm_bindgen(js_name = passengers)]
+    pub fn passengers(&mut self, vehicle: JsValue) -> Result<JsValue, JsValue> {
+        let vehicle: EntityId = serde_wasm_bindgen::from_value(vehicle)
+            .map_err(|e| JsValue::from_str(&format!("invalid vehicle id: {e}")))?;
+        let passengers = self.api.passengers(vehicle);
+        serde_wasm_bindgen::to_value(&passengers)
+            .map_err(|e| JsValue::from_str(&format!("failed to serialize ids: {e}")))
+    }
+
+    /// JS: `freeSeats(vehicleId)` — seats still empty, or `null` when the entity has no seats.
+    #[wasm_bindgen(js_name = freeSeats)]
+    pub fn free_seats(&mut self, vehicle: JsValue) -> Result<JsValue, JsValue> {
+        let vehicle: EntityId = serde_wasm_bindgen::from_value(vehicle)
+            .map_err(|e| JsValue::from_str(&format!("invalid vehicle id: {e}")))?;
+        match self.api.free_seats(vehicle) {
+            Some(seats) => Ok(JsValue::from_f64(f64::from(seats))),
+            None => Ok(JsValue::NULL),
+        }
+    }
+
     /// JS: `tick(dtMs)` — positive integer milliseconds only.
     #[wasm_bindgen(js_name = tick)]
     pub fn tick(&mut self, dt_ms: f64) -> Result<(), JsValue> {
@@ -306,7 +365,7 @@ impl Simulation {
 mod wasm_tests {
     use super::*;
     use open_entities::EntityComponents;
-    use open_entities::components::{Health, Position};
+    use open_entities::components::{Boardable, Health, Position};
     use wasm_bindgen_test::*;
 
     const FIXTURE_YAML: &str = include_str!(concat!(
@@ -513,6 +572,126 @@ mod wasm_tests {
         assert!(
             msg.contains("at least one id"),
             "expected empty-ids validation error, got: {msg}"
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn a_passenger_rides_along_and_steps_off_beside_the_vehicle() {
+        let mut sim = Simulation::new();
+        sim.load_templates_yaml(FIXTURE_YAML).expect("load fixture");
+
+        // The scout already drives toward (20, 0); four seats make it a vehicle.
+        let vehicle = sim
+            .spawn_entity(
+                "scout",
+                serde_wasm_bindgen::to_value(&EntityComponents {
+                    boardable: Some(Boardable(4)),
+                    ..Default::default()
+                })
+                .expect("vehicle overrides"),
+            )
+            .expect("spawn vehicle");
+        // Standing half a unit from the scout's (10, 5): well inside boarding range.
+        let rider = sim
+            .spawn_entity(
+                "marker",
+                serde_wasm_bindgen::to_value(&EntityComponents {
+                    position: Some(Position { x: 10.5, y: 5.0 }),
+                    ..Default::default()
+                })
+                .expect("rider overrides"),
+            )
+            .expect("spawn rider");
+
+        assert_eq!(
+            free_seats_of(&mut sim, vehicle.clone()),
+            Some(4.0),
+            "an empty vehicle has every seat free"
+        );
+        sim.board(rider.clone(), vehicle.clone())
+            .expect("the rider is close enough to board");
+        assert_eq!(free_seats_of(&mut sim, vehicle.clone()), Some(3.0));
+
+        for _ in 0..60 {
+            sim.tick(16.0).expect("tick");
+        }
+
+        let vehicle_id: EntityId = serde_wasm_bindgen::from_value(vehicle.clone()).expect("id");
+        let rider_id: EntityId = serde_wasm_bindgen::from_value(rider.clone()).expect("id");
+        let moved = position_of(&mut sim, vehicle_id);
+        assert_ne!(moved.0, 10.0, "the vehicle should have driven off");
+        assert_eq!(
+            position_of(&mut sim, rider_id),
+            moved,
+            "a passenger is wherever its vehicle is"
+        );
+
+        sim.unboard(rider.clone()).expect("step off");
+        assert_eq!(free_seats_of(&mut sim, vehicle), Some(4.0));
+        assert_ne!(
+            position_of(&mut sim, rider_id),
+            moved,
+            "stepping off puts the unit beside the vehicle, not inside it"
+        );
+    }
+
+    /// Seats left on `vehicle`, as a plain number, or `None` when it carries no seats.
+    fn free_seats_of(sim: &mut Simulation, vehicle: JsValue) -> Option<f64> {
+        sim.free_seats(vehicle).expect("free seats call").as_f64()
+    }
+
+    /// The entity's exported position, which is the only place the demo reads one from.
+    fn position_of(sim: &mut Simulation, id: EntityId) -> (f64, f64) {
+        let json = sim.world_json().expect("export world");
+        let value: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+        let row = value["entities"]
+            .as_array()
+            .expect("entities array")
+            .iter()
+            .find(|row| row["id"]["index"] == id.index && row["id"]["generation"] == id.generation)
+            .expect("row for the requested id");
+        (
+            row["position"]["x"].as_f64().expect("x"),
+            row["position"]["y"].as_f64().expect("y"),
+        )
+    }
+
+    #[wasm_bindgen_test]
+    fn boarding_a_rock_fails() {
+        let mut sim = Simulation::new();
+        sim.load_templates_yaml(FIXTURE_YAML).expect("load fixture");
+        let rock = sim
+            .spawn_entity(
+                "marker",
+                serde_wasm_bindgen::to_value(&EntityComponents {
+                    position: Some(Position { x: 0.0, y: 0.0 }),
+                    ..Default::default()
+                })
+                .expect("rock overrides"),
+            )
+            .expect("spawn rock");
+        let unit = sim
+            .spawn_entity(
+                "marker",
+                serde_wasm_bindgen::to_value(&EntityComponents {
+                    position: Some(Position { x: 0.5, y: 0.0 }),
+                    ..Default::default()
+                })
+                .expect("unit overrides"),
+            )
+            .expect("spawn unit");
+
+        assert!(
+            sim.free_seats(rock.clone())
+                .expect("free seats call")
+                .is_null(),
+            "something with no seats reports none, rather than zero"
+        );
+        let err = sim.board(unit, rock).unwrap_err();
+        let msg = err.as_string().expect("string error");
+        assert!(
+            msg.contains("no seats to board"),
+            "expected NotBoardable message, got: {msg}"
         );
     }
 

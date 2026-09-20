@@ -93,3 +93,60 @@ if (Math.abs(px - tx) > 0.01 || Math.abs(py - ty) > 0.01) {
 }
 
 console.log("wasm tick demo ok");
+
+// --- Transport demo: a unit rides along, then steps off ---
+// This is the only check of the *JavaScript* names: the Rust tests call these methods by their
+// Rust names, so a typo in a `js_name` would sail past them and land in the browser.
+const rideSim = new Simulation();
+rideSim.loadTemplatesYaml(yaml);
+
+const truck = rideSim.spawnEntity("scout", { boardable: 4 });
+const passenger = rideSim.spawnEntity("marker", {
+  position: { x: 10.5, y: 5.0 },
+});
+
+if (rideSim.freeSeats(truck) !== 4) {
+  throw new Error(`transport demo: expected 4 free seats, got ${rideSim.freeSeats(truck)}`);
+}
+if (rideSim.freeSeats(passenger) !== null) {
+  throw new Error("transport demo: a unit with no seats should report null, not a number");
+}
+
+rideSim.board(passenger, truck);
+if (rideSim.freeSeats(truck) !== 3) {
+  throw new Error(`transport demo: expected 3 free seats, got ${rideSim.freeSeats(truck)}`);
+}
+if (rideSim.vehicleOf(passenger)?.index !== truck.index) {
+  throw new Error("transport demo: vehicleOf does not point back at the truck");
+}
+if (rideSim.passengers(truck).length !== 1) {
+  throw new Error("transport demo: the truck should carry exactly one unit");
+}
+
+for (let i = 0; i < 60; i++) {
+  rideSim.tick(16);
+}
+
+const rideRows = JSON.parse(rideSim.getWorldAsJson()).entities;
+const rowFor = (id) =>
+  rideRows.find((e) => e.id?.index === id.index && e.id?.generation === id.generation);
+const truckRow = rowFor(truck);
+const passengerRow = rowFor(passenger);
+if (truckRow.position.x === 10.0) {
+  throw new Error("transport demo: the truck never drove off");
+}
+if (
+  passengerRow.position.x !== truckRow.position.x ||
+  passengerRow.position.y !== truckRow.position.y
+) {
+  throw new Error(
+    `transport demo: a passenger belongs where its vehicle is, got ${JSON.stringify(passengerRow.position)}`,
+  );
+}
+
+rideSim.unboard(passenger);
+if (rideSim.freeSeats(truck) !== 4 || rideSim.vehicleOf(passenger) !== null) {
+  throw new Error("transport demo: unboard left the seat taken");
+}
+
+console.log("wasm transport demo ok");

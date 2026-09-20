@@ -3,6 +3,7 @@
  */
 import "./styles.css";
 import {
+  boardUnits,
   createGroupWith,
   initWasm,
   isWasmReady,
@@ -12,6 +13,7 @@ import {
   tick,
   spawnRandomAt,
   spawnAt,
+  unboardUnits,
 } from "./core/wasm";
 import type { EntityId, EntitySnapshot, Pos } from "./core/types";
 import { renderEntities } from "./visualization/render";
@@ -32,11 +34,23 @@ const groupModeBtn = document.getElementById(
   "group-mode"
 ) as HTMLButtonElement | null;
 const groupStateEl = document.getElementById("group-state");
+const boardBtn = document.getElementById(
+  "board-units"
+) as HTMLButtonElement | null;
+const unboardBtn = document.getElementById(
+  "unboard-units"
+) as HTMLButtonElement | null;
+const transportStateEl = document.getElementById("transport-state");
 const trainButtons = Array.from(
   document.querySelectorAll<HTMLButtonElement>("[data-train-type]")
 );
 
-const ENTITY_TYPES = ["mover", "another_mover", "static_obstacle"] as const;
+const ENTITY_TYPES = [
+  "mover",
+  "another_mover",
+  "truck",
+  "static_obstacle",
+] as const;
 
 type PixiApi = {
   updateEntities: (entities: EntitySnapshot[]) => void;
@@ -59,6 +73,13 @@ let groupMemberIds: string[] = [];
  * ordered by hand keeps walking its own way while the rest of the group turns.
  */
 let groupOrdersOn = false;
+/**
+ * Why the last board or unboard did nothing, shown until the next attempt.
+ *
+ * The HUD is rewritten every frame, so a message that is not held somewhere flashes once and is
+ * gone before it can be read.
+ */
+let transportNotice: string | null = null;
 let lastEntities: EntitySnapshot[] = [];
 let updatePixiEntities: ((entities: EntitySnapshot[]) => void) | null = null;
 let lastFrameTime: number | null = null;
@@ -182,6 +203,56 @@ function syncGroupUi(selectionSize: number): void {
   }
 }
 
+/** What the current selection offers the transport buttons. */
+interface TransportSelection {
+  /** The one selected vehicle, or null when the selection holds none or several. */
+  vehicle: EntitySnapshot | null;
+  /** Selected units on their own feet, which is who Board would try to load. */
+  boarders: EntitySnapshot[];
+  /** Passengers Unboard would let off. */
+  riders: EntitySnapshot[];
+}
+
+function readTransportSelection(
+  selected: ReadonlySet<string>
+): TransportSelection {
+  const chosen = lastEntities.filter((entity) => selected.has(entity.id));
+  const vehicles = chosen.filter((entity) => entity.seats !== null);
+  const vehicle = vehicles.length === 1 ? vehicles[0] : null;
+  const boarders = chosen.filter(
+    (entity) => entity.seats === null && entity.aboard === null
+  );
+  // Picking the truck is enough to unload it; picking the riders themselves works too.
+  const riders = vehicle
+    ? lastEntities.filter((entity) => entity.aboard === vehicle.id)
+    : chosen.filter((entity) => entity.aboard !== null);
+  return { vehicle, boarders, riders };
+}
+
+function describeTransport(vehicle: EntitySnapshot | null): string {
+  if (vehicle === null || vehicle.seats === null) return "No vehicle selected";
+  const taken = lastEntities.filter(
+    (entity) => entity.aboard === vehicle.id
+  ).length;
+  return `${vehicle.entityType} ${vehicle.id}: ${taken}/${vehicle.seats} seats taken`;
+}
+
+function syncTransportUi(selected: ReadonlySet<string>): void {
+  const { vehicle, boarders, riders } = readTransportSelection(selected);
+  const canBoard = vehicle !== null && boarders.length > 0;
+  if (boardBtn) {
+    boardBtn.hidden = !canBoard;
+    boardBtn.disabled = !canBoard;
+  }
+  if (unboardBtn) {
+    unboardBtn.hidden = riders.length === 0;
+    unboardBtn.disabled = riders.length === 0;
+  }
+  if (transportStateEl) {
+    transportStateEl.textContent = transportNotice ?? describeTransport(vehicle);
+  }
+}
+
 function syncSelectionUi(): void {
   if (!pixiApi) return;
   const ids = pixiApi.getSelectedIds();
@@ -192,7 +263,60 @@ function syncSelectionUi(): void {
     clearSelectionBtn.disabled = ids.size === 0;
   }
   syncGroupUi(ids.size);
+  syncTransportUi(ids);
   syncEntityListSelectionHighlight();
+}
+
+/**
+ * Loads the selected units onto the selected vehicle.
+ *
+ * Boarding is not a move order — the core refuses anyone standing further off than its boarding
+ * range — so a unit across the map has to be walked over first. That refusal is the interesting
+ * half of the feature, which is why it is shown rather than logged.
+ */
+async function boardSelection(): Promise<void> {
+  if (!isWasmReady() || !pixiApi) return;
+  const { vehicle, boarders } = readTransportSelection(pixiApi.getSelectedIds());
+  transportNotice = null;
+  if (vehicle === null) {
+    transportNotice = "Select exactly one vehicle along with the units to load";
+    syncSelectionUi();
+    return;
+  }
+  if (boarders.length === 0) {
+    transportNotice = "Select the units to put aboard as well";
+    syncSelectionUi();
+    return;
+  }
+  try {
+    render(
+      await boardUnits(
+        boarders.map((entity) => entity.id),
+        vehicle.id
+      )
+    );
+  } catch (e) {
+    transportNotice = `Could not board: ${e instanceof Error ? e.message : String(e)}`;
+    syncSelectionUi();
+  }
+}
+
+/** Lets the selected passengers off — or, with the vehicle selected, everyone it carries. */
+async function unboardSelection(): Promise<void> {
+  if (!isWasmReady() || !pixiApi) return;
+  const { riders } = readTransportSelection(pixiApi.getSelectedIds());
+  transportNotice = null;
+  if (riders.length === 0) {
+    transportNotice = "Nobody selected is aboard anything";
+    syncSelectionUi();
+    return;
+  }
+  try {
+    render(await unboardUnits(riders.map((entity) => entity.id)));
+  } catch (e) {
+    transportNotice = `Could not unboard: ${e instanceof Error ? e.message : String(e)}`;
+    syncSelectionUi();
+  }
 }
 
 /**
@@ -349,10 +473,18 @@ async function run(): Promise<void> {
       window.addEventListener("keydown", (ev) => {
         if (ev.key === "Escape") clearSelection();
         if (ev.key === "g" || ev.key === "G") void formGroupFromSelection();
+        if (ev.key === "b" || ev.key === "B") void boardSelection();
+        if (ev.key === "u" || ev.key === "U") void unboardSelection();
       });
       clearSelectionBtn?.addEventListener("click", clearSelection);
       formGroupBtn?.addEventListener("click", () => {
         void formGroupFromSelection();
+      });
+      boardBtn?.addEventListener("click", () => {
+        void boardSelection();
+      });
+      unboardBtn?.addEventListener("click", () => {
+        void unboardSelection();
       });
       groupModeBtn?.addEventListener("click", () => {
         groupOrdersOn = !groupOrdersOn;

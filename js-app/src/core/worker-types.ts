@@ -7,8 +7,13 @@ import type { EntityId, EntitySnapshot } from "./types";
  * Raw snapshot row as it crosses the worker boundary.
  * `faction` may be absent on malformed payloads, so the main thread normalizes it to null.
  */
-export type RawEntitySnapshot = Omit<EntitySnapshot, "faction"> & {
+export type RawEntitySnapshot = Omit<
+  EntitySnapshot,
+  "faction" | "seats" | "aboard"
+> & {
   faction?: number | null;
+  seats?: number | null;
+  aboard?: string | null;
 };
 
 export type WorkerInMessage =
@@ -34,7 +39,10 @@ export type WorkerInMessage =
   | { type: "move_to"; entityIds: string[]; point: { x: number; y: number } }
   | { type: "create_group"; faction: number }
   | { type: "add_to_group"; group: EntityId; entityIds: string[] }
-  | { type: "group_move_to"; group: EntityId; point: { x: number; y: number } };
+  | { type: "group_move_to"; group: EntityId; point: { x: number; y: number } }
+  /** Units climb aboard one vehicle; ones that are too far or find no seat are reported. */
+  | { type: "board"; units: string[]; vehicle: string }
+  | { type: "unboard"; units: string[] };
 
 export type WorkerOutMessage =
   | { type: "ready" }

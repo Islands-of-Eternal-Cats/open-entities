@@ -95,6 +95,8 @@ function rawToSnapshots(
     pos: e.pos,
     velocity: e.velocity,
     faction: e.faction ?? null,
+    seats: e.seats ?? null,
+    aboard: e.aboard ?? null,
   }));
 }
 
@@ -105,6 +107,8 @@ function rawToSnapshot(raw: RawEntitySnapshot): EntitySnapshot {
     pos: raw.pos,
     velocity: raw.velocity,
     faction: raw.faction ?? null,
+    seats: raw.seats ?? null,
+    aboard: raw.aboard ?? null,
   };
 }
 
@@ -359,6 +363,46 @@ export function orderGroupTo(
     return Promise.reject(new Error("WASM not initialized"));
   return new Promise((resolve, reject) => {
     enqueue({ type: "group_move_to", group, point }, {
+      resolve,
+      reject,
+      kind: "entities",
+    } as PendingRequest);
+  });
+}
+
+/**
+ * Puts units aboard a vehicle they are standing next to.
+ *
+ * Rejects with every refusal joined together — too far away, no seats left — after boarding the
+ * units that could go. Boarding is not a move order: walk them over first.
+ */
+export function boardUnits(
+  units: string[],
+  vehicle: string
+): Promise<EntitySnapshot[]> {
+  if (!worker || !initialized)
+    return Promise.reject(new Error("WASM not initialized"));
+  if (units.length === 0) {
+    return Promise.reject(new Error("boardUnits: no entity ids"));
+  }
+  return new Promise((resolve, reject) => {
+    enqueue({ type: "board", units, vehicle }, {
+      resolve,
+      reject,
+      kind: "entities",
+    } as PendingRequest);
+  });
+}
+
+/** Lets passengers off, beside whatever they were riding. */
+export function unboardUnits(units: string[]): Promise<EntitySnapshot[]> {
+  if (!worker || !initialized)
+    return Promise.reject(new Error("WASM not initialized"));
+  if (units.length === 0) {
+    return Promise.reject(new Error("unboardUnits: no entity ids"));
+  }
+  return new Promise((resolve, reject) => {
+    enqueue({ type: "unboard", units }, {
       resolve,
       reject,
       kind: "entities",
