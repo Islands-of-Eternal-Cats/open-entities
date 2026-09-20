@@ -154,7 +154,9 @@ impl Api {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::{BaseMoveSpeed, Faction, OrderSource, Position, Velocity};
+    use crate::components::{
+        BaseMoveSpeed, Faction, ManualActive, NeedsMission, OrderSource, Position, Velocity,
+    };
 
     fn spawn_unit(api: &mut Api, faction: u32, x: f32, y: f32) -> EntityId {
         let entity = api
@@ -333,6 +335,98 @@ mod tests {
 
         assert_eq!(api.mission_of(group), Some(second));
         assert!(api.mission_assignees(first).is_empty());
+    }
+
+    #[test]
+    fn a_freed_group_picks_up_the_next_mission() {
+        let mut api = Api::new();
+        let (group, _) = group_with_one_unit(&mut api);
+        let near = api.create_mission(MoveTarget { x: 0.0, y: 0.0 }, 1.0);
+        let next = api.create_mission(MoveTarget { x: 40.0, y: 0.0 }, 1.0);
+        api.assign_group(near, group).expect("assign");
+
+        // The unit is standing on `near`, so it closes on the first tick and the planner runs.
+        api.tick(16).expect("tick");
+
+        assert!(api.is_mission_completed(near));
+        assert_eq!(
+            api.mission_of(group),
+            Some(next),
+            "the group moves on instead of standing idle"
+        );
+    }
+
+    #[test]
+    fn the_planner_takes_the_nearest_open_mission() {
+        let mut api = Api::new();
+        let (group, _) = group_with_one_unit(&mut api);
+        let done = api.create_mission(MoveTarget { x: 0.0, y: 0.0 }, 1.0);
+        let far = api.create_mission(MoveTarget { x: 500.0, y: 0.0 }, 1.0);
+        let near = api.create_mission(MoveTarget { x: 20.0, y: 0.0 }, 1.0);
+        api.assign_group(done, group).expect("assign");
+
+        api.tick(16).expect("tick");
+
+        assert_eq!(api.mission_of(group), Some(near));
+        assert!(api.mission_assignees(far).is_empty());
+    }
+
+    #[test]
+    fn a_freed_group_with_nothing_left_to_do_stands_idle() {
+        let mut api = Api::new();
+        let (group, _) = group_with_one_unit(&mut api);
+        let only = api.create_mission(MoveTarget { x: 0.0, y: 0.0 }, 1.0);
+        api.assign_group(only, group).expect("assign");
+
+        api.tick(16).expect("tick");
+        api.tick(16).expect("tick");
+
+        assert!(api.is_mission_completed(only));
+        assert_eq!(api.mission_of(group), None);
+    }
+
+    #[test]
+    fn the_planner_leaves_a_manual_group_alone() {
+        let mut api = Api::new();
+        let (group, _) = group_with_one_unit(&mut api);
+        api.create_mission(MoveTarget { x: 40.0, y: 0.0 }, 1.0);
+
+        // A group the planner owes a mission to, that the player has taken over in the meantime.
+        let group_entity = group.to_entity().expect("live entity");
+        api.core_mut()
+            .world_mut()
+            .entity_mut(group_entity)
+            .insert((NeedsMission, ManualActive));
+
+        api.tick(16).expect("tick");
+
+        assert_eq!(api.mission_of(group), None, "the player keeps the group");
+        assert!(
+            api.core()
+                .world()
+                .get::<NeedsMission>(group_entity)
+                .is_none(),
+            "and the planner stops asking"
+        );
+    }
+
+    #[test]
+    fn the_planner_skips_a_group_with_nobody_left() {
+        let mut api = Api::new();
+        let (group, unit) = group_with_one_unit(&mut api);
+        let open = api.create_mission(MoveTarget { x: 40.0, y: 0.0 }, 1.0);
+        assert_eq!(api.despawn(&[unit]), 1);
+
+        let group_entity = group.to_entity().expect("live entity");
+        api.core_mut()
+            .world_mut()
+            .entity_mut(group_entity)
+            .insert(NeedsMission);
+
+        api.tick(16).expect("tick");
+
+        assert!(api.mission_assignees(open).is_empty());
+        assert_eq!(api.mission_of(group), None);
     }
 
     #[test]

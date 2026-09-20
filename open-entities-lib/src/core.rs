@@ -31,6 +31,7 @@ impl Core {
                 seek_system,
                 movement_system,
                 mission_completion_system,
+                replanner_system,
             )
                 .chain(),
         );

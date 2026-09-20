@@ -4,7 +4,7 @@ use bevy_ecs::prelude::*;
 
 use crate::components::{
     AssignedTo, BaseMoveSpeed, Group, ManualActive, MemberOf, Mission, MissionCompleted,
-    MoveTarget, OrderSource, Position, Velocity,
+    MoveTarget, NeedsMission, OrderSource, Position, Velocity,
 };
 use crate::orders::group_slot;
 
@@ -114,7 +114,11 @@ pub fn mission_completion_system(
 
         commands.entity(mission_entity).insert(MissionCompleted);
         for group in assignees {
-            commands.entity(group).remove::<AssignedTo>();
+            // Freed, and owed a new mission: the planner picks one up next.
+            commands
+                .entity(group)
+                .remove::<AssignedTo>()
+                .insert(NeedsMission);
         }
         for entity in roster {
             if let Ok(source) = sources.get(entity)
@@ -126,4 +130,78 @@ pub fn mission_completion_system(
             }
         }
     }
+}
+
+/// Gives a freed group its next mission, or lets it stand idle when there is none.
+///
+/// Only groups carrying [`NeedsMission`] are considered — the ones whose mission ended under them.
+/// A planner that grabbed every idle group instead would turn creating a mission into a general
+/// mobilisation, which is not what a player means by adding a task.
+///
+/// Two groups are passed over: one under [`ManualActive`], because the player is driving it, and
+/// one with no live members, because it cannot arrive anywhere. The marker is cleared either way,
+/// so nothing keeps asking.
+///
+/// Choice among open missions is the nearest to the group's centre of mass, ties broken by entity
+/// index so the same world always plans the same way.
+pub fn replanner_system(
+    mut commands: Commands,
+    groups: Query<(Entity, Option<&ManualActive>), (With<Group>, With<NeedsMission>)>,
+    missions: Query<(Entity, &Mission), Without<MissionCompleted>>,
+    members: Query<(Entity, &MemberOf)>,
+    positions: Query<&Position>,
+) {
+    for (group, manual) in &groups {
+        commands.entity(group).remove::<NeedsMission>();
+        if manual.is_some() {
+            continue;
+        }
+
+        let roster: Vec<Entity> = members
+            .iter()
+            .filter(|(_, member_of)| member_of.0 == group)
+            .map(|(entity, _)| entity)
+            .collect();
+        let Some(centre) = centre_of_mass(&roster, &positions) else {
+            continue;
+        };
+
+        let pick = missions
+            .iter()
+            .map(|(entity, mission)| {
+                let dx = mission.target.x - centre.x;
+                let dy = mission.target.y - centre.y;
+                (entity, dx.hypot(dy))
+            })
+            .min_by(|(left_entity, left), (right_entity, right)| {
+                left.total_cmp(right)
+                    .then_with(|| left_entity.index_u32().cmp(&right_entity.index_u32()))
+            });
+
+        if let Some((mission, _)) = pick {
+            commands.entity(group).insert(AssignedTo(mission));
+        }
+    }
+}
+
+/// Average position of the live members, or `None` when nobody is left to average.
+fn centre_of_mass(roster: &[Entity], positions: &Query<&Position>) -> Option<Position> {
+    let mut sum = Position { x: 0.0, y: 0.0 };
+    let mut count = 0_u32;
+    for entity in roster {
+        if let Ok(position) = positions.get(*entity) {
+            sum.x += position.x;
+            sum.y += position.y;
+            count += 1;
+        }
+    }
+    if count == 0 {
+        return None;
+    }
+    #[allow(clippy::cast_precision_loss)] // a roster large enough to lose precision is not a squad
+    let divisor = count as f32;
+    Some(Position {
+        x: sum.x / divisor,
+        y: sum.y / divisor,
+    })
 }

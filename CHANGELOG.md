@@ -14,6 +14,9 @@ to a click on the canvas.
 
 ### Added
 
+- **Replanner.** When a mission closes, the groups it released take the nearest open mission, or
+  stand idle when there is none. Only groups whose mission ended under them are planned for, and a
+  group under manual control or with no members left is skipped.
 - **Missions.** `Api::create_mission`, `assign_group`, `unassign_group`, `mission_of`,
   `mission_assignees`, `is_mission_completed`, plus two systems in the tick. Assigned groups are
   steered toward the mission; the first live member of any assignee to reach the radius closes it

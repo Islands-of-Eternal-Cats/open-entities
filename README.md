@@ -98,6 +98,11 @@ Personal and group orders are untouched: they never belonged to the mission.
 
 A completed mission stays in the world, marked, and refuses new groups.
 
+When a mission closes, the groups it released are handed to the **replanner**: each takes the
+nearest open mission, or stands idle when there is none. Only groups whose mission ended under
+them are planned for — creating a mission does not send every idle squad after it — and a group
+the player is steering by hand is left alone.
+
 ## Entity lifecycle
 
 `Api::despawn(ids)` removes entities and returns how many were actually removed — unknown, stale
