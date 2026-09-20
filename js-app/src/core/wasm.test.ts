@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+/** Bytes that satisfy the wasm magic-number guard in initWasm: "\0asm" + version 1. */
+function wasmHeaderBytes(): ArrayBuffer {
+  return new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]).buffer;
+}
+
 /** Mock fetch so initWasm gets wasm + yaml without hitting the network. */
 function installMockFetch(): void {
   vi.stubGlobal(
@@ -11,7 +16,7 @@ function installMockFetch(): void {
         ok: true,
         status: 200,
         statusText: "OK",
-        arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
+        arrayBuffer: () => Promise.resolve(wasmHeaderBytes()),
         text: () =>
           s.includes("entities.yaml") ? Promise.resolve(yaml) : Promise.resolve(""),
       } as Response);

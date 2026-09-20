@@ -7,10 +7,10 @@
         "node": ">=18"
     },
     "scripts": {
-        "dev": "vite",
-        "build": "vite build",
+        "dev": "sh build-wasm.sh && vite",
+        "build": "sh build-wasm.sh && vite build",
         "preview": "vite preview",
-        "build:wasm": "cd ../wasm-bindings && wasm-pack build --target web",
+        "build:wasm": "sh build-wasm.sh",
         "typecheck": "tsc --noEmit",
         "test": "vitest",
         "test:run": "vitest run"

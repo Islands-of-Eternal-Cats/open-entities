@@ -218,7 +218,7 @@ thread only renders and handles input.
 
 ```bash
 cd js-app
-npm run build:wasm   # first time: wasm-pack build --target web
+npm run build:wasm   # builds the wasm package and copies it into js-app/public/
 npm install
 npm run dev
 ```

@@ -5,12 +5,14 @@
 declare module "open_entities_wasm" {
   /**
    * WASM module initialization; must be called before constructing `Simulation`.
-   * Takes the fetched `.wasm` bytes; without an argument wasm-pack falls back to
-   * `import.meta.url`, which does not survive every bundler.
+   * Takes the fetched `.wasm` bytes as `{ module_or_path }`; without an argument wasm-pack
+   * falls back to `import.meta.url`, which does not survive every bundler.
    */
-  export default function init(
-    module_or_path?: string | URL | Request | ArrayBuffer
-  ): Promise<void>;
+  export interface InitOptions {
+    module_or_path?: string | URL | Request | ArrayBuffer;
+  }
+
+  export default function init(options?: InitOptions): Promise<void>;
 
   /** Stable entity identity, exactly as the world export reports each entity's `id`. */
   export interface EntityId {

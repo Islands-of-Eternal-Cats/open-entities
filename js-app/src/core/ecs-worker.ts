@@ -54,7 +54,7 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
   const msg = event.data;
   try {
     if (msg.type === "init") {
-      await initWasmModule(msg.wasmBuffer);
+      await initWasmModule({ module_or_path: msg.wasmBuffer });
       try {
         const simulation = new Simulation();
         simulation.loadTemplatesYaml(msg.templatesYaml);

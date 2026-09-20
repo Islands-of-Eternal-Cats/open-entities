@@ -10,6 +10,29 @@ import type {
 } from "./worker-types";
 import { WORLD_SIZE } from "../visualization/coords";
 
+/** First four bytes of every wasm module: \0asm. */
+const WASM_MAGIC = [0x00, 0x61, 0x73, 0x6d];
+
+/**
+ * Guard against the dev server answering with index.html instead of the module.
+ *
+ * `build-wasm.sh` copies the wasm-pack output into `public/`; when that step has not run, the
+ * fetch still succeeds with HTML and the failure surfaces deep inside wasm-bindgen as an
+ * unreadable "failed to match magic number".
+ */
+function assertLooksLikeWasm(buffer: ArrayBuffer): void {
+  const head = new Uint8Array(buffer.slice(0, WASM_MAGIC.length));
+  const ok =
+    head.length === WASM_MAGIC.length &&
+    WASM_MAGIC.every((byte, i) => head[i] === byte);
+  if (!ok) {
+    throw new Error(
+      "open_entities_wasm_bg.wasm is missing or not a wasm module — the dev server answered " +
+        "with something else. Run `npm run build:wasm` to build and copy it into public/."
+    );
+  }
+}
+
 function flushQueue(): void {
   if (!worker || pending !== null || requestQueue.length === 0) return;
   const next = requestQueue.shift()!;
@@ -157,6 +180,7 @@ export async function initWasm(): Promise<void> {
         );
       }
       const wasmBuffer = await wasmRes.arrayBuffer();
+      assertLooksLikeWasm(wasmBuffer);
       const templatesYaml = await entitiesYamlRes.text();
       const mapYaml = await initMapYamlRes.text();
 
