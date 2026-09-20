@@ -3,15 +3,17 @@
  */
 import "./styles.css";
 import {
+  createGroupWith,
   initWasm,
   isWasmReady,
   moveSelectedTo,
+  orderGroupTo,
   snapshot,
   tick,
   spawnRandomAt,
   spawnAt,
 } from "./core/wasm";
-import type { EntitySnapshot, Pos } from "./core/types";
+import type { EntityId, EntitySnapshot, Pos } from "./core/types";
 import { renderEntities } from "./visualization/render";
 import { initPixiCanvas } from "./visualization/pixi-canvas";
 import { WORLD_SIZE } from "./visualization/coords";
@@ -23,6 +25,13 @@ const canvasContainer = document.getElementById("canvas-container");
 const clearSelectionBtn = document.getElementById(
   "clear-selection"
 ) as HTMLButtonElement | null;
+const formGroupBtn = document.getElementById(
+  "form-group"
+) as HTMLButtonElement | null;
+const groupModeBtn = document.getElementById(
+  "group-mode"
+) as HTMLButtonElement | null;
+const groupStateEl = document.getElementById("group-state");
 const trainButtons = Array.from(
   document.querySelectorAll<HTMLButtonElement>("[data-train-type]")
 );
@@ -39,6 +48,17 @@ type PixiApi = {
 };
 
 let pixiApi: PixiApi | null = null;
+/** The group the demo commands, once the player has formed one. */
+let activeGroup: EntityId | null = null;
+/** Ids that went into that group, for the HUD line. */
+let groupMemberIds: string[] = [];
+/**
+ * When on, a click on empty ground is a *group* order instead of a personal one.
+ *
+ * The difference is the point of the demo: a personal order outranks group steering, so a unit
+ * ordered by hand keeps walking its own way while the rest of the group turns.
+ */
+let groupOrdersOn = false;
 let lastEntities: EntitySnapshot[] = [];
 let updatePixiEntities: ((entities: EntitySnapshot[]) => void) | null = null;
 let lastFrameTime: number | null = null;
@@ -143,6 +163,25 @@ function syncEntityListSelectionHighlight(): void {
   }
 }
 
+function syncGroupUi(selectionSize: number): void {
+  if (formGroupBtn) {
+    formGroupBtn.hidden = selectionSize === 0;
+    formGroupBtn.disabled = selectionSize === 0;
+  }
+  if (groupModeBtn) {
+    groupModeBtn.hidden = activeGroup === null;
+    groupModeBtn.disabled = activeGroup === null;
+    groupModeBtn.textContent = `Group orders: ${groupOrdersOn ? "on" : "off"}`;
+    groupModeBtn.setAttribute("aria-pressed", String(groupOrdersOn));
+  }
+  if (groupStateEl) {
+    groupStateEl.textContent =
+      activeGroup === null
+        ? "No group"
+        : `Group ${activeGroup.index}: ${groupMemberIds.length} units`;
+  }
+}
+
 function syncSelectionUi(): void {
   if (!pixiApi) return;
   const ids = pixiApi.getSelectedIds();
@@ -152,7 +191,31 @@ function syncSelectionUi(): void {
     clearSelectionBtn.hidden = ids.size === 0;
     clearSelectionBtn.disabled = ids.size === 0;
   }
+  syncGroupUi(ids.size);
   syncEntityListSelectionHighlight();
+}
+
+/**
+ * Forms a group out of whatever is selected.
+ *
+ * The faction comes from the first selected unit; a group commands one faction, so units of
+ * another are refused by the core and the call fails loudly rather than half-forming a group.
+ */
+async function formGroupFromSelection(): Promise<void> {
+  if (!isWasmReady() || !pixiApi) return;
+  const ids = [...pixiApi.getSelectedIds()];
+  if (ids.length === 0) return;
+  const first = lastEntities.find((entity) => entity.id === ids[0]);
+  if (!first || first.faction === null) return;
+
+  try {
+    activeGroup = await createGroupWith(first.faction, ids);
+    groupMemberIds = ids;
+    groupOrdersOn = true;
+    syncSelectionUi();
+  } catch (e) {
+    console.error("createGroupWith error:", e);
+  }
 }
 
 function render(entities: EntitySnapshot[]): void {
@@ -232,14 +295,20 @@ async function run(): Promise<void> {
         },
         onMoveOrder: async (world) => {
           if (!isWasmReady()) return;
-          const ids = [...pixi.getSelectedIds()];
-          if (ids.length === 0) return;
           try {
+            if (groupOrdersOn && activeGroup !== null) {
+              const entities = await orderGroupTo(activeGroup, world);
+              pixi.showMoveTarget(world);
+              render(entities);
+              return;
+            }
+            const ids = [...pixi.getSelectedIds()];
+            if (ids.length === 0) return;
             const entities = await moveSelectedTo(ids, world);
             pixi.showMoveTarget(world);
             render(entities);
           } catch (e) {
-            console.error("moveSelectedTo error:", e);
+            console.error("move order error:", e);
           }
         },
       });
@@ -255,8 +324,16 @@ async function run(): Promise<void> {
       };
       window.addEventListener("keydown", (ev) => {
         if (ev.key === "Escape") clearSelection();
+        if (ev.key === "g" || ev.key === "G") void formGroupFromSelection();
       });
       clearSelectionBtn?.addEventListener("click", clearSelection);
+      formGroupBtn?.addEventListener("click", () => {
+        void formGroupFromSelection();
+      });
+      groupModeBtn?.addEventListener("click", () => {
+        groupOrdersOn = !groupOrdersOn;
+        syncSelectionUi();
+      });
     }
 
     entityListEl?.addEventListener("click", (ev) => {

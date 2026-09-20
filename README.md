@@ -254,6 +254,17 @@ make wasm-check
 | `orderStop(ids)` | `order_stop` |
 | `despawn(ids)` | `despawn` → count removed |
 | `isAlive(id)` | `is_alive` |
+| `createGroup(faction)` | `create_group` |
+| `addToGroup(groupId, unitId)` | `add_to_group` |
+| `removeFromGroup(unitId)` | `remove_from_group` |
+| `groupOf(unitId)` | `group_of` |
+| `groupMembers(groupId)` | `group_members` |
+| `orderGroupMoveTo(groupId, x, y)` | `order_group_move_to` |
+| `isGroupManual(groupId)` / `clearGroupManual(groupId)` | `is_group_manual` / `clear_group_manual` |
+| `createMission(x, y, radius)` | `create_mission` |
+| `assignGroup(missionId, groupId)` | `assign_group` |
+| `missionOf(groupId)` | `mission_of` |
+| `isMissionCompleted(missionId)` | `is_mission_completed` |
 | `loadMapYaml(yaml)` | `load_map_yaml` → array of ids |
 | `mapBounds()` | `map_bounds` → `{width, height}` or `null` |
 | `hello()` | `hello` |
@@ -274,6 +285,11 @@ npm run build:wasm   # builds the wasm package and copies it into js-app/public/
 npm install
 npm run dev
 ```
+
+Press **G** or hit **Form group** to make a group out of the selection, then toggle **Group
+orders**: a click on empty ground becomes a group order instead of a personal one. Give one unit a
+personal order first and watch it keep its own course while the rest of the group turns — that is
+the priority rule, visible.
 
 WASM rebuilds automatically when a `.rs` file under `open-entities-lib/` or `wasm-bindings/`
 changes. The boundary between the WASM core and the visualization — message protocol, id packing,

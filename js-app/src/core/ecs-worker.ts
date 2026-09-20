@@ -110,6 +110,42 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
       return;
     }
 
+    if (msg.type === "create_group") {
+      try {
+        post({ type: "id", id: sim.createGroup(msg.faction) });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        post({ type: "error", message });
+      }
+      return;
+    }
+
+    if (msg.type === "add_to_group") {
+      try {
+        for (const key of msg.entityIds) {
+          sim.addToGroup(msg.group, keyToEntityId(key));
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        post({ type: "error", message });
+        return;
+      }
+      post(entitiesMessage(sim));
+      return;
+    }
+
+    if (msg.type === "group_move_to") {
+      try {
+        sim.orderGroupMoveTo(msg.group, msg.point.x, msg.point.y);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        post({ type: "error", message });
+        return;
+      }
+      post(entitiesMessage(sim));
+      return;
+    }
+
     if (msg.type === "move_to") {
       try {
         sim.orderMoveTo(

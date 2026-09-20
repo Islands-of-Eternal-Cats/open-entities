@@ -1,5 +1,6 @@
 use open_entities::components::MoveTarget;
 use open_entities::{Api, EntityComponents, EntityId, ExportError, ImportError, hello};
+use open_entities::{GroupError, MissionError};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -147,6 +148,140 @@ impl Simulation {
         let id: EntityId = serde_wasm_bindgen::from_value(id)
             .map_err(|e| JsValue::from_str(&format!("invalid entity id: {e}")))?;
         Ok(self.api.is_alive(id))
+    }
+
+    /// JS: `createGroup(faction)` — a new empty group for that faction.
+    #[wasm_bindgen(js_name = createGroup)]
+    pub fn create_group(&mut self, faction: u32) -> Result<JsValue, JsValue> {
+        let id = self.api.create_group(faction);
+        serde_wasm_bindgen::to_value(&id)
+            .map_err(|e| JsValue::from_str(&format!("failed to serialize id: {e}")))
+    }
+
+    /// JS: `addToGroup(groupId, unitId)` — join, leaving whatever group the unit was in.
+    #[wasm_bindgen(js_name = addToGroup)]
+    pub fn add_to_group(&mut self, group: JsValue, unit: JsValue) -> Result<(), JsValue> {
+        let group: EntityId = serde_wasm_bindgen::from_value(group)
+            .map_err(|e| JsValue::from_str(&format!("invalid group id: {e}")))?;
+        let unit: EntityId = serde_wasm_bindgen::from_value(unit)
+            .map_err(|e| JsValue::from_str(&format!("invalid entity id: {e}")))?;
+        self.api
+            .add_to_group(group, unit)
+            .map_err(|e: GroupError| JsValue::from_str(&e.to_string()))
+    }
+
+    /// JS: `removeFromGroup(unitId)` — `true` when it was in a group.
+    #[wasm_bindgen(js_name = removeFromGroup)]
+    pub fn remove_from_group(&mut self, unit: JsValue) -> Result<bool, JsValue> {
+        let unit: EntityId = serde_wasm_bindgen::from_value(unit)
+            .map_err(|e| JsValue::from_str(&format!("invalid entity id: {e}")))?;
+        Ok(self.api.remove_from_group(unit))
+    }
+
+    /// JS: `groupOf(unitId)` — the unit's group, or `null`.
+    #[wasm_bindgen(js_name = groupOf)]
+    pub fn group_of(&self, unit: JsValue) -> Result<JsValue, JsValue> {
+        let unit: EntityId = serde_wasm_bindgen::from_value(unit)
+            .map_err(|e| JsValue::from_str(&format!("invalid entity id: {e}")))?;
+        match self.api.group_of(unit) {
+            Some(group) => serde_wasm_bindgen::to_value(&group)
+                .map_err(|e| JsValue::from_str(&format!("failed to serialize id: {e}"))),
+            None => Ok(JsValue::NULL),
+        }
+    }
+
+    /// JS: `groupMembers(groupId)` — the group's live members.
+    #[wasm_bindgen(js_name = groupMembers)]
+    pub fn group_members(&mut self, group: JsValue) -> Result<JsValue, JsValue> {
+        let group: EntityId = serde_wasm_bindgen::from_value(group)
+            .map_err(|e| JsValue::from_str(&format!("invalid group id: {e}")))?;
+        let members = self.api.group_members(group);
+        serde_wasm_bindgen::to_value(&members)
+            .map_err(|e| JsValue::from_str(&format!("failed to serialize ids: {e}")))
+    }
+
+    /// JS: `orderGroupMoveTo(groupId, x, y)` — a manual order to the whole group.
+    ///
+    /// Returns how many members took it. The group is left under manual control, and members
+    /// following a personal order keep it.
+    #[wasm_bindgen(js_name = orderGroupMoveTo)]
+    pub fn order_group_move_to(&mut self, group: JsValue, x: f32, y: f32) -> Result<u32, JsValue> {
+        let group: EntityId = serde_wasm_bindgen::from_value(group)
+            .map_err(|e| JsValue::from_str(&format!("invalid group id: {e}")))?;
+        if !x.is_finite() || !y.is_finite() {
+            return Err(JsValue::from_str(
+                "orderGroupMoveTo(groupId, x, y) requires finite coordinates",
+            ));
+        }
+        let report = self
+            .api
+            .order_group_move_to(group, MoveTarget { x, y })
+            .map_err(|e: GroupError| JsValue::from_str(&e.to_string()))?;
+        u32::try_from(report.ordered)
+            .map_err(|_| JsValue::from_str("orderGroupMoveTo ordered more than u32 can hold"))
+    }
+
+    /// JS: `isGroupManual(groupId)`.
+    #[wasm_bindgen(js_name = isGroupManual)]
+    pub fn is_group_manual(&self, group: JsValue) -> Result<bool, JsValue> {
+        let group: EntityId = serde_wasm_bindgen::from_value(group)
+            .map_err(|e| JsValue::from_str(&format!("invalid group id: {e}")))?;
+        Ok(self.api.is_group_manual(group))
+    }
+
+    /// JS: `clearGroupManual(groupId)` — hand the group back to automation.
+    #[wasm_bindgen(js_name = clearGroupManual)]
+    pub fn clear_group_manual(&mut self, group: JsValue) -> Result<bool, JsValue> {
+        let group: EntityId = serde_wasm_bindgen::from_value(group)
+            .map_err(|e| JsValue::from_str(&format!("invalid group id: {e}")))?;
+        self.api
+            .clear_group_manual(group)
+            .map_err(|e: GroupError| JsValue::from_str(&e.to_string()))
+    }
+
+    /// JS: `createMission(x, y, radius)`.
+    #[wasm_bindgen(js_name = createMission)]
+    pub fn create_mission(&mut self, x: f32, y: f32, radius: f32) -> Result<JsValue, JsValue> {
+        if !x.is_finite() || !y.is_finite() || !radius.is_finite() {
+            return Err(JsValue::from_str(
+                "createMission(x, y, radius) requires finite numbers",
+            ));
+        }
+        let id = self.api.create_mission(MoveTarget { x, y }, radius);
+        serde_wasm_bindgen::to_value(&id)
+            .map_err(|e| JsValue::from_str(&format!("failed to serialize id: {e}")))
+    }
+
+    /// JS: `assignGroup(missionId, groupId)` — send a group to a mission.
+    #[wasm_bindgen(js_name = assignGroup)]
+    pub fn assign_group(&mut self, mission: JsValue, group: JsValue) -> Result<(), JsValue> {
+        let mission: EntityId = serde_wasm_bindgen::from_value(mission)
+            .map_err(|e| JsValue::from_str(&format!("invalid mission id: {e}")))?;
+        let group: EntityId = serde_wasm_bindgen::from_value(group)
+            .map_err(|e| JsValue::from_str(&format!("invalid group id: {e}")))?;
+        self.api
+            .assign_group(mission, group)
+            .map_err(|e: MissionError| JsValue::from_str(&e.to_string()))
+    }
+
+    /// JS: `missionOf(groupId)` — the mission the group is working, or `null`.
+    #[wasm_bindgen(js_name = missionOf)]
+    pub fn mission_of(&self, group: JsValue) -> Result<JsValue, JsValue> {
+        let group: EntityId = serde_wasm_bindgen::from_value(group)
+            .map_err(|e| JsValue::from_str(&format!("invalid group id: {e}")))?;
+        match self.api.mission_of(group) {
+            Some(mission) => serde_wasm_bindgen::to_value(&mission)
+                .map_err(|e| JsValue::from_str(&format!("failed to serialize id: {e}"))),
+            None => Ok(JsValue::NULL),
+        }
+    }
+
+    /// JS: `isMissionCompleted(missionId)`.
+    #[wasm_bindgen(js_name = isMissionCompleted)]
+    pub fn is_mission_completed(&self, mission: JsValue) -> Result<bool, JsValue> {
+        let mission: EntityId = serde_wasm_bindgen::from_value(mission)
+            .map_err(|e| JsValue::from_str(&format!("invalid mission id: {e}")))?;
+        Ok(self.api.is_mission_completed(mission))
     }
 
     /// JS: `tick(dtMs)` — positive integer milliseconds only.

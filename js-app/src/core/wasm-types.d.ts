@@ -60,6 +60,42 @@ declare module "open_entities_wasm" {
     /** Whole world as JSON (schema version 3). */
     getWorldAsJson(): string;
 
+    /** A new empty group for that faction. */
+    createGroup(faction: number): EntityId;
+
+    /** Join a group, leaving whatever group the unit was in. */
+    addToGroup(group: EntityId, unit: EntityId): void;
+
+    /** Leave whatever group the unit is in; true when it was in one. */
+    removeFromGroup(unit: EntityId): boolean;
+
+    /** The unit's group, or null. */
+    groupOf(unit: EntityId): EntityId | null;
+
+    /** The group's live members. */
+    groupMembers(group: EntityId): EntityId[];
+
+    /** Manual order to a whole group; returns how many members took it. */
+    orderGroupMoveTo(group: EntityId, x: number, y: number): number;
+
+    /** True while the player is steering the group by hand. */
+    isGroupManual(group: EntityId): boolean;
+
+    /** Hand the group back to automation; true when it was manual. */
+    clearGroupManual(group: EntityId): boolean;
+
+    /** A point automation should reach, and how close counts as reached. */
+    createMission(x: number, y: number, radius: number): EntityId;
+
+    /** Send a group to a mission. */
+    assignGroup(mission: EntityId, group: EntityId): void;
+
+    /** The mission this group is working, or null. */
+    missionOf(group: EntityId): EntityId | null;
+
+    /** True once somebody reached the mission. */
+    isMissionCompleted(mission: EntityId): boolean;
+
     /** Advance the simulation; delta is a positive integer number of milliseconds. */
     tick(dtMs: number): void;
   }

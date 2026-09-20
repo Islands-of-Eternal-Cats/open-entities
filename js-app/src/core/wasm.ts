@@ -2,7 +2,7 @@
  * WASM core wrapper. Initializes ECS in a web worker and re-exports the game API.
  * Visualization layer depends only on this module and types from ./types.
  */
-import type { EntitySnapshot } from "./types";
+import type { EntityId, EntitySnapshot } from "./types";
 import type {
   RawEntitySnapshot,
   WorkerInMessage,
@@ -57,6 +57,11 @@ type PendingRequest =
       resolve: (value: EntitySnapshot) => void;
       reject: (reason: unknown) => void;
       kind: "spawned";
+    }
+  | {
+      resolve: (value: EntityId) => void;
+      reject: (reason: unknown) => void;
+      kind: "id";
     };
 let pending: PendingRequest | null = null;
 
@@ -72,6 +77,12 @@ type QueuedRequest =
       reject: (reason: unknown) => void;
       message: WorkerInMessage;
       kind: "spawned";
+    }
+  | {
+      resolve: (value: EntityId) => void;
+      reject: (reason: unknown) => void;
+      message: WorkerInMessage;
+      kind: "id";
     };
 const requestQueue: QueuedRequest[] = [];
 
@@ -132,7 +143,26 @@ function onMessage(event: MessageEvent<WorkerOutMessage>): void {
     pending.resolve(rawToSnapshot(msg.entity));
     pending = null;
     flushQueue();
+    return;
   }
+  if (msg.type === "id" && pending && pending.kind === "id") {
+    pending.resolve(msg.id);
+    pending = null;
+    flushQueue();
+  }
+}
+
+/** Sends a request now when the worker is free, or queues it behind the ones already waiting. */
+function enqueue(
+  message: WorkerInMessage,
+  request: Omit<PendingRequest, "message">
+): void {
+  if (pending === null && requestQueue.length === 0) {
+    pending = request as PendingRequest;
+    worker!.postMessage(message);
+    return;
+  }
+  requestQueue.push({ ...request, message } as QueuedRequest);
 }
 
 export async function initWasm(): Promise<void> {
@@ -278,6 +308,61 @@ export function moveSelectedTo(
     } else {
       requestQueue.push({ resolve, reject, message, kind: "entities" });
     }
+  });
+}
+
+/**
+ * Forms a group for a faction and puts the given units in it.
+ *
+ * Resolves with the group id; keep it, every group call takes it.
+ */
+export function createGroupWith(
+  faction: number,
+  entityIds: string[]
+): Promise<EntityId> {
+  if (!worker || !initialized)
+    return Promise.reject(new Error("WASM not initialized"));
+  if (entityIds.length === 0) {
+    return Promise.reject(new Error("createGroupWith: no entity ids"));
+  }
+  return new Promise<EntityId>((resolve, reject) => {
+    enqueue(
+      { type: "create_group", faction },
+      { resolve, reject, kind: "id" }
+    );
+  }).then(
+    (group) =>
+      new Promise<EntityId>((resolve, reject) => {
+        enqueue(
+          { type: "add_to_group", group, entityIds },
+          {
+            resolve: () => resolve(group),
+            reject,
+            kind: "entities",
+          }
+        );
+      })
+  );
+}
+
+/**
+ * Orders a whole group to a world point.
+ *
+ * Unlike `moveSelectedTo` this is a *group* order: members already following a personal order
+ * keep it, and the group is left under manual control.
+ */
+export function orderGroupTo(
+  group: EntityId,
+  point: { x: number; y: number }
+): Promise<EntitySnapshot[]> {
+  if (!worker || !initialized)
+    return Promise.reject(new Error("WASM not initialized"));
+  return new Promise((resolve, reject) => {
+    enqueue({ type: "group_move_to", group, point }, {
+      resolve,
+      reject,
+      kind: "entities",
+    } as PendingRequest);
   });
 }
 

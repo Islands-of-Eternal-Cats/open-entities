@@ -1,7 +1,7 @@
 /**
  * Message types for main thread ↔ ECS web worker.
  */
-import type { EntitySnapshot } from "./types";
+import type { EntityId, EntitySnapshot } from "./types";
 
 /**
  * Raw snapshot row as it crosses the worker boundary.
@@ -31,10 +31,14 @@ export type WorkerInMessage =
       /** When set, the ECS `Faction` component is attached with this id. */
       faction?: number;
     }
-  | { type: "move_to"; entityIds: string[]; point: { x: number; y: number } };
+  | { type: "move_to"; entityIds: string[]; point: { x: number; y: number } }
+  | { type: "create_group"; faction: number }
+  | { type: "add_to_group"; group: EntityId; entityIds: string[] }
+  | { type: "group_move_to"; group: EntityId; point: { x: number; y: number } };
 
 export type WorkerOutMessage =
   | { type: "ready" }
   | { type: "error"; message: string }
   | { type: "entities"; entities: RawEntitySnapshot[] }
-  | { type: "spawned"; entity: RawEntitySnapshot };
+  | { type: "spawned"; entity: RawEntitySnapshot }
+  | { type: "id"; id: EntityId };

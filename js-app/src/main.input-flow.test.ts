@@ -10,6 +10,8 @@ const state = vi.hoisted(() => {
       selectedIds.clear();
     }),
     showMoveTarget: vi.fn(),
+    createGroupWith: vi.fn(async () => ({ index: 7, generation: 0 })),
+    orderGroupTo: vi.fn(async () => [] as EntitySnapshot[]),
     moveSelectedTo: vi.fn(async () => [
       {
         id: "u1",
@@ -27,10 +29,20 @@ vi.mock("./core/wasm", () => ({
   initWasm: vi.fn(async () => {}),
   isWasmReady: vi.fn(() => true),
   moveSelectedTo: state.moveSelectedTo,
+  createGroupWith: state.createGroupWith,
+  orderGroupTo: state.orderGroupTo,
   tick: vi.fn(async () => [] as EntitySnapshot[]),
   // main.ts imports these two as well; leaving them out made run() throw on the first
   // `await snapshot()` and swallow the rest of the wiring.
-  snapshot: vi.fn(async () => [] as EntitySnapshot[]),
+  snapshot: vi.fn(async () => [
+    {
+      id: "u1",
+      entityType: "mover",
+      pos: { x: 0, y: 0 },
+      velocity: null,
+      faction: 1,
+    } satisfies EntitySnapshot,
+  ]),
   spawnRandomAt: vi.fn(async () => [] as EntitySnapshot[]),
   spawnAt: vi.fn(async () => [] as EntitySnapshot[]),
 }));
@@ -60,6 +72,7 @@ vi.mock("./visualization/pixi-canvas", () => ({
           options?.onSelectionChange?.(state.selectedIds);
         }),
         showMoveTarget: state.showMoveTarget,
+        LookAt: vi.fn(() => true),
       };
     }
   ),
@@ -72,6 +85,9 @@ function mountMainDom(): void {
     <div id="entity-list"></div>
     <div id="canvas-container"></div>
     <button id="clear-selection" hidden disabled></button>
+    <button id="form-group" hidden disabled></button>
+    <button id="group-mode" hidden disabled></button>
+    <p id="group-state"></p>
   `;
 }
 
@@ -89,6 +105,8 @@ describe("main input wiring", () => {
     state.clearSelection.mockClear();
     state.showMoveTarget.mockClear();
     state.moveSelectedTo.mockClear();
+    state.createGroupWith.mockClear();
+    state.orderGroupTo.mockClear();
     state.renderEntities.mockClear();
     vi.stubGlobal("requestAnimationFrame", vi.fn());
     mountMainDom();
@@ -112,6 +130,27 @@ describe("main input wiring", () => {
     clearButton.click();
 
     expect(state.clearSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it("routes a click to the group once one is formed", async () => {
+    await import("./main");
+    await flush();
+
+    // main.ts reads the faction of the first selected unit, so the snapshot has to carry one.
+    const rendered = state.renderEntities.mock.calls.at(-1);
+    expect(rendered).toBeDefined();
+
+    (document.getElementById("form-group") as HTMLButtonElement).click();
+    await flush();
+    await flush();
+
+    await state.onMoveOrder?.({ x: 10, y: 20 });
+
+    expect(state.orderGroupTo).toHaveBeenCalledWith(
+      { index: 7, generation: 0 },
+      { x: 10, y: 20 }
+    );
+    expect(state.moveSelectedTo).not.toHaveBeenCalled();
   });
 
   it("keeps move-order flow active via onMoveOrder callback", async () => {

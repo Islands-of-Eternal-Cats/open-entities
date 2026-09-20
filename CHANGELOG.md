@@ -14,6 +14,9 @@ to a click on the canvas.
 
 ### Added
 
+- **Groups and missions in JavaScript.** The whole group and mission surface is exposed through
+  `Simulation`, and the browser demo can form a group from the selection (**G**) and switch its
+  clicks between personal and group orders, which makes the priority rule visible on screen.
 - **Replanner.** When a mission closes, the groups it released take the nearest open mission, or
   stand idle when there is none. Only groups whose mission ended under them are planned for, and a
   group under manual control or with no members left is skipped.
