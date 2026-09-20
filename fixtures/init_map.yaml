@@ -1,0 +1,20 @@
+# Starting layout: world bounds and the entities a world begins with.
+# Each entry names a template from spawn_entity_templates.yaml; the remaining keys are the same
+# overrides `spawn_entity` takes. Nothing is inserted implicitly — an entry without `velocity`
+# gets no Velocity component, and therefore never drifts.
+
+map:
+  width: 200.0
+  height: 200.0
+
+spawns:
+  - template: marker
+    position: { x: 10.0, y: 10.0 }
+
+  - template: scout
+    position: { x: 20.0, y: 10.0 }
+    faction: 1
+
+  - template: unit
+    position: { x: 24.0, y: 10.0 }
+    faction: 1

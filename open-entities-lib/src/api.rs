@@ -1,5 +1,6 @@
 use crate::core::Core;
 use crate::import::EntityTemplates;
+use crate::map::MapBounds;
 use crate::simulation::{ArrivedThisTick, SimDelta, TickError};
 use crate::systems::MAX_DT_MS;
 
@@ -7,6 +8,7 @@ use crate::systems::MAX_DT_MS;
 pub struct Api {
     core: Core,
     pub(crate) templates: Option<EntityTemplates>,
+    pub(crate) map_bounds: Option<MapBounds>,
 }
 
 impl Api {
@@ -16,6 +18,7 @@ impl Api {
         Self {
             core: Core::new(),
             templates: None,
+            map_bounds: None,
         }
     }
 

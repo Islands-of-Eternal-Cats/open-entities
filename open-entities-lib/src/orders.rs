@@ -137,6 +137,41 @@ impl Api {
             skipped: ids.len() - count,
         }
     }
+
+    /// Stops the given entities: zeroes their [`Velocity`] and drops any [`MoveTarget`].
+    ///
+    /// Unlike [`Api::order_move_to`] this does not require a [`BaseMoveSpeed`]. In this engine a
+    /// `Velocity` is movement, so an entity that carries one without a move speed drifts until
+    /// something stops it — and this is that something.
+    ///
+    /// Ids without a `Velocity`, and repeats within one call, are reported as skipped.
+    pub fn order_stop(&mut self, ids: &[EntityId]) -> OrderReport {
+        let world = self.core_mut().world_mut();
+
+        let mut stopped: Vec<Entity> = Vec::with_capacity(ids.len());
+        for id in ids {
+            let Some(entity) = id.to_entity() else {
+                continue;
+            };
+            if stopped.contains(&entity) {
+                continue;
+            }
+            {
+                let Some(mut velocity) = world.get_mut::<Velocity>(entity) else {
+                    continue;
+                };
+                velocity.vx = 0.0;
+                velocity.vy = 0.0;
+            }
+            world.entity_mut(entity).remove::<MoveTarget>();
+            stopped.push(entity);
+        }
+
+        OrderReport {
+            ordered: stopped.len(),
+            skipped: ids.len() - stopped.len(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -266,6 +301,65 @@ mod tests {
             .expect("velocity inserted");
         assert_eq!(velocity.vx, 0.0);
         assert_eq!(velocity.vy, 0.0);
+    }
+
+    #[test]
+    fn stop_zeroes_velocity_and_drops_the_target() {
+        let mut api = Api::new();
+        let id = spawn_mover(&mut api, 0.0, 0.0);
+        api.order_move_to(&[id], MoveTarget { x: 30.0, y: 0.0 });
+        api.tick(16).expect("tick");
+
+        let report = api.order_stop(&[id]);
+
+        assert_eq!(report.ordered, 1);
+        let entity = id.to_entity().expect("entity");
+        let world = api.core_mut().world();
+        let velocity = world.get::<Velocity>(entity).expect("velocity");
+        assert_eq!(velocity.vx, 0.0);
+        assert_eq!(velocity.vy, 0.0);
+        assert!(world.get::<MoveTarget>(entity).is_none());
+    }
+
+    #[test]
+    fn stop_catches_a_drifting_entity_without_base_move_speed() {
+        let mut api = Api::new();
+        // No BaseMoveSpeed: order_move_to cannot reach it, and nothing else would ever stop it.
+        let entity = api
+            .core_mut()
+            .world_mut()
+            .spawn((
+                Position { x: 0.0, y: 0.0 },
+                Velocity { vx: 0.5, vy: 0.0 },
+            ))
+            .id();
+        let id = EntityId::of(entity);
+
+        api.tick(100).expect("tick");
+        let drifted = api.core_mut().world().get::<Position>(entity).expect("position").x;
+        assert!(drifted > 0.0, "entity should have drifted");
+
+        assert_eq!(api.order_move_to(&[id], MoveTarget { x: 0.0, y: 0.0 }).ordered, 0);
+        assert_eq!(api.order_stop(&[id]).ordered, 1);
+
+        api.tick(100).expect("tick");
+        let after = api.core_mut().world().get::<Position>(entity).expect("position").x;
+        assert!((after - drifted).abs() < 1e-6, "entity should stay put after stop");
+    }
+
+    #[test]
+    fn stop_skips_entities_without_velocity() {
+        let mut api = Api::new();
+        let statue = api
+            .core_mut()
+            .world_mut()
+            .spawn(Position { x: 1.0, y: 1.0 })
+            .id();
+
+        let report = api.order_stop(&[EntityId::of(statue)]);
+
+        assert_eq!(report.ordered, 0);
+        assert_eq!(report.skipped, 1);
     }
 
     #[test]

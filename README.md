@@ -35,6 +35,37 @@ does not pile onto one spot. The returned `OrderReport` says how many took the o
 api.order_move_to(&[id], MoveTarget { x: 20.0, y: 0.0 });
 ```
 
+`Api::order_stop(ids)` is the counterpart: it zeroes `Velocity` and drops any `MoveTarget`. It does
+**not** require a `BaseMoveSpeed`, because in this engine a `Velocity` alone is movement — an entity
+that carries one without a move speed drifts until something stops it.
+
+## Map layout
+
+`Api::load_map_yaml(yaml)` spawns a starting layout and records its bounds. An entry names a
+template and carries the same override fields as `spawn_entity`, so there is nothing new to learn
+beyond the `template` key:
+
+```yaml
+map:
+  width: 200.0
+  height: 200.0
+
+spawns:
+  - template: scout
+    position: { x: 20.0, y: 10.0 }
+    faction: 1
+```
+
+Template names are checked before anything is spawned, so a typo leaves the world untouched rather
+than half-populated. The loader inserts only what the template and the entry ask for — an entry
+without `velocity` gets no `Velocity` component, and therefore never drifts.
+
+`map` is optional and purely informational: `Api::map_bounds()` hands it to a host that needs to
+frame or clamp a view. The simulation does not enforce it — nothing stops an entity from leaving
+the map.
+
+See [`fixtures/init_map.yaml`](fixtures/init_map.yaml).
+
 ## Import and spawn
 
 Load named entity templates from YAML, then spawn by template name with optional overrides:
@@ -64,7 +95,7 @@ To add a component: implement the type under `components/`, add one `register_co
 
 ## Requirements
 
-- Rust **1.85+** (edition 2024; `bevy_ecs 0.18` may require a newer toolchain — check `cargo build` if compile fails)
+- Rust **1.85+** (edition 2024; `bevy_ecs 0.19` may require a newer toolchain — check `cargo build` if compile fails)
 
 Check your toolchain:
 
@@ -141,6 +172,9 @@ make wasm-check
 | `getWorldAsJson()` | `world_json` |
 | `tick(dtMs)` | `tick` |
 | `orderMoveTo(ids, x, y)` | `order_move_to` |
+| `orderStop(ids)` | `order_stop` |
+| `loadMapYaml(yaml)` | `load_map_yaml` → array of ids |
+| `mapBounds()` | `map_bounds` → `{width, height}` or `null` |
 | `hello()` | `hello` |
 
 `tick(0)`, non-integer, NaN, or non-finite `dtMs` are rejected in JavaScript before Rust runs.

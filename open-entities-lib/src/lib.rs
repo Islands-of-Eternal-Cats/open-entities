@@ -8,6 +8,7 @@ pub mod components;
 pub mod core;
 pub mod export;
 pub mod import;
+pub mod map;
 pub mod orders;
 pub mod simulation;
 pub mod systems;
@@ -20,6 +21,7 @@ pub use core::Core;
 pub use export::ExportError;
 pub use entity_components::EntityComponents;
 pub use import::ImportError;
+pub use map::{MapBounds, MapError};
 pub use orders::{EntityId, OrderReport};
 pub use simulation::TickError;
 

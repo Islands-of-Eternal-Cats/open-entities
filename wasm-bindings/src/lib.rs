@@ -97,6 +97,47 @@ impl Simulation {
             .map_err(|_| JsValue::from_str("orderMoveTo ordered more entities than u32 can hold"))
     }
 
+    /// JS: `loadMapYaml(yaml)` — spawns a starting layout, returns the new entities' ids.
+    ///
+    /// Ids come back as `{index, generation}` objects, ready to pass to `orderMoveTo`. A bad
+    /// template name aborts the whole map and spawns nothing.
+    #[wasm_bindgen(js_name = loadMapYaml)]
+    pub fn load_map_yaml(&mut self, yaml: &str) -> Result<JsValue, JsValue> {
+        let spawned = self
+            .api
+            .load_map_yaml(yaml)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let ids: Vec<EntityId> = spawned.into_iter().map(EntityId::of).collect();
+        serde_wasm_bindgen::to_value(&ids)
+            .map_err(|e| JsValue::from_str(&format!("failed to serialize ids: {e}")))
+    }
+
+    /// JS: `mapBounds()` — `{width, height}` of the last loaded map, or `null`.
+    #[wasm_bindgen(js_name = mapBounds)]
+    pub fn map_bounds(&self) -> Result<JsValue, JsValue> {
+        match self.api.map_bounds() {
+            Some(bounds) => serde_wasm_bindgen::to_value(&bounds)
+                .map_err(|e| JsValue::from_str(&format!("failed to serialize map bounds: {e}"))),
+            None => Ok(JsValue::NULL),
+        }
+    }
+
+    /// JS: `orderStop(ids)` — zero velocity and drop any move target.
+    ///
+    /// Works on anything carrying a velocity, including entities that drift with no move speed.
+    /// Returns how many entities were stopped.
+    #[wasm_bindgen(js_name = orderStop)]
+    pub fn order_stop(&mut self, ids: JsValue) -> Result<u32, JsValue> {
+        let ids: Vec<EntityId> = serde_wasm_bindgen::from_value(ids)
+            .map_err(|e| JsValue::from_str(&format!("invalid entity ids: {e}")))?;
+        if ids.is_empty() {
+            return Err(JsValue::from_str("orderStop(ids) requires at least one id"));
+        }
+        let report = self.api.order_stop(&ids);
+        u32::try_from(report.ordered)
+            .map_err(|_| JsValue::from_str("orderStop stopped more entities than u32 can hold"))
+    }
+
     /// JS: `tick(dtMs)` — positive integer milliseconds only.
     #[wasm_bindgen(js_name = tick)]
     pub fn tick(&mut self, dt_ms: f64) -> Result<(), JsValue> {
@@ -280,6 +321,37 @@ mod wasm_tests {
             .expect("scout row");
         assert!((scout["position"]["x"].as_f64().unwrap() - 10.0).abs() < 0.1);
         assert!((scout["position"]["y"].as_f64().unwrap() - 7.0).abs() < 0.1);
+    }
+
+    const MAP_YAML: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../fixtures/init_map.yaml"
+    ));
+
+    #[wasm_bindgen_test]
+    fn load_map_returns_ids_and_bounds() {
+        let mut sim = Simulation::new();
+        sim.load_templates_yaml(FIXTURE_YAML)
+            .expect("load fixture");
+
+        let ids = sim.load_map_yaml(MAP_YAML).expect("load map");
+        let ids: Vec<serde_json::Value> =
+            serde_wasm_bindgen::from_value(ids).expect("ids deserialize");
+        assert_eq!(ids.len(), 3);
+        assert!(ids[0]["index"].is_number());
+        assert!(ids[0]["generation"].is_number());
+
+        let bounds = sim.map_bounds().expect("bounds");
+        let bounds: serde_json::Value =
+            serde_wasm_bindgen::from_value(bounds).expect("bounds deserialize");
+        assert_eq!(bounds["width"], 200.0);
+        assert_eq!(bounds["height"], 200.0);
+    }
+
+    #[wasm_bindgen_test]
+    fn map_bounds_is_null_before_any_map() {
+        let sim = Simulation::new();
+        assert!(sim.map_bounds().expect("bounds call").is_null());
     }
 
     #[wasm_bindgen_test]
