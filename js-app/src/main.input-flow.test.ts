@@ -28,7 +28,11 @@ vi.mock("./core/wasm", () => ({
   isWasmReady: vi.fn(() => true),
   moveSelectedTo: state.moveSelectedTo,
   tick: vi.fn(async () => [] as EntitySnapshot[]),
+  // main.ts imports these two as well; leaving them out made run() throw on the first
+  // `await snapshot()` and swallow the rest of the wiring.
+  snapshot: vi.fn(async () => [] as EntitySnapshot[]),
   spawnRandomAt: vi.fn(async () => [] as EntitySnapshot[]),
+  spawnAt: vi.fn(async () => [] as EntitySnapshot[]),
 }));
 
 vi.mock("./visualization/render", () => ({

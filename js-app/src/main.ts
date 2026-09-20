@@ -245,6 +245,10 @@ async function run(): Promise<void> {
       });
       pixiApi = pixi;
       updatePixiEntities = pixi.updateEntities;
+      // The canvas can report a selection while initPixiCanvas is still being awaited — at that
+      // point pixiApi is null and syncSelectionUi bails out, leaving the HUD hidden and its
+      // clear button disabled. Sync once now that the api is in hand.
+      syncSelectionUi();
 
       const clearSelection = (): void => {
         pixi.clearSelection();
