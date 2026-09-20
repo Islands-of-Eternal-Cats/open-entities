@@ -22,6 +22,10 @@ export default defineConfig({
     },
     server: {
         port: 5173,
+        // Fail instead of quietly moving to 5174: a second dev server on another port keeps
+        // serving the browser an older build from the port the tab is already on, and the app
+        // then complains about methods the WASM module "does not have".
+        strictPort: true,
         open: true
     },
     build: {
