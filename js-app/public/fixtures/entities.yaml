@@ -1,0 +1,35 @@
+# Entity templates for the browser demo.
+#
+# The demo owns this file: the buttons in index.html spawn `mover`, `another_mover`,
+# `static_obstacle` and `base` by name. The library's own fixtures live in /fixtures and serve the
+# Node demo and the Rust tests.
+#
+# Movement rule: a Velocity component IS movement. Only templates that should be able to move carry
+# one; `base_move_speed` on top makes a unit steerable by move orders.
+
+entities:
+  # Shared base for everything that belongs to the player.
+  unit:
+    faction: 1
+    health: { current: 100, max: 100 }
+
+  mover:
+    template: unit
+    position: { x: 0.0, y: 0.0 }
+    velocity: { vx: 0.0, vy: 0.0 }
+    base_move_speed: 45.0
+
+  another_mover:
+    template: unit
+    position: { x: 5.0, y: 5.0 }
+    velocity: { vx: 0.0, vy: 0.0 }
+    base_move_speed: 30.0
+
+  # No velocity and no move speed: cannot be ordered anywhere, and never drifts.
+  static_obstacle:
+    position: { x: 10.0, y: 10.0 }
+
+  base:
+    template: unit
+    position: { x: 20.0, y: 20.0 }
+    health: { current: 500, max: 500 }

@@ -210,6 +210,26 @@ make wasm-check
 
 Override objects use the same snake_case keys as YAML and export (`position`, `move_target`, etc.). See [`wasm-bindings/demo/run.mjs`](wasm-bindings/demo/run.mjs) for a full example.
 
+## Browser demo (js-app)
+
+An interactive RTS-style demo lives in [`js-app/`](js-app/): PixiJS canvas, marquee selection,
+move orders for a group, minimap, pan and zoom. The simulation runs in a web worker; the main
+thread only renders and handles input.
+
+```bash
+cd js-app
+npm run build:wasm   # first time: wasm-pack build --target web
+npm install
+npm run dev
+```
+
+WASM rebuilds automatically when a `.rs` file under `open-entities-lib/` or `wasm-bindings/`
+changes. The boundary between the WASM core and the visualization — message protocol, id packing,
+input semantics — is documented in [`js-app/CORE-API.md`](js-app/CORE-API.md).
+
+The demo owns its YAML under `js-app/public/fixtures/`; the library's own fixtures in `/fixtures`
+serve the Node demo and the Rust tests.
+
 ## Examples
 
 ### Spawn from YAML (default)

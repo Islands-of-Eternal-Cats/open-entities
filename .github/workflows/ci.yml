@@ -46,3 +46,25 @@ jobs:
         with:
           version: latest
       - run: make wasm-check
+
+  js-app:
+    name: js-app typecheck + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: latest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # js-app depends on wasm-bindings/pkg as a file: dependency, so the package has to exist
+      # before npm resolves it.
+      - run: wasm-pack build wasm-bindings --target web
+      - run: npm install --prefix js-app
+      - run: npm run typecheck --prefix js-app
+      - run: npm run test:run --prefix js-app

@@ -1,0 +1,23 @@
+# Starting layout for the browser demo.
+#
+# Bounds match WORLD_SIZE in src/visualization/coords.ts, so the camera frames the whole map.
+
+map:
+  width: 120.0
+  height: 120.0
+
+spawns:
+  - template: base
+    position: { x: 20.0, y: 20.0 }
+    faction: 1
+
+  - template: mover
+    position: { x: 30.0, y: 20.0 }
+    faction: 1
+
+  - template: another_mover
+    position: { x: 34.0, y: 24.0 }
+    faction: 1
+
+  - template: static_obstacle
+    position: { x: 60.0, y: 60.0 }
