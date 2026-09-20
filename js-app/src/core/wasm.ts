@@ -371,6 +371,27 @@ export function orderGroupTo(
 }
 
 /**
+ * Stops the given entities where they are: velocity to zero, move target dropped.
+ *
+ * Needed as its own order because a vehicle that keeps driving after its passengers step off
+ * leaves them behind, and nothing else releases a move target early.
+ */
+export function stopSelected(entityIds: string[]): Promise<EntitySnapshot[]> {
+  if (!worker || !initialized)
+    return Promise.reject(new Error("WASM not initialized"));
+  if (entityIds.length === 0) {
+    return Promise.reject(new Error("stopSelected: no entity ids"));
+  }
+  return new Promise((resolve, reject) => {
+    enqueue({ type: "stop", entityIds }, {
+      resolve,
+      reject,
+      kind: "entities",
+    } as PendingRequest);
+  });
+}
+
+/**
  * Puts units aboard a vehicle they are standing next to.
  *
  * Rejects with every refusal joined together — too far away, no seats left — after boarding the

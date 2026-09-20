@@ -136,6 +136,9 @@ api.board(unit, jeep)?;   // within BOARDING_RANGE of it
 api.unboard(unit)?;       // steps off beside the vehicle
 ```
 
+`BoardError::TooFarAway` carries the measured distance. "Too far" on its own does not say whether
+to walk the unit over or to stop the vehicle first, and those are opposite actions.
+
 While a unit is aboard, its position belongs to the vehicle: seek and movement skip passengers
 entirely, and one system copies the vehicle's position onto them after it has moved. An order given
 to a passenger does nothing rather than fighting the vehicle for where the unit is — the position
@@ -322,7 +325,9 @@ personal order first and watch it keep its own course while the rest of the grou
 the priority rule, visible.
 
 The map starts with a truck parked beside one of the movers. Select the truck together with units
-standing next to it and press **B** to load them; **U** lets them off again. Riders fade into the
+standing next to it and press **B** to load them; **U** lets them off again, and **S** stops
+whatever is selected — worth doing to the truck before anyone steps out, since unboarding does not
+halt it and a vehicle still under orders drives away from the unit it just dropped. Riders fade into the
 truck and travel with it, and the second mover is deliberately parked out of reach, so it has to be
 walked over before it can board — boarding is not a move order.
 

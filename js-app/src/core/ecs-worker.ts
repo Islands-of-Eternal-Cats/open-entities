@@ -192,6 +192,18 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
       return;
     }
 
+    if (msg.type === "stop") {
+      try {
+        sim.orderStop(msg.entityIds.map(keyToEntityId));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        post({ type: "error", message });
+        return;
+      }
+      post(entitiesMessage(sim));
+      return;
+    }
+
     if (msg.type === "move_to") {
       try {
         sim.orderMoveTo(

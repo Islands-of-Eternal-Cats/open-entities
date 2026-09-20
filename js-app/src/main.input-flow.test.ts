@@ -35,6 +35,7 @@ const state = vi.hoisted(() => {
     createGroupWith: vi.fn(async () => ({ index: 7, generation: 0 })),
     orderGroupTo: vi.fn(async () => [] as EntitySnapshot[]),
     boardUnits: vi.fn(async () => [] as EntitySnapshot[]),
+    stopSelected: vi.fn(async () => [] as EntitySnapshot[]),
     unboardUnits: vi.fn(async () => [] as EntitySnapshot[]),
     moveSelectedTo: vi.fn(async () => [
       {
@@ -58,6 +59,7 @@ vi.mock("./core/wasm", () => ({
   createGroupWith: state.createGroupWith,
   orderGroupTo: state.orderGroupTo,
   boardUnits: state.boardUnits,
+  stopSelected: state.stopSelected,
   unboardUnits: state.unboardUnits,
   tick: vi.fn(async () => [] as EntitySnapshot[]),
   // main.ts imports these two as well; leaving them out made run() throw on the first
@@ -108,6 +110,7 @@ function mountMainDom(): void {
     <button id="form-group" hidden disabled></button>
     <button id="group-mode" hidden disabled></button>
     <p id="group-state"></p>
+    <button id="stop-order" hidden disabled></button>
     <button id="board-units" hidden disabled></button>
     <button id="unboard-units" hidden disabled></button>
     <p id="transport-state"></p>
@@ -131,6 +134,7 @@ describe("main input wiring", () => {
     state.createGroupWith.mockClear();
     state.orderGroupTo.mockClear();
     state.boardUnits.mockClear();
+    state.stopSelected.mockClear();
     state.unboardUnits.mockClear();
     state.renderEntities.mockClear();
     for (const entity of state.world) entity.aboard = null;
@@ -224,6 +228,19 @@ describe("main input wiring", () => {
     expect(document.getElementById("transport-state")?.textContent).toContain(
       "more than 3 units away"
     );
+  });
+
+  it("stops the selection so a vehicle does not drive off without its passengers", async () => {
+    await import("./main");
+    await flush();
+    await flush();
+
+    const stop = document.getElementById("stop-order") as HTMLButtonElement;
+    expect(stop.hidden).toBe(false);
+    stop.click();
+    await flush();
+
+    expect(state.stopSelected).toHaveBeenCalledWith(["u1"]);
   });
 
   it("keeps move-order flow active via onMoveOrder callback", async () => {

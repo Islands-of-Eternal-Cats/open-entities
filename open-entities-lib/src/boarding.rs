@@ -19,7 +19,8 @@ pub const BOARDING_RANGE: f32 = 3.0;
 const UNBOARD_OFFSET: f32 = 1.5;
 
 /// Errors from boarding and unboarding.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// Not `Eq`: `TooFarAway` carries the measured distance, and a distance is a float.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BoardError {
     /// The id does not resolve to a live entity.
     UnknownUnit(EntityId),
@@ -31,8 +32,9 @@ pub enum BoardError {
     NoSeatsLeft { seats: u8 },
     /// One of the two has no position, so the distance between them is undefined.
     NoPosition(EntityId),
-    /// The unit is not close enough to climb aboard.
-    TooFarAway,
+    /// The unit is not close enough to climb aboard. Carries how far it actually was, because
+    /// "too far" alone does not say whether to walk the unit over or to stop the vehicle first.
+    TooFarAway { distance: f32 },
     /// The unit is not riding anything.
     NotAboard(EntityId),
 }
@@ -57,7 +59,10 @@ impl std::fmt::Display for BoardError {
                 "entity {}:{} has no position, so boarding distance is undefined",
                 id.index, id.generation
             ),
-            Self::TooFarAway => write!(f, "the unit is more than {BOARDING_RANGE} units away"),
+            Self::TooFarAway { distance } => write!(
+                f,
+                "the unit is {distance:.1} units away, and boarding range is {BOARDING_RANGE}"
+            ),
             Self::NotAboard(id) => write!(
                 f,
                 "entity {}:{} is not aboard anything",
@@ -110,8 +115,9 @@ impl Api {
                 .ok_or(BoardError::NoPosition(vehicle))?;
             let dx = vehicle_position.x - unit_position.x;
             let dy = vehicle_position.y - unit_position.y;
-            if dx.hypot(dy) > BOARDING_RANGE {
-                return Err(BoardError::TooFarAway);
+            let distance = dx.hypot(dy);
+            if distance > BOARDING_RANGE {
+                return Err(BoardError::TooFarAway { distance });
             }
             seats
         };
@@ -282,7 +288,11 @@ mod tests {
         let truck = spawn_vehicle(&mut api, 0.0, 2);
         let rider = spawn_unit(&mut api, 50.0);
 
-        assert_eq!(api.board(rider, truck), Err(BoardError::TooFarAway));
+        assert_eq!(
+            api.board(rider, truck),
+            Err(BoardError::TooFarAway { distance: 50.0 }),
+            "the refusal says how far, so a caller can tell 'walk over' from 'the truck drove off'"
+        );
         assert_eq!(api.vehicle_of(rider), None);
     }
 

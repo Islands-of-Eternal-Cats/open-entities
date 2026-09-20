@@ -42,7 +42,9 @@ export type WorkerInMessage =
   | { type: "group_move_to"; group: EntityId; point: { x: number; y: number } }
   /** Units climb aboard one vehicle; ones that are too far or find no seat are reported. */
   | { type: "board"; units: string[]; vehicle: string }
-  | { type: "unboard"; units: string[] };
+  | { type: "unboard"; units: string[] }
+  /** Zero velocity and drop any move target — works on anything that carries a velocity. */
+  | { type: "stop"; entityIds: string[] };
 
 export type WorkerOutMessage =
   | { type: "ready" }

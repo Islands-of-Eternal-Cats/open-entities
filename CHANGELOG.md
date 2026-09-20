@@ -19,6 +19,9 @@ to a click on the canvas.
   with a truck parked beside one mover and out of reach of the other. **B** loads the selected
   units, **U** lets them off, and a refusal — too far away, no seats left — is shown in the HUD
   instead of the console, because that refusal is the rule worth seeing.
+- **Stop order in the demo.** **S** (or the Stop button) halts the selection through the
+  `orderStop` that was already in the core. Unboarding does not stop a vehicle, so without this
+  a truck under orders drives away from the units it just dropped and they cannot climb back in.
 - **Carrying units.** `Api::board`, `unboard`, `passengers`, `vehicle_of`, `free_seats`, plus a
   `boardable: <seats>` template field. A passenger's position belongs to its vehicle: the movement
   systems skip passengers and a sync system copies the vehicle's position onto them after it moves,
@@ -59,6 +62,9 @@ to a click on the canvas.
 
 ### Changed
 
+- `BoardError::TooFarAway` carries the measured distance, so a refusal says whether to walk the
+  unit over or to stop the vehicle first. `BoardError` is no longer `Eq`, since a distance is a
+  float.
 - **Breaking.** The export is **schema version 4**: registering `Boardable` adds a `boardable`
   field to entities that have seats.
 

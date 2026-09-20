@@ -27,6 +27,9 @@
                     </div>
                     <button type="button" id="clear-selection" class="rts-btn rts-btn--ghost" hidden disabled
                         aria-label="Clear selection">Clear selection <span class="hotkey-hint">(Esc)</span></button>
+                    <button type="button" id="stop-order" class="rts-btn rts-btn--ghost" hidden disabled
+                        aria-label="Stop the selection where it stands">Stop <span
+                            class="hotkey-hint">(S)</span></button>
                     <button type="button" id="form-group" class="rts-btn" hidden disabled
                         aria-label="Form a group from the selection">Form group <span
                             class="hotkey-hint">(G)</span></button>
@@ -53,8 +56,10 @@
                 <strong>Orders:</strong> drag a box or click units to select ·
                 <kbd>Shift</kbd> add/remove · with a selection, click empty ground to <strong>move</strong> ·
                 <kbd>Esc</kbd> clears selection ·
+                <kbd>S</kbd> halts the selection ·
                 select a truck together with units next to it and press <kbd>B</kbd> to
-                <strong>board</strong>, <kbd>U</kbd> to let them off.
+                <strong>board</strong>, <kbd>U</kbd> to let them off (stop the truck first, or it
+                drives away from whoever steps out).
                 <strong>Minimap</strong> (corner): click with selection — move order; without selection — center view on that point (white frame = visible area).
             </p>
             <div class="train-bar" role="group" aria-label="Hire units">

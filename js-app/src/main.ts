@@ -10,6 +10,7 @@ import {
   moveSelectedTo,
   orderGroupTo,
   snapshot,
+  stopSelected,
   tick,
   spawnRandomAt,
   spawnAt,
@@ -41,6 +42,9 @@ const unboardBtn = document.getElementById(
   "unboard-units"
 ) as HTMLButtonElement | null;
 const transportStateEl = document.getElementById("transport-state");
+const stopOrderBtn = document.getElementById(
+  "stop-order"
+) as HTMLButtonElement | null;
 const trainButtons = Array.from(
   document.querySelectorAll<HTMLButtonElement>("[data-train-type]")
 );
@@ -262,9 +266,25 @@ function syncSelectionUi(): void {
     clearSelectionBtn.hidden = ids.size === 0;
     clearSelectionBtn.disabled = ids.size === 0;
   }
+  if (stopOrderBtn) {
+    stopOrderBtn.hidden = ids.size === 0;
+    stopOrderBtn.disabled = ids.size === 0;
+  }
   syncGroupUi(ids.size);
   syncTransportUi(ids);
   syncEntityListSelectionHighlight();
+}
+
+/** Halts the selection where it stands — mainly so a truck stops before anyone steps off. */
+async function stopSelection(): Promise<void> {
+  if (!isWasmReady() || !pixiApi) return;
+  const ids = [...pixiApi.getSelectedIds()];
+  if (ids.length === 0) return;
+  try {
+    render(await stopSelected(ids));
+  } catch (e) {
+    console.error("stop order error:", e);
+  }
 }
 
 /**
@@ -473,10 +493,14 @@ async function run(): Promise<void> {
       window.addEventListener("keydown", (ev) => {
         if (ev.key === "Escape") clearSelection();
         if (ev.key === "g" || ev.key === "G") void formGroupFromSelection();
+        if (ev.key === "s" || ev.key === "S") void stopSelection();
         if (ev.key === "b" || ev.key === "B") void boardSelection();
         if (ev.key === "u" || ev.key === "U") void unboardSelection();
       });
       clearSelectionBtn?.addEventListener("click", clearSelection);
+      stopOrderBtn?.addEventListener("click", () => {
+        void stopSelection();
+      });
       formGroupBtn?.addEventListener("click", () => {
         void formGroupFromSelection();
       });
