@@ -313,3 +313,16 @@ Every entity in the world appears in `entities`. Component keys are omitted when
   ]
 }
 ```
+
+## License
+
+Dual-licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+at your option. This is the usual arrangement in the Rust ecosystem: the MIT half keeps the terms
+short, the Apache half adds an explicit patent grant.
+
+Unless you state otherwise, any contribution you intentionally submit for inclusion in this work
+shall be dual-licensed as above, without any additional terms or conditions.

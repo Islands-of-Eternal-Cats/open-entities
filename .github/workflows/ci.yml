@@ -1,8 +1,9 @@
 name: CI
 
 on:
+  # every branch: the work happens on feature branches, and a check that waits for a pull request
+  # is a check that runs after the mistake has already been pushed
   push:
-    branches: [main, master]
   pull_request:
 
 env:

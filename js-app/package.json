@@ -2,6 +2,7 @@
     "name": "open-entities-js-app",
     "version": "0.1.0",
     "description": "JavaScript app using open-entities WASM bindings",
+    "license": "MIT OR Apache-2.0",
     "type": "module",
     "engines": {
         "node": ">=18"
