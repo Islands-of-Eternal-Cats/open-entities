@@ -26,6 +26,12 @@ pub struct Simulation {
     api: Api,
 }
 
+impl Default for Simulation {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[wasm_bindgen]
 impl Simulation {
     #[wasm_bindgen(constructor)]

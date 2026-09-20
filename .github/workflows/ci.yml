@@ -21,9 +21,6 @@ jobs:
   lint:
     name: fmt + clippy
     runs-on: ubuntu-latest
-    # Эти проверки ни разу не запускались локально. Пока они красные — задание
-    # не валит сборку. Уберите continue-on-error, когда пройдут чисто.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -36,8 +33,6 @@ jobs:
   wasm:
     name: wasm-check
     runs-on: ubuntu-latest
-    # То же самое: wasm-pack в CI ещё не проверялся.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

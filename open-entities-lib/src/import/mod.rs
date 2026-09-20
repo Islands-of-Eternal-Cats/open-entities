@@ -345,13 +345,13 @@ entities:
 
         let mut api = Api::new();
         api.load_templates_yaml(
-            r#"
+            r"
 entities:
   grunt:
     health:
       current: 50
       max: 100
-"#,
+",
         )
         .expect("load templates");
         let entity = api
@@ -378,7 +378,7 @@ entities:
 
         let mut api = Api::new();
         api.load_templates_yaml(
-            r#"
+            r"
 entities:
   base_unit:
     health:
@@ -389,7 +389,7 @@ entities:
     health:
       current: 80
       max: 100
-"#,
+",
         )
         .expect("load templates");
         let entity = api
