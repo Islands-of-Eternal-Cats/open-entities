@@ -10,6 +10,7 @@ pub mod export;
 pub mod groups;
 pub mod import;
 pub mod map;
+pub mod missions;
 pub mod orders;
 pub mod simulation;
 pub mod systems;
@@ -24,6 +25,7 @@ pub use export::ExportError;
 pub use groups::GroupError;
 pub use import::ImportError;
 pub use map::{MapBounds, MapError};
+pub use missions::MissionError;
 pub use orders::{EntityId, OrderReport};
 pub use simulation::TickError;
 

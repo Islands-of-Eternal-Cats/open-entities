@@ -77,6 +77,27 @@ one. The claim is released when the unit arrives or is stopped.
 See [`docs/design/group-mission-contract.md`](docs/design/group-mission-contract.md) for the full
 behaviour; missions and the replanner are not implemented yet.
 
+## Missions
+
+A mission is a point somebody should reach, and how close counts as reached. Groups are sent to
+it; the first arrival finishes it for everyone.
+
+```rust
+let mission = api.create_mission(MoveTarget { x: 80.0, y: 20.0 }, 2.0);
+api.assign_group(mission, group)?;
+```
+
+While a mission is assigned, its groups are steered toward it every tick. A group under manual
+control is skipped, and a manual order to a group takes it off the mission — the mission is then
+free for whoever can still work it. A group that has lost every member is unassigned too, since it
+cannot arrive.
+
+When any live member of any assigned group comes within the radius, the mission is marked
+completed, every assignee is released, and the units that were following **mission** steering stop.
+Personal and group orders are untouched: they never belonged to the mission.
+
+A completed mission stays in the world, marked, and refuses new groups.
+
 ## Entity lifecycle
 
 `Api::despawn(ids)` removes entities and returns how many were actually removed — unknown, stale

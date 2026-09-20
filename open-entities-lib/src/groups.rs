@@ -10,7 +10,9 @@
 use bevy_ecs::prelude::Entity;
 
 use crate::api::Api;
-use crate::components::{Faction, Group, ManualActive, MemberOf, MoveTarget, OrderSource};
+use crate::components::{
+    AssignedTo, Faction, Group, ManualActive, MemberOf, MoveTarget, OrderSource,
+};
 use crate::orders::{EntityId, OrderReport, can_take_a_move_order, steer};
 
 /// Errors from the group operations.
@@ -132,7 +134,8 @@ impl Api {
     /// Destinations are spread over the same grid a multi-unit order uses.
     ///
     /// The group is left [`ManualActive`], which automation must respect until it is cleared
-    /// explicitly through [`Api::clear_group_manual`].
+    /// explicitly through [`Api::clear_group_manual`], and it is taken off any mission it was
+    /// working.
     ///
     /// # Errors
     ///
@@ -153,7 +156,12 @@ impl Api {
             .collect();
 
         let ordered = steer(world, &movable, target, OrderSource::GroupSteering);
-        world.entity_mut(group_entity).insert(ManualActive);
+        // Taking a group by hand takes it off its mission: the mission is freed for whoever else
+        // can still work it, instead of waiting on a group that is now going somewhere else.
+        world
+            .entity_mut(group_entity)
+            .remove::<AssignedTo>()
+            .insert(ManualActive);
 
         Ok(OrderReport {
             ordered,

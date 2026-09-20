@@ -2,7 +2,9 @@ use bevy_ecs::prelude::{Schedule, World};
 use bevy_ecs::schedule::{IntoScheduleConfigs, ScheduleLabel};
 
 use crate::simulation::ArrivedThisTick;
-use crate::systems::{movement_system, seek_system};
+use crate::systems::{
+    mission_completion_system, mission_steering_system, movement_system, seek_system,
+};
 
 #[derive(ScheduleLabel, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct SimulationSchedule;
@@ -21,7 +23,17 @@ impl Core {
         world.insert_resource(ArrivedThisTick::default());
 
         let mut schedule = Schedule::new(SimulationSchedule);
-        schedule.add_systems((seek_system, movement_system).chain());
+        // Order matters: automation proposes, steering resolves, movement integrates, and
+        // arrival is judged on where everyone ended up this tick.
+        schedule.add_systems(
+            (
+                mission_steering_system,
+                seek_system,
+                movement_system,
+                mission_completion_system,
+            )
+                .chain(),
+        );
 
         Self { world, schedule }
     }

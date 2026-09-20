@@ -14,6 +14,11 @@ to a click on the canvas.
 
 ### Added
 
+- **Missions.** `Api::create_mission`, `assign_group`, `unassign_group`, `mission_of`,
+  `mission_assignees`, `is_mission_completed`, plus two systems in the tick. Assigned groups are
+  steered toward the mission; the first live member of any assignee to reach the radius closes it
+  for everyone, releases every assignee and stops the units that were following mission steering.
+  A manual order or an empty roster takes a group off its mission.
 - **Groups.** `Api::create_group`, `add_to_group`, `remove_from_group`, `group_of`,
   `group_members`, `order_group_move_to`, `is_group_manual`, `clear_group_manual`. A unit belongs
   to at most one group, a group commands one faction, and an empty group stays alive. A group

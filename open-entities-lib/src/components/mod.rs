@@ -1,3 +1,4 @@
+pub mod assigned_to;
 pub mod base_move_speed;
 pub mod entity_type;
 pub mod faction;
@@ -5,11 +6,13 @@ pub mod group;
 pub mod health;
 pub mod manual_active;
 pub mod member_of;
+pub mod mission;
 pub mod move_target;
 pub mod order_source;
 pub mod position;
 pub mod velocity;
 
+pub use assigned_to::AssignedTo;
 pub use base_move_speed::BaseMoveSpeed;
 pub use entity_type::EntityType;
 pub use faction::Faction;
@@ -17,6 +20,7 @@ pub use group::Group;
 pub use health::Health;
 pub use manual_active::ManualActive;
 pub use member_of::MemberOf;
+pub use mission::{Mission, MissionCompleted};
 pub use move_target::MoveTarget;
 pub use order_source::OrderSource;
 pub use position::Position;
