@@ -283,6 +283,42 @@ mod tests {
     }
 
     #[test]
+    fn a_move_order_does_not_stick_to_a_passenger() {
+        let mut api = Api::new();
+        let truck = spawn_vehicle(&mut api, 0.0, 2);
+        let rider = spawn_unit(&mut api, 1.0);
+        api.board(rider, truck).expect("board");
+
+        // The player boxes the truck and its passenger and clicks the ground: the order reaches
+        // both ids, and the passenger must not take it.
+        let report = api.order_move_to(&[truck, rider], MoveTarget { x: 40.0, y: 0.0 });
+        assert_eq!(report.ordered, 1, "only the vehicle can take a move order");
+        assert_eq!(report.skipped, 1);
+
+        api.unboard(rider).expect("step off");
+        let dropped = api
+            .core()
+            .world()
+            .get::<Position>(rider.to_entity().expect("live"))
+            .copied()
+            .expect("position");
+        for _ in 0..30 {
+            api.tick(16).expect("tick");
+        }
+        let after = api
+            .core_mut()
+            .world_mut()
+            .get::<Position>(rider.to_entity().expect("live"))
+            .copied()
+            .expect("position");
+        assert_eq!(
+            (after.x, after.y),
+            (dropped.x, dropped.y),
+            "a unit that just stepped off stays where it was put"
+        );
+    }
+
+    #[test]
     fn boarding_is_refused_from_across_the_map() {
         let mut api = Api::new();
         let truck = spawn_vehicle(&mut api, 0.0, 2);

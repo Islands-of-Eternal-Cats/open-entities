@@ -4,7 +4,7 @@ use bevy_ecs::prelude::*;
 
 use crate::components::{
     AssignedTo, BaseMoveSpeed, Group, ManualActive, MemberOf, Mission, MissionCompleted,
-    MoveTarget, NeedsMission, OrderSource, Position, Velocity,
+    MoveTarget, NeedsMission, OrderSource, PassengerOf, Position, Velocity,
 };
 use crate::orders::group_slot;
 
@@ -21,9 +21,11 @@ pub fn mission_steering_system(
     groups: Query<(Entity, &AssignedTo), (With<Group>, Without<ManualActive>)>,
     missions: Query<&Mission, Without<MissionCompleted>>,
     members: Query<(Entity, &MemberOf)>,
+    // A passenger is not steerable: its position is the vehicle's, and a target left on it would
+    // fire the moment it steps off.
     steerable: Query<
         (Option<&OrderSource>, Option<&Velocity>),
-        (With<Position>, With<BaseMoveSpeed>),
+        (With<Position>, With<BaseMoveSpeed>, Without<PassengerOf>),
     >,
 ) {
     for (group, assigned) in &groups {

@@ -80,6 +80,12 @@ to a click on the canvas.
 
 ### Fixed
 
+- **A move order stuck to a passenger.** Ordering a unit that was riding a vehicle stored a target
+  the movement systems could not see; stepping off handed it back to `seek_system`, and the unit
+  walked off to a destination given while it was cargo. Selecting a truck with its passengers and
+  clicking the ground was enough — the rider got a grid slot 5 units from the truck's and walked
+  there the moment it was let out, too far to climb back in. Passengers are now refused a move
+  order outright, in `can_take_a_move_order` and in mission steering.
 - **Seek overshoot.** A unit whose step (`speed * dt`) passed the target flew by, turned around and
   oscillated forever without dropping its `MoveTarget` — at any speed above 12.5 units/s at a 16 ms
   tick, or 2 units/s at the 100 ms cap. A step that reaches the target now counts as arrival.

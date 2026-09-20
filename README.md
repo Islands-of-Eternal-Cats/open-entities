@@ -140,9 +140,11 @@ api.unboard(unit)?;       // steps off beside the vehicle
 to walk the unit over or to stop the vehicle first, and those are opposite actions.
 
 While a unit is aboard, its position belongs to the vehicle: seek and movement skip passengers
-entirely, and one system copies the vehicle's position onto them after it has moved. An order given
-to a passenger does nothing rather than fighting the vehicle for where the unit is — the position
-has exactly one owner at a time.
+entirely, and one system copies the vehicle's position onto them after it has moved. A move order
+addressed to a passenger is **refused**, not stored — the position has exactly one owner at a
+time, and a target parked on a rider would fire the moment it stepped off and walk it away from
+the vehicle that just dropped it. `order_move_to` counts it as skipped, group and mission steering
+pass it over.
 
 If the vehicle is despawned, its passengers are let off where they stand: a component pointing at
 an entity that no longer exists is a leak waiting to be read.

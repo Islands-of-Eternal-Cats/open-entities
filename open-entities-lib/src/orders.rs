@@ -9,7 +9,7 @@ use bevy_ecs::prelude::World;
 use serde::{Deserialize, Serialize};
 
 use crate::api::Api;
-use crate::components::{BaseMoveSpeed, MoveTarget, OrderSource, Position, Velocity};
+use crate::components::{BaseMoveSpeed, MoveTarget, OrderSource, PassengerOf, Position, Velocity};
 
 /// World units between adjacent slots of a group move destination.
 const MOVE_GROUP_GRID_SPACING: f32 = 5.0;
@@ -93,9 +93,15 @@ pub(crate) fn group_slot(target: MoveTarget, index: usize, count: usize) -> Move
 }
 
 /// `true` when the entity is something a move order can reach: it exists, it has a place in the
-/// world, and it has a speed to travel at.
+/// world, it has a speed to travel at, and it is not riding in something else.
+///
+/// A passenger is refused rather than quietly pointed somewhere. Its position belongs to its
+/// vehicle, so the target would do nothing while it rides — and then everything the moment it
+/// steps off, walking the unit away from the vehicle that just dropped it.
 pub(crate) fn can_take_a_move_order(world: &World, entity: Entity) -> bool {
-    world.get::<Position>(entity).is_some() && world.get::<BaseMoveSpeed>(entity).is_some()
+    world.get::<Position>(entity).is_some()
+        && world.get::<BaseMoveSpeed>(entity).is_some()
+        && world.get::<PassengerOf>(entity).is_none()
 }
 
 /// Points entities at `target`, spread over a grid, and records who gave the order.
