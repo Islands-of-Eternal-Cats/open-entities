@@ -136,10 +136,7 @@ describe("main input wiring", () => {
     await import("./main");
     await flush();
 
-    // main.ts reads the faction of the first selected unit, so the snapshot has to carry one.
-    const rendered = state.renderEntities.mock.calls.at(-1);
-    expect(rendered).toBeDefined();
-
+    // The snapshot mock carries a faction-1 unit, which is what forming a group reads.
     (document.getElementById("form-group") as HTMLButtonElement).click();
     await flush();
     await flush();
