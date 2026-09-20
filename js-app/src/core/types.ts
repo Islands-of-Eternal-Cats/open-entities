@@ -34,6 +34,14 @@ export interface EntitySnapshot {
    * A passenger's position is the vehicle's, so the two rows always report the same point.
    */
   aboard: string | null;
+  /**
+   * Where this entity has been told to go, or null when it holds no order.
+   *
+   * Straight from the export's `move_target`. Visible in the HUD on purpose: a target is the one
+   * piece of unit state with no appearance on the map, so a unit standing on a stale one looks
+   * identical to a unit standing still — until it walks off.
+   */
+  moveTarget: Pos | null;
 }
 
 /** Entity identity as the WASM side spells it. */

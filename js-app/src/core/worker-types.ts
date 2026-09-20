@@ -1,7 +1,7 @@
 /**
  * Message types for main thread ↔ ECS web worker.
  */
-import type { EntityId, EntitySnapshot } from "./types";
+import type { EntityId, EntitySnapshot, Pos } from "./types";
 
 /**
  * Raw snapshot row as it crosses the worker boundary.
@@ -9,11 +9,12 @@ import type { EntityId, EntitySnapshot } from "./types";
  */
 export type RawEntitySnapshot = Omit<
   EntitySnapshot,
-  "faction" | "seats" | "aboard"
+  "faction" | "seats" | "aboard" | "moveTarget"
 > & {
   faction?: number | null;
   seats?: number | null;
   aboard?: string | null;
+  moveTarget?: Pos | null;
 };
 
 export type WorkerInMessage =

@@ -65,15 +65,20 @@ export default defineConfig({
                     });
                 };
                 rustDirs.forEach(dir => server.watcher.add(dir));
-                server.watcher.on('change', (file) => {
+                // Not just 'change': git writes a temp file and renames it over the target, so
+                // applying a patch or switching branches arrives as unlink + add. Listening for
+                // 'change' alone meant `git am` never rebuilt the wasm, and the browser kept
+                // running the previous core while the source on disk said otherwise.
+                const onRustFile = (file) => {
                     if (!file.endsWith('.rs')) return;
                     if (buildTimeout) clearTimeout(buildTimeout);
                     buildTimeout = setTimeout(() => {
                         buildTimeout = null;
-                        console.log('[watch-rust] Rust file changed, rebuilding WASM...');
+                        console.log('[watch-rust] Rust sources changed, rebuilding WASM...');
                         runWasmBuild();
                     }, 300);
-                });
+                };
+                ['change', 'add', 'unlink'].forEach(event => server.watcher.on(event, onRustFile));
             }
         }
     ]

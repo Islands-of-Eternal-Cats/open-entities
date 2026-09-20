@@ -36,6 +36,7 @@ function toSnapshot(row: WorldExportRow): EntitySnapshot | null {
     faction: row.faction ?? null,
     seats: row.boardable ?? null,
     aboard: null,
+    moveTarget: row.move_target ? { ...row.move_target } : null,
   };
 }
 

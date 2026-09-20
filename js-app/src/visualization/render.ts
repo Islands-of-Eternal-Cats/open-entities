@@ -44,6 +44,10 @@ export function renderEntities(
           : e.seats !== null
             ? ` · ${e.seats} seats`
             : "";
+      const order =
+        e.moveTarget !== null
+          ? ` · → (${formatCoord(e.moveTarget.x)}, ${formatCoord(e.moveTarget.y)})`
+          : "";
       const idAttr = escapeAttr(e.id);
       const idHtml = escapeHtml(e.id);
       const typeHtml = escapeHtml(e.entityType);
@@ -54,7 +58,7 @@ export function renderEntities(
       const ariaCurrent = selected ? ' aria-current="true"' : "";
       return `<button type="button" class="${rowClass}" data-entity-id="${idAttr}" aria-label="Select entity ${idAttr}"${ariaCurrent}>
         <strong>Entity ${idHtml}</strong>
-        <span class="entity-meta">${typeHtml} · (${formatCoord(e.pos.x)}, ${formatCoord(e.pos.y)}) · ${vel}${transport}</span>
+        <span class="entity-meta">${typeHtml} · (${formatCoord(e.pos.x)}, ${formatCoord(e.pos.y)}) · ${vel}${transport}${order}</span>
       </button>`;
     })
     .join("");

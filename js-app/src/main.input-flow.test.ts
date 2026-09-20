@@ -13,6 +13,7 @@ const state = vi.hoisted(() => {
       faction: 1,
       seats: null,
       aboard: null,
+      moveTarget: null,
     },
     {
       id: "v1",
@@ -22,6 +23,7 @@ const state = vi.hoisted(() => {
       faction: 1,
       seats: 4,
       aboard: null,
+      moveTarget: null,
     },
   ];
   return {
@@ -46,6 +48,7 @@ const state = vi.hoisted(() => {
         faction: null,
         seats: null,
         aboard: null,
+        moveTarget: null,
       } satisfies EntitySnapshot,
     ]),
     renderEntities: vi.fn(),

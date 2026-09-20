@@ -19,6 +19,9 @@ to a click on the canvas.
   with a truck parked beside one mover and out of reach of the other. **B** loads the selected
   units, **U** lets them off, and a refusal — too far away, no seats left — is shown in the HUD
   instead of the console, because that refusal is the rule worth seeing.
+- **Move targets in the HUD.** Each row in Forces prints `→ (x, y)` when the entity holds an order.
+  A target is the one piece of unit state with no appearance on the map, so a unit standing on a
+  stale one looked exactly like a unit standing still.
 - **Stop order in the demo.** **S** (or the Stop button) halts the selection through the
   `orderStop` that was already in the core. Unboarding does not stop a vehicle, so without this
   a truck under orders drives away from the units it just dropped and they cannot climb back in.
@@ -86,6 +89,10 @@ to a click on the canvas.
   clicking the ground was enough — the rider got a grid slot 5 units from the truck's and walked
   there the moment it was let out, too far to climb back in. Passengers are now refused a move
   order outright, in `can_take_a_move_order` and in mission steering.
+- **The dev server ignored patches.** `watch-rust-dirs` rebuilt the wasm on `change` only. Git
+  writes a temp file and renames it over the target, so `git am` and branch switches arrive as
+  `unlink` + `add` and never triggered a rebuild: the browser kept running the previous core while
+  the sources on disk said otherwise. It now listens for all three events.
 - **Seek overshoot.** A unit whose step (`speed * dt`) passed the target flew by, turned around and
   oscillated forever without dropping its `MoveTarget` — at any speed above 12.5 units/s at a 16 ms
   tick, or 2 units/s at the 100 ms cap. A step that reaches the target now counts as arrival.

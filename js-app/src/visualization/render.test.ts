@@ -13,6 +13,7 @@ function mockEntity(
     faction: null,
     seats: null,
     aboard: null,
+    moveTarget: null,
     ...overrides,
   };
 }
@@ -58,6 +59,14 @@ describe("renderEntities", () => {
     );
     expect(container.innerHTML).toContain("4 seats");
     expect(container.innerHTML).toContain("aboard 7");
+  });
+
+  it("shows a move target, the one piece of state the map cannot draw", () => {
+    renderEntities(
+      [mockEntity({ id: "9", moveTarget: { x: 40, y: 12.5 } })],
+      container
+    );
+    expect(container.innerHTML).toContain("→ (40.00, 12.50)");
   });
 
   it("renders multiple entities", () => {

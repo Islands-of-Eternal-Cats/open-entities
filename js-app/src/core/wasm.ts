@@ -97,6 +97,7 @@ function rawToSnapshots(
     faction: e.faction ?? null,
     seats: e.seats ?? null,
     aboard: e.aboard ?? null,
+    moveTarget: e.moveTarget ?? null,
   }));
 }
 
@@ -109,6 +110,7 @@ function rawToSnapshot(raw: RawEntitySnapshot): EntitySnapshot {
     faction: raw.faction ?? null,
     seats: raw.seats ?? null,
     aboard: raw.aboard ?? null,
+    moveTarget: raw.moveTarget ?? null,
   };
 }
 
