@@ -6,10 +6,11 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-09-20
+Nothing is published yet: the crates carry `publish = false` and the demo package is private. This
+section becomes 0.1.0 on the day that changes.
 
-First release of the library line: one facade, one way to name an entity, and a browser demo that
-exercises the whole path from YAML to a click on the canvas.
+One facade, one way to name an entity, and a browser demo that exercises the whole path from YAML
+to a click on the canvas.
 
 ### Added
 
@@ -49,5 +50,3 @@ exercises the whole path from YAML to a click on the canvas.
 - Browser demo: the HUD syncs once the canvas api is in hand, so the clear-selection button is no
   longer stuck hidden and disabled after startup.
 
-[Unreleased]: https://github.com/Islands-of-Eternal-Cats/open-entities/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/Islands-of-Eternal-Cats/open-entities/releases/tag/v0.1.0

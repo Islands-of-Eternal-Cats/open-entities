@@ -3,6 +3,8 @@ name = "open_entities_wasm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+# Not published anywhere yet; flip this when the API is worth someone else's time.
+publish = false
 
 [lib]
 crate-type = ["cdylib", "rlib"]
