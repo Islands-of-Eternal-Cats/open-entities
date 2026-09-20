@@ -1,5 +1,5 @@
 #[allow(unused_imports)] // re-exported for public API
-pub use crate::component_registry::{merge_components, EntityComponents};
+pub use crate::component_registry::{EntityComponents, merge_components};
 
 #[cfg(test)]
 mod tests {

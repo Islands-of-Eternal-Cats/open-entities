@@ -8,8 +8,10 @@
 use open_entities::components::{Health, Position};
 use open_entities::{Api, EntityComponents};
 
-const TEMPLATES_YAML: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/spawn_entity_templates.yaml"));
+const TEMPLATES_YAML: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../fixtures/spawn_entity_templates.yaml"
+));
 
 fn main() {
     let mut api = Api::new();
@@ -41,8 +43,8 @@ fn main() {
     match api.world_json() {
         Ok(json) => match serde_json::from_str::<serde_json::Value>(&json) {
             Ok(value) => {
-                let pretty = serde_json::to_string_pretty(&value)
-                    .expect("pretty-print valid JSON value");
+                let pretty =
+                    serde_json::to_string_pretty(&value).expect("pretty-print valid JSON value");
                 println!("\n{pretty}");
             }
             Err(err) => eprintln!("export returned invalid JSON: {err}"),

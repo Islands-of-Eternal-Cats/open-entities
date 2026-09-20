@@ -60,10 +60,7 @@ mod tests {
         let entity = api
             .core_mut()
             .world_mut()
-            .spawn((
-                Position { x: 0.0, y: 0.0 },
-                Velocity { vx: 1.0, vy: 0.0 },
-            ))
+            .spawn((Position { x: 0.0, y: 0.0 }, Velocity { vx: 1.0, vy: 0.0 }))
             .id();
 
         api.tick(500).expect("tick with clamp");
@@ -73,10 +70,7 @@ mod tests {
         let entity2 = api2
             .core_mut()
             .world_mut()
-            .spawn((
-                Position { x: 0.0, y: 0.0 },
-                Velocity { vx: 1.0, vy: 0.0 },
-            ))
+            .spawn((Position { x: 0.0, y: 0.0 }, Velocity { vx: 1.0, vy: 0.0 }))
             .id();
         api2.tick(100).expect("tick at cap");
         let pos_after_100 = api2.core_mut().world().get::<Position>(entity2).unwrap().x;
@@ -150,8 +144,7 @@ mod tests {
     #[test]
     fn scout_reaches_move_target() {
         let mut api = Api::new();
-        api.load_templates_yaml(FIXTURE_YAML)
-            .expect("load fixture");
+        api.load_templates_yaml(FIXTURE_YAML).expect("load fixture");
         let entity = api
             .spawn_entity("scout", EntityComponents::default())
             .expect("spawn scout");

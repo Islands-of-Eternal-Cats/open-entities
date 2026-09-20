@@ -1,5 +1,5 @@
 use open_entities::components::MoveTarget;
-use open_entities::{hello, Api, EntityComponents, EntityId, ExportError, ImportError};
+use open_entities::{Api, EntityComponents, EntityId, ExportError, ImportError, hello};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -183,8 +183,8 @@ impl Simulation {
 #[cfg(test)]
 mod wasm_tests {
     use super::*;
-    use open_entities::components::{Health, Position};
     use open_entities::EntityComponents;
+    use open_entities::components::{Health, Position};
     use wasm_bindgen_test::*;
 
     const FIXTURE_YAML: &str = include_str!(concat!(
@@ -218,33 +218,25 @@ mod wasm_tests {
     #[wasm_bindgen_test]
     fn load_and_spawn_from_fixture() {
         let mut sim = Simulation::new();
-        sim.load_templates_yaml(FIXTURE_YAML)
-            .expect("load fixture");
+        sim.load_templates_yaml(FIXTURE_YAML).expect("load fixture");
         sim.spawn_entity("marker", empty_overrides())
             .expect("spawn marker");
         let json = sim.world_json().expect("export world");
-        let value: serde_json::Value =
-            serde_json::from_str(&json).expect("valid JSON");
+        let value: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
         assert_eq!(value["version"], 3);
-        let entities = value["entities"]
-            .as_array()
-            .expect("entities array");
+        let entities = value["entities"].as_array().expect("entities array");
         assert!(!entities.is_empty());
     }
 
     #[wasm_bindgen_test]
     fn spawn_scout_with_overrides() {
         let mut sim = Simulation::new();
-        sim.load_templates_yaml(FIXTURE_YAML)
-            .expect("load fixture");
+        sim.load_templates_yaml(FIXTURE_YAML).expect("load fixture");
         sim.spawn_entity("scout", scout_overrides())
             .expect("spawn scout");
         let json = sim.world_json().expect("export world");
-        let value: serde_json::Value =
-            serde_json::from_str(&json).expect("valid JSON");
-        let entities = value["entities"]
-            .as_array()
-            .expect("entities array");
+        let value: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+        let entities = value["entities"].as_array().expect("entities array");
         let scout = entities
             .iter()
             .find(|e| e["entity_type"] == "scout")
@@ -268,14 +260,12 @@ mod wasm_tests {
     #[wasm_bindgen_test]
     fn tick_advances_scout() {
         let mut sim = Simulation::new();
-        sim.load_templates_yaml(FIXTURE_YAML)
-            .expect("load fixture");
+        sim.load_templates_yaml(FIXTURE_YAML).expect("load fixture");
         sim.spawn_entity("scout", scout_overrides())
             .expect("spawn scout");
 
         let before = sim.world_json().expect("export before");
-        let before_val: serde_json::Value =
-            serde_json::from_str(&before).expect("parse JSON");
+        let before_val: serde_json::Value = serde_json::from_str(&before).expect("parse JSON");
         let scout_before = before_val["entities"]
             .as_array()
             .unwrap()
@@ -289,8 +279,7 @@ mod wasm_tests {
         }
 
         let after = sim.world_json().expect("export after");
-        let after_val: serde_json::Value =
-            serde_json::from_str(&after).expect("parse JSON");
+        let after_val: serde_json::Value = serde_json::from_str(&after).expect("parse JSON");
         let scout_after = after_val["entities"]
             .as_array()
             .unwrap()
@@ -316,8 +305,7 @@ mod wasm_tests {
     #[wasm_bindgen_test]
     fn order_move_to_moves_a_spawned_entity() {
         let mut sim = Simulation::new();
-        sim.load_templates_yaml(FIXTURE_YAML)
-            .expect("load fixture");
+        sim.load_templates_yaml(FIXTURE_YAML).expect("load fixture");
         let spawned = sim
             .spawn_entity("scout", empty_overrides())
             .expect("spawn scout");
@@ -355,8 +343,7 @@ mod wasm_tests {
     #[wasm_bindgen_test]
     fn load_map_returns_ids_and_bounds() {
         let mut sim = Simulation::new();
-        sim.load_templates_yaml(FIXTURE_YAML)
-            .expect("load fixture");
+        sim.load_templates_yaml(FIXTURE_YAML).expect("load fixture");
 
         let ids = sim.load_map_yaml(MAP_YAML).expect("load map");
         let ids: Vec<serde_json::Value> =
@@ -375,8 +362,7 @@ mod wasm_tests {
     #[wasm_bindgen_test]
     fn despawned_entity_leaves_the_export_and_stops_resolving() {
         let mut sim = Simulation::new();
-        sim.load_templates_yaml(FIXTURE_YAML)
-            .expect("load fixture");
+        sim.load_templates_yaml(FIXTURE_YAML).expect("load fixture");
         let spawned = sim
             .spawn_entity("marker", empty_overrides())
             .expect("spawn marker");
@@ -414,8 +400,7 @@ mod wasm_tests {
     #[wasm_bindgen_test]
     fn unknown_template_fails() {
         let mut sim = Simulation::new();
-        sim.load_templates_yaml(FIXTURE_YAML)
-            .expect("load fixture");
+        sim.load_templates_yaml(FIXTURE_YAML).expect("load fixture");
         let msg = err_string(sim.spawn_entity("nope", empty_overrides()));
         assert!(
             msg.contains("unknown template name: nope"),

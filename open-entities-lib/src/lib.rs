@@ -18,8 +18,8 @@ mod entity_components;
 
 pub use api::Api;
 pub use core::Core;
-pub use export::ExportError;
 pub use entity_components::EntityComponents;
+pub use export::ExportError;
 pub use import::ImportError;
 pub use map::{MapBounds, MapError};
 pub use orders::{EntityId, OrderReport};

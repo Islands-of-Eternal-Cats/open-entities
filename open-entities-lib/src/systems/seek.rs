@@ -82,10 +82,7 @@ mod tests {
 
         run_seek(&mut world);
 
-        let velocity = world
-            .query::<&Velocity>()
-            .single(&world)
-            .expect("velocity");
+        let velocity = world.query::<&Velocity>().single(&world).expect("velocity");
         assert!((velocity.vx - 6.0).abs() < 1e-5);
         assert!((velocity.vy - 8.0).abs() < 1e-5);
     }
@@ -150,10 +147,7 @@ mod tests {
 
         run_seek_with_dt(&mut world, 100);
 
-        let velocity = world
-            .query::<&Velocity>()
-            .single(&world)
-            .expect("velocity");
+        let velocity = world.query::<&Velocity>().single(&world).expect("velocity");
         assert!((velocity.vx - 45.0).abs() < 1e-5);
         assert!((velocity.vy - 0.0).abs() < 1e-5);
     }

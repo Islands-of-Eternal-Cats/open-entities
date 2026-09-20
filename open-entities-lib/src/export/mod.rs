@@ -156,10 +156,9 @@ mod tests {
     #[test]
     fn world_json_partial_components() {
         let mut api = Api::new();
-        api.core_mut().world_mut().spawn((
-            Position { x: 1.0, y: 2.0 },
-            Velocity { vx: 0.5, vy: -0.5 },
-        ));
+        api.core_mut()
+            .world_mut()
+            .spawn((Position { x: 1.0, y: 2.0 }, Velocity { vx: 0.5, vy: -0.5 }));
 
         let json = api.world_json().expect("serialize world");
         let value: serde_json::Value =
@@ -269,10 +268,7 @@ mod tests {
         let mut api = Api::new();
         api.core_mut()
             .world_mut()
-            .spawn((
-                Position { x: 1.0, y: 2.0 },
-                BaseMoveSpeed(2.5),
-            ));
+            .spawn((Position { x: 1.0, y: 2.0 }, BaseMoveSpeed(2.5)));
 
         let json = api.world_json().expect("serialize world");
         let value: serde_json::Value =

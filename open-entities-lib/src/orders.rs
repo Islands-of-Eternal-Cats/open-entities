@@ -328,23 +328,37 @@ mod tests {
         let entity = api
             .core_mut()
             .world_mut()
-            .spawn((
-                Position { x: 0.0, y: 0.0 },
-                Velocity { vx: 0.5, vy: 0.0 },
-            ))
+            .spawn((Position { x: 0.0, y: 0.0 }, Velocity { vx: 0.5, vy: 0.0 }))
             .id();
         let id = EntityId::of(entity);
 
         api.tick(100).expect("tick");
-        let drifted = api.core_mut().world().get::<Position>(entity).expect("position").x;
+        let drifted = api
+            .core_mut()
+            .world()
+            .get::<Position>(entity)
+            .expect("position")
+            .x;
         assert!(drifted > 0.0, "entity should have drifted");
 
-        assert_eq!(api.order_move_to(&[id], MoveTarget { x: 0.0, y: 0.0 }).ordered, 0);
+        assert_eq!(
+            api.order_move_to(&[id], MoveTarget { x: 0.0, y: 0.0 })
+                .ordered,
+            0
+        );
         assert_eq!(api.order_stop(&[id]).ordered, 1);
 
         api.tick(100).expect("tick");
-        let after = api.core_mut().world().get::<Position>(entity).expect("position").x;
-        assert!((after - drifted).abs() < 1e-6, "entity should stay put after stop");
+        let after = api
+            .core_mut()
+            .world()
+            .get::<Position>(entity)
+            .expect("position")
+            .x;
+        assert!(
+            (after - drifted).abs() < 1e-6,
+            "entity should stay put after stop"
+        );
     }
 
     #[test]

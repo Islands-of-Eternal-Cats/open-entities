@@ -28,10 +28,7 @@ mod tests {
     #[test]
     fn movement_integrates_velocity() {
         let mut world = World::new();
-        world.spawn((
-            Position { x: 0.0, y: 0.0 },
-            Velocity { vx: 10.0, vy: 0.0 },
-        ));
+        world.spawn((Position { x: 0.0, y: 0.0 }, Velocity { vx: 10.0, vy: 0.0 }));
         world.insert_resource(SimDelta::from_ms(100));
         world.insert_resource(ArrivedThisTick::default());
 

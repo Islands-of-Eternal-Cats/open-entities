@@ -5,8 +5,8 @@ mod registered;
 
 #[allow(unused_imports)] // re-exports are the public registry API
 pub use registered::{
-    collect_world_export_rows, entity_components_from_query, merge_components,
-    spawn_registered_components, EntityComponents, WorldExportQuery, WorldExportRow,
+    EntityComponents, WorldExportQuery, WorldExportRow, collect_world_export_rows,
+    entity_components_from_query, merge_components, spawn_registered_components,
 };
 
 #[cfg(test)]
@@ -36,10 +36,7 @@ mod tests {
     #[test]
     fn entity_components_has_any_detects_health() {
         let doc = EntityComponents {
-            health: Some(Health {
-                current: 1,
-                max: 1,
-            }),
+            health: Some(Health { current: 1, max: 1 }),
             ..Default::default()
         };
         assert!(entity_components_has_any(&doc));
@@ -49,13 +46,7 @@ mod tests {
     #[test]
     fn collect_world_export_rows_reads_registered_components() {
         let mut world = World::new();
-        world.spawn((
-            Position { x: 3.0, y: 4.0 },
-            Health {
-                current: 7,
-                max: 9,
-            },
-        ));
+        world.spawn((Position { x: 3.0, y: 4.0 }, Health { current: 7, max: 9 }));
 
         let rows = collect_world_export_rows(&mut world);
         assert_eq!(rows.len(), 1);
@@ -65,10 +56,7 @@ mod tests {
         );
         assert_eq!(
             rows[0].components.health,
-            Some(Health {
-                current: 7,
-                max: 9,
-            })
+            Some(Health { current: 7, max: 9 })
         );
         assert!(rows[0].entity_type.is_none());
     }
