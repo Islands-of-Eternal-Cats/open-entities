@@ -107,6 +107,41 @@ mod tests {
         assert!(world.get::<MoveTarget>(entity).is_none());
     }
 
+    #[test]
+    fn fast_unit_arrives_without_oscillation() {
+        let mut api = Api::new();
+        let entity = api
+            .core_mut()
+            .world_mut()
+            .spawn((
+                Position { x: 0.0, y: 0.0 },
+                MoveTarget { x: 20.0, y: 0.0 },
+                BaseMoveSpeed(45.0),
+                Velocity { vx: 0.0, vy: 0.0 },
+            ))
+            .id();
+
+        // 45 units/s at the 100 ms cap steps 4.5 per tick: 4 full steps, then arrival.
+        let mut ticks = 0;
+        for _ in 0..100 {
+            api.tick(100).expect("tick");
+            ticks += 1;
+            if api.core_mut().world().get::<MoveTarget>(entity).is_none() {
+                break;
+            }
+        }
+
+        assert!(ticks <= 6, "expected arrival in a few ticks, took {ticks}");
+
+        let world = api.core_mut().world();
+        let position = world.get::<Position>(entity).expect("position");
+        assert!((position.x - 20.0).abs() < 1e-4);
+        assert!((position.y - 0.0).abs() < 1e-4);
+        let velocity = world.get::<Velocity>(entity).expect("velocity");
+        assert_eq!(velocity.vx, 0.0);
+        assert_eq!(velocity.vy, 0.0);
+    }
+
     const FIXTURE_YAML: &str = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../fixtures/spawn_entity_templates.yaml"

@@ -1,10 +1,20 @@
 use bevy_ecs::prelude::*;
 
 use crate::components::{BaseMoveSpeed, MoveTarget, Position, Velocity};
-use crate::simulation::ArrivedThisTick;
+use crate::simulation::{ArrivedThisTick, SimDelta};
 
 use super::ARRIVAL_THRESHOLD;
 
+/// Steers entities toward their [`MoveTarget`] and detects arrival.
+///
+/// An entity arrives when it is already within [`ARRIVAL_THRESHOLD`] of the target, or when the
+/// step it would take this tick (`speed * dt`) reaches it. Either way the position snaps to the
+/// target, velocity is zeroed, [`MoveTarget`] is removed and the entity is recorded in
+/// [`ArrivedThisTick`] so [`movement_system`](super::movement_system) skips it this frame.
+///
+/// Without the step check, a unit faster than `2 * ARRIVAL_THRESHOLD / dt` overshoots the target
+/// every tick, turns around on the next one and oscillates forever.
+#[allow(clippy::needless_pass_by_value)] // Bevy `Res` system parameters
 pub fn seek_system(
     mut commands: Commands,
     mut query: Query<(
@@ -15,13 +25,16 @@ pub fn seek_system(
         &mut Velocity,
     )>,
     mut arrived: ResMut<ArrivedThisTick>,
+    delta: Res<SimDelta>,
 ) {
     for (entity, mut position, target, speed, mut velocity) in &mut query {
         let dx = target.x - position.x;
         let dy = target.y - position.y;
         let dist = dx.hypot(dy);
+        let speed = speed.0.max(0.0);
+        let step = speed * delta.dt_secs;
 
-        if dist <= ARRIVAL_THRESHOLD {
+        if dist <= ARRIVAL_THRESHOLD || step >= dist {
             position.x = target.x;
             position.y = target.y;
             velocity.vx = 0.0;
@@ -31,18 +44,9 @@ pub fn seek_system(
             continue;
         }
 
-        if dist > 0.0 {
-            let inv = speed.0 / dist;
-            velocity.vx = dx * inv;
-            velocity.vy = dy * inv;
-        } else {
-            position.x = target.x;
-            position.y = target.y;
-            velocity.vx = 0.0;
-            velocity.vy = 0.0;
-            commands.entity(entity).remove::<MoveTarget>();
-            arrived.0.insert(entity);
-        }
+        let inv = speed / dist;
+        velocity.vx = dx * inv;
+        velocity.vy = dy * inv;
     }
 }
 
@@ -53,13 +57,17 @@ mod tests {
     use crate::simulation::{ArrivedThisTick, SimDelta};
     use bevy_ecs::prelude::{Schedule, World};
 
-    fn run_seek(world: &mut World) {
+    fn run_seek_with_dt(world: &mut World, dt_ms: u32) {
         let mut schedule = Schedule::default();
         schedule.add_systems(seek_system);
         world.insert_resource(ArrivedThisTick::default());
-        world.insert_resource(SimDelta::from_ms(16));
+        world.insert_resource(SimDelta::from_ms(dt_ms));
         schedule.run(world);
         world.flush();
+    }
+
+    fn run_seek(world: &mut World) {
+        run_seek_with_dt(world, 16);
     }
 
     #[test]
@@ -103,5 +111,50 @@ mod tests {
         assert_eq!(velocity.vx, 0.0);
         assert_eq!(velocity.vy, 0.0);
         assert!(world.get::<MoveTarget>(entity).is_none());
+    }
+
+    #[test]
+    fn seek_arrives_when_step_would_overshoot() {
+        let mut world = World::new();
+        let entity = world
+            .spawn((
+                Position { x: 0.0, y: 0.0 },
+                MoveTarget { x: 1.0, y: 0.0 },
+                BaseMoveSpeed(45.0),
+                Velocity { vx: 0.0, vy: 0.0 },
+            ))
+            .id();
+
+        // step = 45 * 0.1 = 4.5 world units, far past the target 1.0 away.
+        run_seek_with_dt(&mut world, 100);
+
+        let position = world.get::<Position>(entity).expect("position");
+        assert_eq!(position.x, 1.0);
+        assert_eq!(position.y, 0.0);
+        let velocity = world.get::<Velocity>(entity).expect("velocity");
+        assert_eq!(velocity.vx, 0.0);
+        assert_eq!(velocity.vy, 0.0);
+        assert!(world.get::<MoveTarget>(entity).is_none());
+        assert!(world.resource::<ArrivedThisTick>().0.contains(&entity));
+    }
+
+    #[test]
+    fn seek_keeps_full_speed_while_step_is_short_of_target() {
+        let mut world = World::new();
+        world.spawn((
+            Position { x: 0.0, y: 0.0 },
+            MoveTarget { x: 20.0, y: 0.0 },
+            BaseMoveSpeed(45.0),
+            Velocity { vx: 0.0, vy: 0.0 },
+        ));
+
+        run_seek_with_dt(&mut world, 100);
+
+        let velocity = world
+            .query::<&Velocity>()
+            .single(&world)
+            .expect("velocity");
+        assert!((velocity.vx - 45.0).abs() < 1e-5);
+        assert!((velocity.vy - 0.0).abs() < 1e-5);
     }
 }
