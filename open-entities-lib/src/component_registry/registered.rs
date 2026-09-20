@@ -1,4 +1,6 @@
-use crate::components::{BaseMoveSpeed, Faction, Health, MoveTarget, Position, Velocity};
+use crate::components::{
+    BaseMoveSpeed, Boardable, Faction, Health, MoveTarget, Position, Velocity,
+};
 
 define_registered_components! {
     register_component!(position, Position);
@@ -7,4 +9,5 @@ define_registered_components! {
     register_component!(move_target, MoveTarget);
     register_component!(base_move_speed, BaseMoveSpeed);
     register_component!(health, Health);
+    register_component!(boardable, Boardable);
 }

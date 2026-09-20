@@ -345,7 +345,7 @@ mod wasm_tests {
             .expect("spawn marker");
         let json = sim.world_json().expect("export world");
         let value: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
-        assert_eq!(value["version"], 3);
+        assert_eq!(value["version"], 4);
         let entities = value["entities"].as_array().expect("entities array");
         assert!(!entities.is_empty());
     }

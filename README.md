@@ -7,7 +7,7 @@ The library uses [Bevy ECS](https://crates.io/crates/bevy_ecs) (`bevy_ecs` only,
 - [`Api`](open-entities-lib/src/api.rs) — the facade: spawn, orders, lifecycle, import, export
 - [`EntityId`](open-entities-lib/src/orders.rs) — how every call names an entity: an `{index, generation}` pair
 - [`Core`](open-entities-lib/src/core.rs) — owns the ECS [`World`](https://docs.rs/bevy_ecs/latest/bevy_ecs/world/struct.World.html); reachable through `Api::core()` / `core_mut()`
-- [`export`](open-entities-lib/src/export/mod.rs) — `Api::world_json()` serializes **every entity** in the world to JSON **schema version 3**; registered gameplay fields are omitted when absent (not `null`)
+- [`export`](open-entities-lib/src/export/mod.rs) — `Api::world_json()` serializes **every entity** in the world to JSON **schema version 4**; registered gameplay fields are omitted when absent (not `null`)
 - [`EntityComponents`](open-entities-lib/src/entity_components.rs) — shared struct for YAML templates, `spawn_entity` overrides, and flattened export rows
 
 ## Where bevy stops
@@ -117,6 +117,34 @@ a new entity by accident.
 let removed = api.despawn(&[id]);
 assert!(!api.is_alive(id));
 ```
+
+## Carrying units
+
+A vehicle is an entity with seats; a unit standing next to it can climb aboard.
+
+```yaml
+entities:
+  jeep:
+    position: { x: 0.0, y: 0.0 }
+    velocity: { vx: 0.0, vy: 0.0 }
+    base_move_speed: 60.0
+    boardable: 4
+```
+
+```rust
+api.board(unit, jeep)?;   // within BOARDING_RANGE of it
+api.unboard(unit)?;       // steps off beside the vehicle
+```
+
+While a unit is aboard, its position belongs to the vehicle: seek and movement skip passengers
+entirely, and one system copies the vehicle's position onto them after it has moved. An order given
+to a passenger does nothing rather than fighting the vehicle for where the unit is — the position
+has exactly one owner at a time.
+
+If the vehicle is despawned, its passengers are let off where they stand: a component pointing at
+an entity that no longer exists is a leak waiting to be read.
+
+`Api::passengers(vehicle)`, `Api::vehicle_of(unit)` and `Api::free_seats(vehicle)` read the state.
 
 ## Map layout
 
@@ -352,19 +380,20 @@ api.core_mut().world_mut().spawn(Position { x: 1.0, y: 2.0 });
 let json = api.world_json().expect("export world");
 ```
 
-### Exported JSON (schema version 3)
+### Exported JSON (schema version 4)
 
 Every entity in the world appears in `entities`. Component keys are omitted when the entity does not have that component (not `null`).
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "entities": [
     {
       "id": { "index": 0, "generation": 0 },
       "position": { "x": 1.0, "y": 2.0 },
       "velocity": { "vx": 0.5, "vy": -0.5 },
-      "base_move_speed": 2.0
+      "base_move_speed": 2.0,
+      "boardable": 4
     },
     {
       "id": { "index": 1, "generation": 0 },

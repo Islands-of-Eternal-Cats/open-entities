@@ -34,7 +34,7 @@ export interface EntityId {
   generation: number;
 }
 
-/** One row of the world export (schema version 3); component keys are absent, never null. */
+/** One row of the world export (schema version 4); component keys are absent, never null. */
 export interface WorldExportRow {
   id: EntityId;
   entity_type?: string;
@@ -44,6 +44,7 @@ export interface WorldExportRow {
   base_move_speed?: number;
   move_target?: Pos;
   health?: { current: number; max: number };
+  boardable?: number;
 }
 
 /** Payload of `Simulation.getWorldAsJson()`. */

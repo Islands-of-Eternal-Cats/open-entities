@@ -1,5 +1,6 @@
 pub mod assigned_to;
 pub mod base_move_speed;
+pub mod boardable;
 pub mod entity_type;
 pub mod faction;
 pub mod group;
@@ -10,11 +11,13 @@ pub mod mission;
 pub mod move_target;
 pub mod needs_mission;
 pub mod order_source;
+pub mod passenger_of;
 pub mod position;
 pub mod velocity;
 
 pub use assigned_to::AssignedTo;
 pub use base_move_speed::BaseMoveSpeed;
+pub use boardable::Boardable;
 pub use entity_type::EntityType;
 pub use faction::Faction;
 pub use group::Group;
@@ -25,5 +28,6 @@ pub use mission::{Mission, MissionCompleted};
 pub use move_target::MoveTarget;
 pub use needs_mission::NeedsMission;
 pub use order_source::OrderSource;
+pub use passenger_of::PassengerOf;
 pub use position::Position;
 pub use velocity::Velocity;

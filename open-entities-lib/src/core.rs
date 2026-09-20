@@ -3,8 +3,8 @@ use bevy_ecs::schedule::{IntoScheduleConfigs, ScheduleLabel};
 
 use crate::simulation::ArrivedThisTick;
 use crate::systems::{
-    mission_completion_system, mission_steering_system, movement_system, replanner_system,
-    seek_system,
+    mission_completion_system, mission_steering_system, movement_system, passenger_sync_system,
+    replanner_system, seek_system,
 };
 
 #[derive(ScheduleLabel, Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -31,6 +31,7 @@ impl Core {
                 mission_steering_system,
                 seek_system,
                 movement_system,
+                passenger_sync_system,
                 mission_completion_system,
                 replanner_system,
             )

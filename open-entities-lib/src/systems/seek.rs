@@ -1,6 +1,6 @@
 use bevy_ecs::prelude::*;
 
-use crate::components::{BaseMoveSpeed, MoveTarget, OrderSource, Position, Velocity};
+use crate::components::{BaseMoveSpeed, MoveTarget, OrderSource, PassengerOf, Position, Velocity};
 use crate::simulation::{ArrivedThisTick, SimDelta};
 
 use super::ARRIVAL_THRESHOLD;
@@ -18,13 +18,17 @@ use super::ARRIVAL_THRESHOLD;
 #[allow(clippy::needless_pass_by_value)] // Bevy `Res` system parameters
 pub fn seek_system(
     mut commands: Commands,
-    mut query: Query<(
-        Entity,
-        &mut Position,
-        &MoveTarget,
-        &BaseMoveSpeed,
-        &mut Velocity,
-    )>,
+    mut query: Query<
+        (
+            Entity,
+            &mut Position,
+            &MoveTarget,
+            &BaseMoveSpeed,
+            &mut Velocity,
+        ),
+        // A passenger's position belongs to its vehicle; steering it here would give it two owners.
+        Without<PassengerOf>,
+    >,
     mut arrived: ResMut<ArrivedThisTick>,
     delta: Res<SimDelta>,
 ) {

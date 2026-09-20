@@ -1,11 +1,12 @@
 use bevy_ecs::prelude::*;
 
-use crate::components::{Position, Velocity};
+use crate::components::{PassengerOf, Position, Velocity};
 use crate::simulation::{ArrivedThisTick, SimDelta};
 
 #[allow(clippy::needless_pass_by_value)] // Bevy `Res` system parameters
 pub fn movement_system(
-    mut query: Query<(Entity, &mut Position, &Velocity)>,
+    // Passengers are carried, not integrated: `passenger_sync_system` owns their position.
+    mut query: Query<(Entity, &mut Position, &Velocity), Without<PassengerOf>>,
     arrived: Res<ArrivedThisTick>,
     delta: Res<SimDelta>,
 ) {

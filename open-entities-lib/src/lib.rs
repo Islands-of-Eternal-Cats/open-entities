@@ -4,6 +4,7 @@
 #![cfg_attr(test, allow(clippy::float_cmp))]
 
 pub mod api;
+pub mod boarding;
 pub mod components;
 pub mod core;
 pub mod export;
@@ -19,6 +20,7 @@ mod component_registry;
 mod entity_components;
 
 pub use api::Api;
+pub use boarding::{BOARDING_RANGE, BoardError};
 pub use core::Core;
 pub use entity_components::EntityComponents;
 pub use export::ExportError;

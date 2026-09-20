@@ -14,6 +14,11 @@ to a click on the canvas.
 
 ### Added
 
+- **Carrying units.** `Api::board`, `unboard`, `passengers`, `vehicle_of`, `free_seats`, plus a
+  `boardable: <seats>` template field. A passenger's position belongs to its vehicle: the movement
+  systems skip passengers and a sync system copies the vehicle's position onto them after it moves,
+  so an order given to a passenger does nothing instead of fighting for where the unit is. Losing
+  the vehicle lets its passengers go.
 - **Groups and missions in JavaScript.** The whole group and mission surface is exposed through
   `Simulation`, and the browser demo can form a group from the selection (**G**) and switch its
   clicks between personal and group orders, which makes the priority rule visible on screen.
@@ -48,6 +53,9 @@ to a click on the canvas.
   push and pull request.
 
 ### Changed
+
+- **Breaking.** The export is **schema version 4**: registering `Boardable` adds a `boardable`
+  field to entities that have seats.
 
 - **Breaking.** `spawn_entity` and `load_map_yaml` return `EntityId` instead of a bevy `Entity`,
   and the crate root no longer re-exports `Component`, `Entity`, `Query` and `World`. No

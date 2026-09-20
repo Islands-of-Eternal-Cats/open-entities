@@ -1,7 +1,9 @@
+pub mod boarding;
 pub mod missions;
 pub mod movement;
 pub mod seek;
 
+pub use boarding::passenger_sync_system;
 pub use missions::{mission_completion_system, mission_steering_system, replanner_system};
 pub use movement::movement_system;
 pub use seek::seek_system;

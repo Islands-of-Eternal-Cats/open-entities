@@ -6,7 +6,7 @@ use crate::component_registry::collect_world_export_rows;
 use crate::components::EntityType;
 use crate::entity_components::EntityComponents;
 
-const SCHEMA_VERSION: u32 = 3;
+const SCHEMA_VERSION: u32 = 4;
 
 /// Errors while serializing a world snapshot to JSON.
 #[derive(Debug)]
@@ -59,7 +59,7 @@ struct EntityIdExport {
 }
 
 impl Api {
-    /// Serializes every entity in the world to JSON (schema version 3).
+    /// Serializes every entity in the world to JSON (schema version 4).
     ///
     /// Registered gameplay component fields are omitted from each entity row when
     /// that component is not present on the entity.
@@ -104,17 +104,17 @@ mod tests {
         let json = api.world_json().expect("serialize empty world");
         let value: serde_json::Value =
             serde_json::from_str(&json).expect("exported JSON should parse");
-        assert_eq!(value["version"], 3);
+        assert_eq!(value["version"], 4);
         assert_eq!(value["entities"].as_array().map(Vec::len), Some(0));
     }
 
     #[test]
-    fn world_json_v3_version() {
+    fn world_json_v4_version() {
         let mut api = Api::new();
         let json = api.world_json().expect("serialize empty world");
         let value: serde_json::Value =
             serde_json::from_str(&json).expect("exported JSON should parse");
-        assert_eq!(value["version"], 3);
+        assert_eq!(value["version"], 4);
     }
 
     #[test]
@@ -128,7 +128,7 @@ mod tests {
         let value: serde_json::Value =
             serde_json::from_str(&json).expect("exported JSON should parse");
 
-        assert_eq!(value["version"], 3);
+        assert_eq!(value["version"], 4);
         let entities = value["entities"].as_array().expect("entities array");
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0]["position"]["x"], 1.0);
@@ -146,7 +146,7 @@ mod tests {
         let value: serde_json::Value =
             serde_json::from_str(&json).expect("exported JSON should parse");
 
-        assert_eq!(value["version"], 3);
+        assert_eq!(value["version"], 4);
         let entities = value["entities"].as_array().expect("entities array");
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0]["faction"], 2);
@@ -164,7 +164,7 @@ mod tests {
         let value: serde_json::Value =
             serde_json::from_str(&json).expect("exported JSON should parse");
 
-        assert_eq!(value["version"], 3);
+        assert_eq!(value["version"], 4);
         let entities = value["entities"].as_array().expect("entities array");
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0]["position"]["x"], 1.0);
@@ -184,7 +184,7 @@ mod tests {
         let value: serde_json::Value =
             serde_json::from_str(&json).expect("exported JSON should parse");
 
-        assert_eq!(value["version"], 3);
+        assert_eq!(value["version"], 4);
         let entities = value["entities"].as_array().expect("entities array");
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0]["entity_type"], "marker");
@@ -218,7 +218,7 @@ mod tests {
         let value: serde_json::Value =
             serde_json::from_str(&json).expect("exported JSON should parse");
 
-        assert_eq!(value["version"], 3);
+        assert_eq!(value["version"], 4);
         let entities = value["entities"].as_array().expect("entities array");
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0]["health"]["current"], 80);
@@ -235,7 +235,7 @@ mod tests {
         let value: serde_json::Value =
             serde_json::from_str(&json).expect("exported JSON should parse");
 
-        assert_eq!(value["version"], 3);
+        assert_eq!(value["version"], 4);
         let entities = value["entities"].as_array().expect("entities array");
         assert_eq!(entities.len(), 1);
         assert!(entities[0].get("position").is_none());

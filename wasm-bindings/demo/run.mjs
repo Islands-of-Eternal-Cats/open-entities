@@ -30,8 +30,8 @@ for (const name of names) {
 const json = sim.getWorldAsJson();
 const parsed = JSON.parse(json);
 
-if (parsed.version !== 3) {
-  throw new Error(`expected version 3, got ${parsed.version}`);
+if (parsed.version !== 4) {
+  throw new Error(`expected version 4, got ${parsed.version}`);
 }
 if (!Array.isArray(parsed.entities) || parsed.entities.length !== 5) {
   throw new Error(`expected 5 entities, got ${parsed.entities?.length}`);
