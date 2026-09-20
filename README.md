@@ -39,6 +39,21 @@ api.order_move_to(&[id], MoveTarget { x: 20.0, y: 0.0 });
 **not** require a `BaseMoveSpeed`, because in this engine a `Velocity` alone is movement — an entity
 that carries one without a move speed drifts until something stops it.
 
+## Entity lifecycle
+
+`Api::despawn(ids)` removes entities and returns how many were actually removed — unknown, stale
+and repeated ids are skipped, so the count is of entities, never of ids passed in.
+`Api::is_alive(id)` says whether an id still resolves.
+
+An id stops resolving the moment its entity is despawned, and stays dead afterwards: the index may
+be handed to a new entity, but that one carries a higher `generation`, so an old id never points at
+a new entity by accident.
+
+```rust
+let removed = api.despawn(&[id]);
+assert!(!api.is_alive(id));
+```
+
 ## Map layout
 
 `Api::load_map_yaml(yaml)` spawns a starting layout and records its bounds. An entry names a
@@ -173,6 +188,8 @@ make wasm-check
 | `tick(dtMs)` | `tick` |
 | `orderMoveTo(ids, x, y)` | `order_move_to` |
 | `orderStop(ids)` | `order_stop` |
+| `despawn(ids)` | `despawn` → count removed |
+| `isAlive(id)` | `is_alive` |
 | `loadMapYaml(yaml)` | `load_map_yaml` → array of ids |
 | `mapBounds()` | `map_bounds` → `{width, height}` or `null` |
 | `hello()` | `hello` |

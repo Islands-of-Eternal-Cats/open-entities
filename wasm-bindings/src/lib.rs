@@ -138,6 +138,30 @@ impl Simulation {
             .map_err(|_| JsValue::from_str("orderStop stopped more entities than u32 can hold"))
     }
 
+    /// JS: `despawn(ids)` — removes entities, returns how many were actually removed.
+    ///
+    /// Unknown, stale and repeated ids are skipped, so the count is of entities removed, never of
+    /// ids passed in.
+    #[wasm_bindgen(js_name = despawn)]
+    pub fn despawn(&mut self, ids: JsValue) -> Result<u32, JsValue> {
+        let ids: Vec<EntityId> = serde_wasm_bindgen::from_value(ids)
+            .map_err(|e| JsValue::from_str(&format!("invalid entity ids: {e}")))?;
+        if ids.is_empty() {
+            return Err(JsValue::from_str("despawn(ids) requires at least one id"));
+        }
+        let removed = self.api.despawn(&ids);
+        u32::try_from(removed)
+            .map_err(|_| JsValue::from_str("despawn removed more entities than u32 can hold"))
+    }
+
+    /// JS: `isAlive(id)` — `true` while the entity behind this `{index, generation}` is spawned.
+    #[wasm_bindgen(js_name = isAlive)]
+    pub fn is_alive(&self, id: JsValue) -> Result<bool, JsValue> {
+        let id: EntityId = serde_wasm_bindgen::from_value(id)
+            .map_err(|e| JsValue::from_str(&format!("invalid entity id: {e}")))?;
+        Ok(self.api.is_alive(id))
+    }
+
     /// JS: `tick(dtMs)` — positive integer milliseconds only.
     #[wasm_bindgen(js_name = tick)]
     pub fn tick(&mut self, dt_ms: f64) -> Result<(), JsValue> {
@@ -346,6 +370,27 @@ mod wasm_tests {
             serde_wasm_bindgen::from_value(bounds).expect("bounds deserialize");
         assert_eq!(bounds["width"], 200.0);
         assert_eq!(bounds["height"], 200.0);
+    }
+
+    #[wasm_bindgen_test]
+    fn despawned_entity_leaves_the_export_and_stops_resolving() {
+        let mut sim = Simulation::new();
+        sim.load_templates_yaml(FIXTURE_YAML)
+            .expect("load fixture");
+        let spawned = sim
+            .spawn_entity("marker", empty_overrides())
+            .expect("spawn marker");
+        let id = EntityId::new(spawned.index(), spawned.generation());
+        let id_js = serde_wasm_bindgen::to_value(&id).expect("id");
+        let ids_js = serde_wasm_bindgen::to_value(&vec![id]).expect("ids");
+
+        assert!(sim.is_alive(id_js.clone()).expect("alive check"));
+        assert_eq!(sim.despawn(ids_js).expect("despawn"), 1);
+        assert!(!sim.is_alive(id_js).expect("alive check"));
+
+        let json = sim.world_json().expect("export world");
+        let value: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+        assert_eq!(value["entities"].as_array().map(Vec::len), Some(0));
     }
 
     #[wasm_bindgen_test]
