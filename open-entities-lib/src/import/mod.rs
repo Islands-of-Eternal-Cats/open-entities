@@ -15,7 +15,7 @@ use crate::orders::EntityId;
 #[derive(Debug)]
 pub enum ImportError {
     /// YAML syntax, type mismatch, or unknown field.
-    Yaml(serde_yaml::Error),
+    Yaml(yaml_serde::Error),
     /// `spawn_entity` called before a successful `load_templates_yaml`.
     TemplatesNotLoaded,
     /// No template with this name in the loaded map.
@@ -170,7 +170,7 @@ impl Api {
     ///
     /// Returns [`ImportError::Yaml`] for invalid YAML or unknown fields.
     pub fn load_templates_yaml(&mut self, yaml: &str) -> Result<(), ImportError> {
-        let parsed: TemplatesFileRoot = serde_yaml::from_str(yaml).map_err(ImportError::Yaml)?;
+        let parsed: TemplatesFileRoot = yaml_serde::from_str(yaml).map_err(ImportError::Yaml)?;
         let flattened = resolve_all_templates(&parsed.entities)?;
         self.templates = Some(flattened);
         Ok(())

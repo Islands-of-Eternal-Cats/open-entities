@@ -26,7 +26,7 @@ pub struct MapBounds {
 #[derive(Debug)]
 pub enum MapError {
     /// YAML syntax, type mismatch, or unknown field.
-    Yaml(serde_yaml::Error),
+    Yaml(yaml_serde::Error),
     /// `load_map_yaml` called before a successful `load_templates_yaml`.
     TemplatesNotLoaded,
     /// An entry names a template that was not loaded; nothing was spawned.
@@ -90,7 +90,7 @@ impl Api {
     /// [`MapError::Yaml`] for invalid YAML, [`MapError::TemplatesNotLoaded`] when no templates are
     /// loaded, [`MapError::UnknownTemplate`] when an entry names a template that does not exist.
     pub fn load_map_yaml(&mut self, yaml: &str) -> Result<Vec<EntityId>, MapError> {
-        let file: MapFile = serde_yaml::from_str(yaml).map_err(MapError::Yaml)?;
+        let file: MapFile = yaml_serde::from_str(yaml).map_err(MapError::Yaml)?;
 
         {
             let templates = self
