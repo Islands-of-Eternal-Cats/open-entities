@@ -15,6 +15,7 @@ const state = vi.hoisted(() => {
       faction: 1,
       seats: null,
       aboard: null,
+    boarding: null,
       moveTarget: null,
     },
     {
@@ -25,6 +26,7 @@ const state = vi.hoisted(() => {
       faction: 1,
       seats: null,
       aboard: null,
+    boarding: null,
       moveTarget: null,
     },
     {
@@ -35,6 +37,7 @@ const state = vi.hoisted(() => {
       faction: 1,
       seats: 4,
       aboard: null,
+    boarding: null,
       moveTarget: null,
     },
   ];
@@ -60,6 +63,7 @@ const state = vi.hoisted(() => {
         faction: null,
         seats: null,
         aboard: null,
+    boarding: null,
         moveTarget: null,
       } satisfies EntitySnapshot,
     ]),
@@ -232,7 +236,7 @@ describe("main input wiring", () => {
   it("says why boarding did nothing instead of logging it", async () => {
     state.selectedIds.add("v1");
     state.boardUnits.mockRejectedValueOnce(
-      new Error("the unit is more than 3 units away")
+      new Error("entity 9:0 has no seats to board")
     );
     await import("./main");
     await flush();
@@ -242,7 +246,7 @@ describe("main input wiring", () => {
     await flush();
 
     expect(document.getElementById("transport-state")?.textContent).toContain(
-      "more than 3 units away"
+      "no seats to board"
     );
   });
 

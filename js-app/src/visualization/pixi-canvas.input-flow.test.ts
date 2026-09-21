@@ -77,6 +77,7 @@ function makeEntity(id: string, x: number, y: number): EntitySnapshot {
     faction: null,
     seats: null,
     aboard: null,
+    boarding: null,
     moveTarget: null,
   };
 }

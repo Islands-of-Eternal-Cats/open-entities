@@ -16,6 +16,7 @@ describe("selection-logic", () => {
     faction: null,
     seats: null,
     aboard: null,
+    boarding: null,
     moveTarget: null,
   };
   const b: EntitySnapshot = {
@@ -26,6 +27,7 @@ describe("selection-logic", () => {
     faction: null,
     seats: null,
     aboard: null,
+    boarding: null,
     moveTarget: null,
   };
 

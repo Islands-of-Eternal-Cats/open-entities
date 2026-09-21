@@ -13,6 +13,7 @@ function mockEntity(
     faction: null,
     seats: null,
     aboard: null,
+    boarding: null,
     moveTarget: null,
     ...overrides,
   };
@@ -61,6 +62,11 @@ describe("renderEntities", () => {
     expect(container.innerHTML).toContain("aboard 7");
   });
 
+  it("says who is on the way to board, since that is invisible too", () => {
+    renderEntities([mockEntity({ id: "8", boarding: "7" })], container);
+    expect(container.innerHTML).toContain("boarding 7");
+  });
+
   it("shows a move target, the one piece of state the map cannot draw", () => {
     renderEntities(
       [mockEntity({ id: "9", moveTarget: { x: 40, y: 12.5 } })],
@@ -97,5 +103,24 @@ describe("renderEntities", () => {
     expect(rows[0].classList.contains("entity-row--selected")).toBe(false);
     expect(rows[1].classList.contains("entity-row--selected")).toBe(true);
     expect(rows[1].getAttribute("aria-current")).toBe("true");
+  });
+
+  it("keeps a row's element between calls, so its text stays selectable", () => {
+    renderEntities([mockEntity({ id: "1", pos: { x: 0, y: 0 } })], container);
+    const before = container.querySelector(".entity-row");
+    const meta = container.querySelector(".entity-meta");
+    renderEntities([mockEntity({ id: "1", pos: { x: 5, y: 0 } })], container);
+    expect(container.querySelector(".entity-row")).toBe(before);
+    expect(container.querySelector(".entity-meta")).toBe(meta);
+    expect(meta?.textContent).toContain("(5.00, 0.00)");
+  });
+
+  it("drops rows whose entity is gone and keeps snapshot order", () => {
+    renderEntities([mockEntity({ id: "1" }), mockEntity({ id: "2" })], container);
+    renderEntities([mockEntity({ id: "3" }), mockEntity({ id: "1" })], container);
+    const ids = [...container.querySelectorAll<HTMLElement>(".entity-row")].map(
+      (row) => row.dataset.entityId
+    );
+    expect(ids).toEqual(["3", "1"]);
   });
 });

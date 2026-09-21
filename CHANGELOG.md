@@ -12,6 +12,16 @@ section becomes 0.1.0 on the day that changes.
 One facade, one way to name an entity, and a browser demo that exercises the whole path from YAML
 to a click on the canvas.
 
+### Changed
+
+- **Boarding is an order, not a range check.** `order_board(units, vehicle)` marks units with
+  `BoardingTarget`; the new `boarding_approach_system` walks them to the vehicle — following it
+  if it drives off — and boards them once within `BOARDING_RANGE`. A unit that arrives to find
+  no seat stays outside with the order dropped; stop and a new move order cancel it. `board`
+  itself no longer refuses on distance (`BoardError::TooFarAway` is gone): it is the primitive
+  underneath. `boarding_target_of` and `approaching` read the order back, and the demo's **B**
+  now sends units over instead of refusing the far ones.
+
 ### Added
 
 - **Transport in the browser demo.** `board`, `unboard`, `vehicleOf`, `passengers` and `freeSeats`
