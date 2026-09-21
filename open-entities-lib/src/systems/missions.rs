@@ -16,6 +16,10 @@ use crate::orders::group_slot;
 ///
 /// Within a group, a member already following a stronger order keeps it. The ladder lives in
 /// [`OrderSource`], and mission steering sits at the bottom of it.
+// The "complex types" are query declarations: data tuple plus filter tuple, which is how this ECS
+// spells a system's inputs. Factoring them into aliases would move the same words somewhere else
+// and cost the reader the signature.
+#[allow(clippy::type_complexity)]
 pub fn mission_steering_system(
     mut commands: Commands,
     groups: Query<(Entity, &AssignedTo), (With<Group>, Without<ManualActive>)>,
@@ -146,6 +150,7 @@ pub fn mission_completion_system(
 ///
 /// Choice among open missions is the nearest to the group's centre of mass, ties broken by entity
 /// index so the same world always plans the same way.
+#[allow(clippy::type_complexity)] // a query declaration, see `mission_steering_system`
 pub fn replanner_system(
     mut commands: Commands,
     groups: Query<(Entity, Option<&ManualActive>), (With<Group>, With<NeedsMission>)>,

@@ -268,8 +268,8 @@ mod tests {
         let rider = spawn_unit(&mut api, 1.0);
         api.board(rider, truck).expect("board");
 
-        // Nothing stops a host from ordering a passenger about; the movement systems must not
-        // act on it, or its position would have two owners.
+        // Nothing stops a host from *trying* to order a passenger about. The order is refused
+        // at the door — see `can_take_a_move_order` — so nothing is left to act on later.
         api.order_move_to(&[rider], MoveTarget { x: 100.0, y: 0.0 });
         for _ in 0..20 {
             api.tick(100).expect("tick");
