@@ -23,6 +23,10 @@ to a click on the canvas.
   actually loaded, plus its size. Same fingerprint after a rebuild means nothing rebuilt — which
   is the difference between a fix that does not work and a fix that is not in what you are
   running, and that difference cost an evening.
+- **The demo only offers mobile things as cargo.** Board reads the selection for units with a
+  velocity, which in this engine is what being mobile means. The core stays permissive — it asks a
+  passenger only for a position, and whether a self-propelled gun is freight is a question for a
+  game rather than for an ECS — but the demo no longer offers to load the player's base.
 - **Move targets in the HUD.** Each row in Forces prints `→ (x, y)` when the entity holds an order.
   A target is the one piece of unit state with no appearance on the map, so a unit standing on a
   stale one looked exactly like a unit standing still.

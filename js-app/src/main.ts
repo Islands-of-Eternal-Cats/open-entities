@@ -218,7 +218,7 @@ function syncGroupUi(selectionSize: number): void {
 interface TransportSelection {
   /** The one selected vehicle, or null when the selection holds none or several. */
   vehicle: EntitySnapshot | null;
-  /** Selected units on their own feet, which is who Board would try to load. */
+  /** Selected units on their own feet that could plausibly be cargo. */
   boarders: EntitySnapshot[];
   /** Passengers Unboard would let off. */
   riders: EntitySnapshot[];
@@ -230,8 +230,13 @@ function readTransportSelection(
   const chosen = lastEntities.filter((entity) => selected.has(entity.id));
   const vehicles = chosen.filter((entity) => entity.seats !== null);
   const vehicle = vehicles.length === 1 ? vehicles[0] : null;
+  // A velocity is what makes a thing mobile in this engine, so it is also what makes it something
+  // a truck carries. The core is deliberately more permissive — it asks a passenger only for a
+  // position, and whether a self-propelled gun counts as freight is a question for a game, not for
+  // an ECS — but offering to load the player's base is nonsense the demo should not put on screen.
   const boarders = chosen.filter(
-    (entity) => entity.seats === null && entity.aboard === null
+    (entity) =>
+      entity.seats === null && entity.aboard === null && entity.velocity !== null
   );
   // Picking the truck is enough to unload it; picking the riders themselves works too.
   const riders = vehicle

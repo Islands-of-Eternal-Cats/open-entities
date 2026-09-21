@@ -3,12 +3,24 @@ import type { EntitySnapshot, Pos } from "./core/types";
 
 const state = vi.hoisted(() => {
   const selectedIds = new Set<string>(["u1"]);
-  /** A unit on foot and a truck beside it: what the transport buttons read. */
+  /** A unit on foot, an immobile base and a truck: what the transport buttons read. */
   const world: EntitySnapshot[] = [
     {
       id: "u1",
       entityType: "mover",
       pos: { x: 0, y: 0 },
+      // A velocity is what makes it mobile, and therefore what makes it cargo the demo will offer
+      // to load. The base below deliberately has none.
+      velocity: { vx: 0, vy: 0 },
+      faction: 1,
+      seats: null,
+      aboard: null,
+      moveTarget: null,
+    },
+    {
+      id: "b1",
+      entityType: "base",
+      pos: { x: 2, y: 0 },
       velocity: null,
       faction: 1,
       seats: null,
@@ -19,7 +31,7 @@ const state = vi.hoisted(() => {
       id: "v1",
       entityType: "truck",
       pos: { x: 1, y: 0 },
-      velocity: null,
+      velocity: { vx: 0, vy: 0 },
       faction: 1,
       seats: 4,
       aboard: null,
@@ -245,6 +257,20 @@ describe("main input wiring", () => {
     await flush();
 
     expect(state.stopSelected).toHaveBeenCalledWith(["u1"]);
+  });
+
+  it("does not offer to load a building into the truck", async () => {
+    state.selectedIds.clear();
+    state.selectedIds.add("b1");
+    state.selectedIds.add("v1");
+    await import("./main");
+    await flush();
+    await flush();
+
+    // The base has no velocity, so in this engine it does not move under its own power and has no
+    // business being freight. The core would allow it; the demo should not suggest it.
+    const board = document.getElementById("board-units") as HTMLButtonElement;
+    expect(board.hidden).toBe(true);
   });
 
   it("keeps move-order flow active via onMoveOrder callback", async () => {
