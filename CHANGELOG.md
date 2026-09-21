@@ -93,6 +93,12 @@ to a click on the canvas.
   clicking the ground was enough — the rider got a grid slot 5 units from the truck's and walked
   there the moment it was let out, too far to climb back in. Passengers are now refused a move
   order outright, in `can_take_a_move_order` and in mission steering.
+- **CI ran on a deprecated runtime, and installed whatever npm felt like.**
+  `actions/checkout` and `actions/setup-node` moved to `v5`, the first major of each on node24,
+  and `jetli/wasm-pack-action` — pinned to node16 and unmaintained — gave way to
+  `taiki-e/install-action`, which is composite and brings no node runtime at all.
+  `Swatinem/rust-cache@v2` already resolves to a node24 build. The js-app job also installs with
+  `npm ci` now, from the committed lockfile, instead of re-resolving every `^` range per run.
 - **The dev server ignored patches.** `watch-rust-dirs` rebuilt the wasm on `change` only. Git
   writes a temp file and renames it over the target, so `git am` and branch switches arrive as
   `unlink` + `add` and never triggered a rebuild: the browser kept running the previous core while

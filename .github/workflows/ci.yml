@@ -14,7 +14,7 @@ jobs:
     name: cargo test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --all-targets
@@ -23,7 +23,7 @@ jobs:
     name: fmt + clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -35,37 +35,44 @@ jobs:
     name: wasm-check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
-      - uses: jetli/wasm-pack-action@v0.4.0
+      # jetli/wasm-pack-action is pinned to the node16 runner and unmaintained; this one is a
+      # composite action, so it brings no node runtime of its own and drops a prebuilt binary in.
+      - uses: taiki-e/install-action@v2
         with:
-          version: latest
+          tool: wasm-pack
       - run: make wasm-check
 
   js-app:
     name: js-app typecheck + tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-      - uses: jetli/wasm-pack-action@v0.4.0
+      # jetli/wasm-pack-action is pinned to the node16 runner and unmaintained; this one is a
+      # composite action, so it brings no node runtime of its own and drops a prebuilt binary in.
+      - uses: taiki-e/install-action@v2
         with:
-          version: latest
-      - uses: actions/setup-node@v4
+          tool: wasm-pack
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
       # js-app depends on wasm-bindings/pkg as a file: dependency, so the package has to exist
       # before npm resolves it.
       - run: wasm-pack build wasm-bindings --target web
-      - run: npm install --prefix js-app
+      # `npm ci` installs exactly what js-app/package-lock.json pins. `npm install` re-resolves
+      # the `^` ranges and may quietly rewrite the lockfile, so a green run says nothing about
+      # what the next one will install.
+      - run: npm ci --prefix js-app
       - run: npm run typecheck --prefix js-app
       - run: npm run test:run --prefix js-app
