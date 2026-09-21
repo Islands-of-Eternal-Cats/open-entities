@@ -111,6 +111,18 @@ describe("wasm module", () => {
     expect(isWasmReady()).toBe(true);
   });
 
+  it("fingerprints the module it loaded, so a stale build is visible", async () => {
+    const { initWasm, coreBuildInfo } = await import("./wasm");
+    expect(coreBuildInfo()).toBeNull();
+
+    await initWasm();
+
+    const build = coreBuildInfo();
+    // The mock fetch answers with the 8-byte wasm header, whose FNV-1a is fixed.
+    expect(build?.bytes).toBe(8);
+    expect(build?.id).toMatch(/^[0-9a-f]{8}$/);
+  });
+
   it("spawnRandomAt uses WORLD_SIZE for random coordinate range", async () => {
     const randomSpy = vi
       .spyOn(Math, "random")

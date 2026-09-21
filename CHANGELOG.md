@@ -19,6 +19,10 @@ to a click on the canvas.
   with a truck parked beside one mover and out of reach of the other. **B** loads the selected
   units, **U** lets them off, and a refusal — too far away, no seats left — is shown in the HUD
   instead of the console, because that refusal is the rule worth seeing.
+- **Core build fingerprint.** The status line prints an FNV-1a of the wasm bytes the browser
+  actually loaded, plus its size. Same fingerprint after a rebuild means nothing rebuilt — which
+  is the difference between a fix that does not work and a fix that is not in what you are
+  running, and that difference cost an evening.
 - **Move targets in the HUD.** Each row in Forces prints `→ (x, y)` when the entity holds an order.
   A target is the one piece of unit state with no appearance on the map, so a unit standing on a
   stale one looked exactly like a unit standing still.

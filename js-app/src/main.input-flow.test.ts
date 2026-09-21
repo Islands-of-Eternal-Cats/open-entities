@@ -58,6 +58,7 @@ const state = vi.hoisted(() => {
 vi.mock("./core/wasm", () => ({
   initWasm: vi.fn(async () => {}),
   isWasmReady: vi.fn(() => true),
+  coreBuildInfo: vi.fn(() => ({ id: "deadbeef", bytes: 1024 })),
   moveSelectedTo: state.moveSelectedTo,
   createGroupWith: state.createGroupWith,
   orderGroupTo: state.orderGroupTo,

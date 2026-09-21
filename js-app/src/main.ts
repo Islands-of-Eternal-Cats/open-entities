@@ -4,6 +4,7 @@
 import "./styles.css";
 import {
   boardUnits,
+  coreBuildInfo,
   createGroupWith,
   initWasm,
   isWasmReady,
@@ -130,7 +131,13 @@ function syncTrainButtonsVisibility(
 }
 
 function setStatusReady(el: HTMLElement): void {
-  el.textContent = "Core ready (worker)";
+  // The build fingerprint is the point: a core that did not rebuild keeps the same one, which is
+  // the difference between "the fix does not work" and "the fix is not in what you are running".
+  const build = coreBuildInfo();
+  const stamp = build
+    ? ` · core ${build.id} · ${(build.bytes / 1024 / 1024).toFixed(2)} MB`
+    : "";
+  el.textContent = `Core ready (worker)${stamp}`;
   el.classList.remove("rts-status--loading", "rts-status--error");
   el.classList.add("rts-status--ready");
 }

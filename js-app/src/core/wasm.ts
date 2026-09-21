@@ -33,6 +33,32 @@ function assertLooksLikeWasm(buffer: ArrayBuffer): void {
   }
 }
 
+/**
+ * Short fingerprint of the bytes the browser actually loaded.
+ *
+ * FNV-1a over the whole module. Not a security hash — its job is to answer "is the core running
+ * here the one I just built?", which cost an evening of debugging a fix that was never in the
+ * build. Shown in the status line; compare two reloads, and identical means nothing rebuilt.
+ */
+function fingerprint(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < bytes.length; i++) {
+    hash ^= bytes[i];
+    // FNV prime, via shifts: Math.imul keeps this in 32-bit territory.
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
+/** Fingerprint and size of the loaded module, once `initWasm` has fetched it. */
+let coreBuild: { id: string; bytes: number } | null = null;
+
+/** What the status line prints, or null before the module is loaded. */
+export function coreBuildInfo(): { id: string; bytes: number } | null {
+  return coreBuild;
+}
+
 function flushQueue(): void {
   if (!worker || pending !== null || requestQueue.length === 0) return;
   const next = requestQueue.shift()!;
@@ -217,6 +243,8 @@ export async function initWasm(): Promise<void> {
       }
       const wasmBuffer = await wasmRes.arrayBuffer();
       assertLooksLikeWasm(wasmBuffer);
+      // Before the buffer is transferred to the worker, which empties it on this side.
+      coreBuild = { id: fingerprint(wasmBuffer), bytes: wasmBuffer.byteLength };
       const templatesYaml = await entitiesYamlRes.text();
       const mapYaml = await initMapYamlRes.text();
 
