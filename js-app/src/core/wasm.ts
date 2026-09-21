@@ -123,6 +123,7 @@ function rawToSnapshots(
     faction: e.faction ?? null,
     seats: e.seats ?? null,
     aboard: e.aboard ?? null,
+    boarding: e.boarding ?? null,
     moveTarget: e.moveTarget ?? null,
   }));
 }
@@ -136,6 +137,7 @@ function rawToSnapshot(raw: RawEntitySnapshot): EntitySnapshot {
     faction: raw.faction ?? null,
     seats: raw.seats ?? null,
     aboard: raw.aboard ?? null,
+    boarding: raw.boarding ?? null,
     moveTarget: raw.moveTarget ?? null,
   };
 }
@@ -422,10 +424,11 @@ export function stopSelected(entityIds: string[]): Promise<EntitySnapshot[]> {
 }
 
 /**
- * Puts units aboard a vehicle they are standing next to.
+ * Sends units to walk to a vehicle and get in.
  *
- * Rejects with every refusal joined together — too far away, no seats left — after boarding the
- * units that could go. Boarding is not a move order: walk them over first.
+ * An order, not an instant board: the core walks each unit over tick by tick, following the
+ * vehicle if it moves, and boards it once within range. The returned snapshot has `boarding`
+ * set on the units that took the order. Rejects only when the vehicle has no seats at all.
  */
 export function boardUnits(
   units: string[],

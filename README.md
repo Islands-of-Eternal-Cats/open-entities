@@ -132,12 +132,16 @@ entities:
 ```
 
 ```rust
-api.board(unit, jeep)?;   // within BOARDING_RANGE of it
-api.unboard(unit)?;       // steps off beside the vehicle
+api.order_board(&[unit], jeep)?;  // walk over, follow it if it moves, climb in within range
+api.board(unit, jeep)?;           // the primitive: inside at once, from anywhere
+api.unboard(unit)?;               // steps off beside the vehicle
 ```
 
-`BoardError::TooFarAway` carries the measured distance. "Too far" on its own does not say whether
-to walk the unit over or to stop the vehicle first, and those are opposite actions.
+`order_board` is the order a player gives. It marks the unit with `BoardingTarget`, and each tick
+the boarding system points it at where the vehicle is *now* and boards it once within
+`BOARDING_RANGE`. The order ends when the unit boards, finds no seat left, loses the vehicle, or
+is told to stop or go somewhere else. `board` is the primitive underneath — no distance check —
+for scenarios that start a vehicle loaded and for the system itself.
 
 While a unit is aboard, its position belongs to the vehicle: seek and movement skip passengers
 entirely, and one system copies the vehicle's position onto them after it has moved. A move order

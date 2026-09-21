@@ -19,6 +19,7 @@ import {
 } from "./core/wasm";
 import type { EntityId, EntitySnapshot, Pos } from "./core/types";
 import { renderEntities } from "./visualization/render";
+import { setHtml, setText } from "./visualization/dom";
 import { initPixiCanvas } from "./visualization/pixi-canvas";
 import { WORLD_SIZE } from "./visualization/coords";
 
@@ -81,8 +82,8 @@ let groupOrdersOn = false;
 /**
  * Why the last board or unboard did nothing, shown until the next attempt.
  *
- * The HUD is rewritten every frame, so a message that is not held somewhere flashes once and is
- * gone before it can be read.
+ * The HUD is synced after every tick, so a message that is not held somewhere flashes once and
+ * is gone before it can be read.
  */
 let transportNotice: string | null = null;
 let lastEntities: EntitySnapshot[] = [];
@@ -154,14 +155,14 @@ function updateSelectionPanel(
 ): void {
   if (!selectionDetailEl) return;
   if (selected.size === 0) {
-    selectionDetailEl.innerHTML = `<p class="selection-empty">Nothing selected</p>`;
+    setHtml(selectionDetailEl, `<p class="selection-empty">Nothing selected</p>`);
     return;
   }
   if (selected.size === 1) {
     const id = [...selected][0];
     const e = entities.find((x) => x.id === id);
     if (!e) {
-      selectionDetailEl.innerHTML = `<p class="selection-empty">Nothing selected</p>`;
+      setHtml(selectionDetailEl, `<p class="selection-empty">Nothing selected</p>`);
       return;
     }
     const vel =
@@ -170,15 +171,31 @@ function updateSelectionPanel(
         : "—";
     const safeId = e.id.replace(/&/g, "&amp;").replace(/</g, "&lt;");
     const safeType = e.entityType.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-    selectionDetailEl.innerHTML = `<dl>
+    // The `<dl>` is built once per selected entity and its cells patched after that, so the
+    // player can select the id while the position underneath keeps ticking.
+    let list = selectionDetailEl.querySelector<HTMLElement>("dl");
+    if (!list || list.dataset.entityId !== e.id) {
+      setHtml(
+        selectionDetailEl,
+        `<dl data-entity-id="${safeId.replace(/"/g, "&quot;")}">
       <dt>ID</dt><dd>${safeId}</dd>
       <dt>Type</dt><dd>${safeType}</dd>
-      <dt>Position</dt><dd>(${e.pos.x.toFixed(2)}, ${e.pos.y.toFixed(2)})</dd>
-      <dt>Velocity</dt><dd>${vel}</dd>
-    </dl>`;
+      <dt>Position</dt><dd data-field="position"></dd>
+      <dt>Velocity</dt><dd data-field="velocity"></dd>
+    </dl>`
+      );
+      list = selectionDetailEl.querySelector<HTMLElement>("dl");
+    }
+    const position = list?.querySelector('[data-field="position"]');
+    const velocity = list?.querySelector('[data-field="velocity"]');
+    if (position) setText(position, `(${e.pos.x.toFixed(2)}, ${e.pos.y.toFixed(2)})`);
+    if (velocity) setText(velocity, vel);
     return;
   }
-  selectionDetailEl.innerHTML = `<p class="selection-multi"><strong>${selected.size}</strong> units selected</p>`;
+  setHtml(
+    selectionDetailEl,
+    `<p class="selection-multi"><strong>${selected.size}</strong> units selected</p>`
+  );
 }
 
 function syncEntityListSelectionHighlight(): void {
@@ -203,14 +220,16 @@ function syncGroupUi(selectionSize: number): void {
   if (groupModeBtn) {
     groupModeBtn.hidden = activeGroup === null;
     groupModeBtn.disabled = activeGroup === null;
-    groupModeBtn.textContent = `Group orders: ${groupOrdersOn ? "on" : "off"}`;
+    setText(groupModeBtn, `Group orders: ${groupOrdersOn ? "on" : "off"}`);
     groupModeBtn.setAttribute("aria-pressed", String(groupOrdersOn));
   }
   if (groupStateEl) {
-    groupStateEl.textContent =
+    setText(
+      groupStateEl,
       activeGroup === null
         ? "No group"
-        : `Group ${activeGroup.index}: ${groupMemberIds.length} units`;
+        : `Group ${activeGroup.index}: ${groupMemberIds.length} units`
+    );
   }
 }
 
@@ -250,7 +269,11 @@ function describeTransport(vehicle: EntitySnapshot | null): string {
   const taken = lastEntities.filter(
     (entity) => entity.aboard === vehicle.id
   ).length;
-  return `${vehicle.entityType} ${vehicle.id}: ${taken}/${vehicle.seats} seats taken`;
+  const walking = lastEntities.filter(
+    (entity) => entity.boarding === vehicle.id
+  ).length;
+  const onTheWay = walking > 0 ? `, ${walking} on the way` : "";
+  return `${vehicle.entityType} ${vehicle.id}: ${taken}/${vehicle.seats} seats taken${onTheWay}`;
 }
 
 function syncTransportUi(selected: ReadonlySet<string>): void {
@@ -265,7 +288,7 @@ function syncTransportUi(selected: ReadonlySet<string>): void {
     unboardBtn.disabled = riders.length === 0;
   }
   if (transportStateEl) {
-    transportStateEl.textContent = transportNotice ?? describeTransport(vehicle);
+    setText(transportStateEl, transportNotice ?? describeTransport(vehicle));
   }
 }
 
@@ -300,11 +323,10 @@ async function stopSelection(): Promise<void> {
 }
 
 /**
- * Loads the selected units onto the selected vehicle.
+ * Sends the selected units to board the selected vehicle.
  *
- * Boarding is not a move order — the core refuses anyone standing further off than its boarding
- * range — so a unit across the map has to be walked over first. That refusal is the interesting
- * half of the feature, which is why it is shown rather than logged.
+ * An order, not a teleport: the core walks each unit over and puts it in once it is close enough,
+ * following the truck if it drives off meanwhile. The HUD shows who is still on the way.
  */
 async function boardSelection(): Promise<void> {
   if (!isWasmReady() || !pixiApi) return;

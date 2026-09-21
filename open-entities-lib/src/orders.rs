@@ -9,7 +9,9 @@ use bevy_ecs::prelude::World;
 use serde::{Deserialize, Serialize};
 
 use crate::api::Api;
-use crate::components::{BaseMoveSpeed, MoveTarget, OrderSource, PassengerOf, Position, Velocity};
+use crate::components::{
+    BaseMoveSpeed, BoardingTarget, MoveTarget, OrderSource, PassengerOf, Position, Velocity,
+};
 
 /// World units between adjacent slots of a group move destination.
 const MOVE_GROUP_GRID_SPACING: f32 = 5.0;
@@ -166,6 +168,11 @@ impl Api {
             movable.push(entity);
         }
 
+        // A fresh personal move order replaces a boarding order: otherwise the boarding system
+        // would point the unit back at its vehicle on the next tick.
+        for entity in &movable {
+            world.entity_mut(*entity).remove::<BoardingTarget>();
+        }
         let ordered = steer(world, &movable, target, OrderSource::PlayerUnit);
 
         OrderReport {
@@ -203,10 +210,11 @@ impl Api {
                 velocity.vy = 0.0;
             }
             // The source goes with the target: a leftover PlayerUnit claim on an entity that
-            // is no longer going anywhere would block every later group or mission order.
+            // is no longer going anywhere would block every later group or mission order. A
+            // boarding order is a standing intent to move, so stop cancels it too.
             world
                 .entity_mut(entity)
-                .remove::<(MoveTarget, OrderSource)>();
+                .remove::<(MoveTarget, OrderSource, BoardingTarget)>();
             stopped.push(entity);
         }
 

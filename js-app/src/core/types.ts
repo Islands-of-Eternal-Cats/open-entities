@@ -35,6 +35,13 @@ export interface EntitySnapshot {
    */
   aboard: string | null;
   /**
+   * Key of the vehicle this unit is walking to board, or null when it has no such order.
+   *
+   * A standing order, not a place: the unit follows the vehicle if it drives off and climbs in
+   * once within range. Cleared when it boards, finds no seat, or is told to do something else.
+   */
+  boarding: string | null;
+  /**
    * Where this entity has been told to go, or null when it holds no order.
    *
    * Straight from the export's `move_target`. Visible in the HUD on purpose: a target is the one

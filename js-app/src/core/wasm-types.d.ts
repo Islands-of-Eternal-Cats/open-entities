@@ -98,6 +98,15 @@ declare module "open_entities_wasm" {
 
     /** Put a unit standing next to a vehicle inside it; throws when it cannot go. */
     board(unit: EntityId, vehicle: EntityId): void;
+    /**
+     * Sends units to walk to a vehicle and get in; returns how many took the order. Throws only
+     * when the vehicle has no seats at all.
+     */
+    orderBoard(units: EntityId[], vehicle: EntityId): number;
+    /** The vehicle the unit is walking to board, or null. */
+    boardingTargetOf(unit: EntityId): EntityId | null;
+    /** Who is on the way to board the vehicle. */
+    approaching(vehicle: EntityId): EntityId[];
 
     /** Let a passenger off, beside the vehicle. */
     unboard(unit: EntityId): void;

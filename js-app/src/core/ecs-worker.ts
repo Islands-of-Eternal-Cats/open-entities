@@ -36,16 +36,18 @@ function toSnapshot(row: WorldExportRow): EntitySnapshot | null {
     faction: row.faction ?? null,
     seats: row.boardable ?? null,
     aboard: null,
+    boarding: null,
     moveTarget: row.move_target ? { ...row.move_target } : null,
   };
 }
 
 /**
- * Fills in who is riding what.
+ * Fills in who is riding what, and who is on the way to.
  *
- * `PassengerOf` is not an exported component — it holds an entity, which no YAML file has any
- * business writing — so the link is read back through `passengers()`, once per vehicle. Vehicles
- * are few, and this saves the main thread a round trip per frame.
+ * `PassengerOf` and `BoardingTarget` are not exported components — they hold an entity, which
+ * no YAML file has any business writing — so the links are read back per vehicle through
+ * `passengers()` and `approaching()`. Vehicles are few, and this saves the main thread a round
+ * trip per frame.
  */
 function markPassengers(
   simulation: Simulation,
@@ -55,9 +57,14 @@ function markPassengers(
   for (const entity of snapshots) byKey.set(entity.id, entity);
   for (const vehicle of snapshots) {
     if (vehicle.seats === null) continue;
-    for (const passenger of simulation.passengers(keyToEntityId(vehicle.id))) {
+    const vehicleId = keyToEntityId(vehicle.id);
+    for (const passenger of simulation.passengers(vehicleId)) {
       const rider = byKey.get(entityIdToKey(passenger));
       if (rider) rider.aboard = vehicle.id;
+    }
+    for (const walker of simulation.approaching(vehicleId)) {
+      const unit = byKey.get(entityIdToKey(walker));
+      if (unit) unit.boarding = vehicle.id;
     }
   }
 }
@@ -173,18 +180,28 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
       return;
     }
 
-    if (msg.type === "board" || msg.type === "unboard") {
-      const vehicle = msg.type === "board" ? keyToEntityId(msg.vehicle) : null;
+    if (msg.type === "board") {
+      try {
+        sim.orderBoard(msg.units.map(keyToEntityId), keyToEntityId(msg.vehicle));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        post({ type: "error", message });
+        return;
+      }
+      post(entitiesMessage(sim));
+      return;
+    }
+
+    if (msg.type === "unboard") {
       const refused: string[] = [];
       for (const key of msg.units) {
         try {
-          if (vehicle) sim.board(keyToEntityId(key), vehicle);
-          else sim.unboard(keyToEntityId(key));
+          sim.unboard(keyToEntityId(key));
         } catch (err) {
           refused.push(err instanceof Error ? err.message : String(err));
         }
       }
-      // Whoever made it is aboard either way; the refusals say why the rest did not.
+      // Whoever could step off did; the refusals say why the rest did not.
       if (refused.length > 0) {
         post({ type: "error", message: refused.join("; ") });
         return;

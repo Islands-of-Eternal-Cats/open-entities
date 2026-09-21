@@ -9,11 +9,12 @@ import type { EntityId, EntitySnapshot, Pos } from "./types";
  */
 export type RawEntitySnapshot = Omit<
   EntitySnapshot,
-  "faction" | "seats" | "aboard" | "moveTarget"
+  "faction" | "seats" | "aboard" | "boarding" | "moveTarget"
 > & {
   faction?: number | null;
   seats?: number | null;
   aboard?: string | null;
+  boarding?: string | null;
   moveTarget?: Pos | null;
 };
 
@@ -41,7 +42,10 @@ export type WorkerInMessage =
   | { type: "create_group"; faction: number }
   | { type: "add_to_group"; group: EntityId; entityIds: string[] }
   | { type: "group_move_to"; group: EntityId; point: { x: number; y: number } }
-  /** Units climb aboard one vehicle; ones that are too far or find no seat are reported. */
+  /**
+   * Units are sent to walk to one vehicle and get in. This is an order, not an instant board: the
+   * reply is the snapshot with `boarding` set on whoever took it.
+   */
   | { type: "board"; units: string[]; vehicle: string }
   | { type: "unboard"; units: string[] }
   /** Zero velocity and drop any move target — works on anything that carries a velocity. */

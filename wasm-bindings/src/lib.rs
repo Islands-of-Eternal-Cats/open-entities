@@ -284,11 +284,10 @@ impl Simulation {
         Ok(self.api.is_mission_completed(mission))
     }
 
-    /// JS: `board(unitId, vehicleId)` — put a unit standing next to a vehicle inside it.
+    /// JS: `board(unitId, vehicleId)` — put a unit inside a vehicle, from any distance.
     ///
-    /// Fails when the vehicle has no seats, none are left, or the unit is further away than
-    /// `BOARDING_RANGE`. A passenger's move target is dropped: while aboard it goes where the
-    /// vehicle goes.
+    /// Fails when the vehicle has no seats or none are left. A passenger's move target is
+    /// dropped: while aboard it goes where the vehicle goes.
     #[wasm_bindgen(js_name = board)]
     pub fn board(&mut self, unit: JsValue, vehicle: JsValue) -> Result<(), JsValue> {
         let unit: EntityId = serde_wasm_bindgen::from_value(unit)
@@ -298,6 +297,54 @@ impl Simulation {
         self.api
             .board(unit, vehicle)
             .map_err(|e: BoardError| JsValue::from_str(&e.to_string()))
+    }
+
+    /// JS: `orderBoard(unitIds, vehicleId)` — send units to walk to a vehicle and get in.
+    ///
+    /// The order the player gives. Each unit walks toward the vehicle tick by tick, following it
+    /// if it drives off, and boards once within `BOARDING_RANGE`. Returns how many units took the
+    /// order; passengers, immobile and unknown ids are skipped. Fails only when the vehicle has
+    /// no seats at all. A unit that arrives to find no seat stays outside and its order is
+    /// dropped — read `boardingTargetOf` / `approaching` to see who is still on the way.
+    #[wasm_bindgen(js_name = orderBoard)]
+    pub fn order_board(&mut self, units: JsValue, vehicle: JsValue) -> Result<u32, JsValue> {
+        let units: Vec<EntityId> = serde_wasm_bindgen::from_value(units)
+            .map_err(|e| JsValue::from_str(&format!("invalid entity ids: {e}")))?;
+        if units.is_empty() {
+            return Err(JsValue::from_str(
+                "orderBoard(units, vehicle) requires at least one id",
+            ));
+        }
+        let vehicle: EntityId = serde_wasm_bindgen::from_value(vehicle)
+            .map_err(|e| JsValue::from_str(&format!("invalid vehicle id: {e}")))?;
+        let report = self
+            .api
+            .order_board(&units, vehicle)
+            .map_err(|e: BoardError| JsValue::from_str(&e.to_string()))?;
+        u32::try_from(report.ordered)
+            .map_err(|_| JsValue::from_str("orderBoard ordered more entities than u32 can hold"))
+    }
+
+    /// JS: `boardingTargetOf(unitId)` — the vehicle the unit is walking to board, or `null`.
+    #[wasm_bindgen(js_name = boardingTargetOf)]
+    pub fn boarding_target_of(&self, unit: JsValue) -> Result<JsValue, JsValue> {
+        let unit: EntityId = serde_wasm_bindgen::from_value(unit)
+            .map_err(|e| JsValue::from_str(&format!("invalid entity id: {e}")))?;
+        match self.api.boarding_target_of(unit) {
+            Some(vehicle) => serde_wasm_bindgen::to_value(&vehicle)
+                .map_err(|e| JsValue::from_str(&format!("failed to serialize id: {e}"))),
+            None => Ok(JsValue::NULL),
+        }
+    }
+
+    /// JS: `approaching(vehicleId)` — who is on the way to board it.
+    #[wasm_bindgen(js_name = approaching)]
+    pub fn approaching(&mut self, vehicle: JsValue) -> Result<JsValue, JsValue> {
+        let vehicle: EntityId = serde_wasm_bindgen::from_value(vehicle)
+            .map_err(|e| JsValue::from_str(&format!("invalid vehicle id: {e}")))?;
+        let units = self.api.approaching(vehicle);
+        serde_wasm_bindgen::to_value(&units)
+            .map_err(|e| JsValue::from_str(&format!("failed to serialize ids: {e}")))
     }
 
     /// JS: `unboard(unitId)` — step off, beside the vehicle.
@@ -365,7 +412,7 @@ impl Simulation {
 mod wasm_tests {
     use super::*;
     use open_entities::EntityComponents;
-    use open_entities::components::{Boardable, Health, Position};
+    use open_entities::components::{BaseMoveSpeed, Boardable, Health, Position};
     use wasm_bindgen_test::*;
 
     const FIXTURE_YAML: &str = include_str!(concat!(
@@ -591,7 +638,7 @@ mod wasm_tests {
                 .expect("vehicle overrides"),
             )
             .expect("spawn vehicle");
-        // Standing half a unit from the scout's (10, 5): well inside boarding range.
+        // Standing half a unit from the scout's (10, 5).
         let rider = sim
             .spawn_entity(
                 "marker",
@@ -654,6 +701,75 @@ mod wasm_tests {
             row["position"]["x"].as_f64().expect("x"),
             row["position"]["y"].as_f64().expect("y"),
         )
+    }
+
+    #[wasm_bindgen_test]
+    fn an_order_to_board_walks_the_unit_over_first() {
+        let mut sim = Simulation::new();
+        sim.load_templates_yaml(FIXTURE_YAML).expect("load fixture");
+
+        // A parked truck: a marker with seats. It has no speed, so it stays put.
+        let vehicle = sim
+            .spawn_entity(
+                "marker",
+                serde_wasm_bindgen::to_value(&EntityComponents {
+                    position: Some(Position { x: 0.0, y: 0.0 }),
+                    boardable: Some(Boardable(4)),
+                    ..Default::default()
+                })
+                .expect("vehicle overrides"),
+            )
+            .expect("spawn vehicle");
+        // A unit that can walk, well outside boarding range.
+        let rider = sim
+            .spawn_entity(
+                "marker",
+                serde_wasm_bindgen::to_value(&EntityComponents {
+                    position: Some(Position { x: 30.0, y: 0.0 }),
+                    base_move_speed: Some(BaseMoveSpeed(10.0)),
+                    ..Default::default()
+                })
+                .expect("rider overrides"),
+            )
+            .expect("spawn rider");
+        let units = serde_wasm_bindgen::to_value(&[serde_wasm_bindgen::from_value::<EntityId>(
+            rider.clone(),
+        )
+        .expect("id")])
+        .expect("ids");
+
+        let ordered = sim
+            .order_board(units, vehicle.clone())
+            .expect("the order is accepted");
+        assert_eq!(ordered, 1);
+        assert!(
+            !sim.boarding_target_of(rider.clone())
+                .expect("call")
+                .is_null(),
+            "the unit is on its way"
+        );
+        assert_eq!(
+            free_seats_of(&mut sim, vehicle.clone()),
+            Some(4.0),
+            "not aboard yet"
+        );
+
+        for _ in 0..200 {
+            sim.tick(50.0).expect("tick");
+        }
+
+        assert_eq!(
+            free_seats_of(&mut sim, vehicle.clone()),
+            Some(3.0),
+            "boarded on arrival"
+        );
+        assert!(
+            sim.boarding_target_of(rider).expect("call").is_null(),
+            "the order is spent"
+        );
+        let approaching: Vec<EntityId> =
+            serde_wasm_bindgen::from_value(sim.approaching(vehicle).expect("call")).expect("ids");
+        assert!(approaching.is_empty());
     }
 
     #[wasm_bindgen_test]

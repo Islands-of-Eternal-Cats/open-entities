@@ -1,6 +1,7 @@
 pub mod assigned_to;
 pub mod base_move_speed;
 pub mod boardable;
+pub mod boarding_target;
 pub mod entity_type;
 pub mod faction;
 pub mod group;
@@ -18,6 +19,7 @@ pub mod velocity;
 pub use assigned_to::AssignedTo;
 pub use base_move_speed::BaseMoveSpeed;
 pub use boardable::Boardable;
+pub use boarding_target::BoardingTarget;
 pub use entity_type::EntityType;
 pub use faction::Faction;
 pub use group::Group;
