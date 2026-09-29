@@ -3,9 +3,9 @@
 use bevy_ecs::prelude::*;
 
 use crate::components::{PassengerOf, Position, Velocity};
-use crate::simulation::{ArrivedThisTick, TICK_SECS};
+use crate::simulation::ArrivedThisTick;
 
-/// Moves every non-passenger by its `Velocity`, skipping entities that arrived this tick.
+/// Moves every non-passenger by its `Velocity` (milli-units per tick), skipping entities that arrived this tick.
 #[allow(clippy::needless_pass_by_value)] // Bevy `Res` system parameters
 pub fn movement_system(
     // Passengers are carried, not integrated: `passenger_sync_system` owns their position.
@@ -16,8 +16,8 @@ pub fn movement_system(
         if arrived.0.contains(&entity) {
             continue;
         }
-        position.x += velocity.vx * TICK_SECS;
-        position.y += velocity.vy * TICK_SECS;
+        position.x = position.x.saturating_add(velocity.vx);
+        position.y = position.y.saturating_add(velocity.vy);
     }
 }
 
@@ -31,7 +31,7 @@ mod tests {
     #[test]
     fn movement_integrates_velocity() {
         let mut world = World::new();
-        world.spawn((Position { x: 0.0, y: 0.0 }, Velocity { vx: 10.0, vy: 0.0 }));
+        world.spawn((Position { x: 0, y: 0 }, Velocity { vx: 500, vy: 0 }));
         world.insert_resource(ArrivedThisTick::default());
 
         let mut schedule = Schedule::default();
@@ -39,8 +39,7 @@ mod tests {
         schedule.run(&mut world);
 
         let position = world.query::<&Position>().single(&world).expect("position");
-        // 10 units/s over one 50 ms tick.
-        assert!((position.x - 0.5).abs() < 1e-5);
-        assert!((position.y - 0.0).abs() < 1e-5);
+        // 500 milli-units per tick (10 units/s) over one tick.
+        assert_eq!(*position, Position { x: 500, y: 0 });
     }
 }

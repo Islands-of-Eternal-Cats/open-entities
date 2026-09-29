@@ -88,14 +88,14 @@ mod tests {
         let entity = api
             .core_mut()
             .world_mut()
-            .spawn(Position { x: 1.0, y: 2.0 })
+            .spawn(Position { x: 1000, y: 2000 })
             .id();
 
         let snapshot = api.world_snapshot();
         assert_eq!(snapshot.entities.len(), 1);
         let row = &snapshot.entities[0];
         assert_eq!(row.id, EntityId::of(entity));
-        assert_eq!(row.components.position, Some(Position { x: 1.0, y: 2.0 }));
+        assert_eq!(row.components.position, Some(Position { x: 1000, y: 2000 }));
     }
 
     #[test]
@@ -103,13 +103,10 @@ mod tests {
         let mut api = Api::new();
         api.core_mut()
             .world_mut()
-            .spawn((Position { x: 1.0, y: 2.0 }, Velocity { vx: 0.5, vy: -0.5 }));
+            .spawn((Position { x: 1000, y: 2000 }, Velocity { vx: 25, vy: -25 }));
 
         let row = &api.world_snapshot().entities[0];
-        assert_eq!(
-            row.components.velocity,
-            Some(Velocity { vx: 0.5, vy: -0.5 })
-        );
+        assert_eq!(row.components.velocity, Some(Velocity { vx: 25, vy: -25 }));
         assert!(row.components.faction.is_none());
         assert!(row.components.move_target.is_none());
         assert!(row.entity_type.is_none());
@@ -125,7 +122,7 @@ mod tests {
             current: 80,
             max: 100,
         });
-        world.spawn((Position { x: 1.0, y: 2.0 }, BaseMoveSpeed(2.5)));
+        world.spawn((Position { x: 1000, y: 2000 }, BaseMoveSpeed(125)));
 
         let snapshot = api.world_snapshot();
         let rows = &snapshot.entities;
@@ -145,7 +142,7 @@ mod tests {
             })));
         assert!(
             rows.iter()
-                .any(|r| r.components.base_move_speed == Some(BaseMoveSpeed(2.5)))
+                .any(|r| r.components.base_move_speed == Some(BaseMoveSpeed(125)))
         );
     }
 
@@ -165,9 +162,10 @@ mod tests {
     #[test]
     fn serializes_flat_and_omits_absent() {
         let mut api = Api::new();
-        api.core_mut()
-            .world_mut()
-            .spawn((Position { x: 1.0, y: 2.0 }, EntityType("scout".to_owned())));
+        api.core_mut().world_mut().spawn((
+            Position { x: 1000, y: 2000 },
+            EntityType("scout".to_owned()),
+        ));
         api.core_mut().world_mut().spawn(Faction(2));
 
         let value = serde_json::to_value(api.world_snapshot()).expect("serialize");

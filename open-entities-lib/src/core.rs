@@ -1,5 +1,7 @@
 //! [`Core`]: the ECS world and the fixed system schedule behind [`Api`](crate::Api).
 
+#![deny(clippy::float_arithmetic)]
+
 use bevy_ecs::prelude::{Schedule, World};
 use bevy_ecs::schedule::{IntoScheduleConfigs, ScheduleLabel};
 
