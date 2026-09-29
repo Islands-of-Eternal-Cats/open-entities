@@ -22,7 +22,7 @@ Target: 100 000 units, lockstep multiplayer, replays.
 Items marked (target) are being migrated per the roadmap. Do not write new code that
 depends on the old behaviour they replace.
 
-1. (target) Fixed timestep: the simulation advances only in whole ticks of constant length.
+1. Fixed timestep: the simulation advances only in whole ticks of constant length.
    No system reads wall-clock time or a host-supplied delta.
 2. Determinism: the same initial state and the same command log produce bit-identical state
    on every platform, native and wasm32.

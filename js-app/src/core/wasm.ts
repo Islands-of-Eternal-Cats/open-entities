@@ -2,7 +2,7 @@
  * WASM core wrapper. Initializes ECS in a web worker and re-exports the game API.
  * Visualization layer depends only on this module and types from ./types.
  */
-import type { EntityId, EntitySnapshot } from "./types";
+import type { EntityId, EntitySnapshot, Pos } from "./types";
 import type {
   RawEntitySnapshot,
   WorkerInMessage,
@@ -88,6 +88,11 @@ type PendingRequest =
       resolve: (value: EntityId) => void;
       reject: (reason: unknown) => void;
       kind: "id";
+    }
+  | {
+      resolve: (value: FrameResult) => void;
+      reject: (reason: unknown) => void;
+      kind: "frame";
     };
 let pending: PendingRequest | null = null;
 
@@ -109,6 +114,12 @@ type QueuedRequest =
       reject: (reason: unknown) => void;
       message: WorkerInMessage;
       kind: "id";
+    }
+  | {
+      resolve: (value: FrameResult) => void;
+      reject: (reason: unknown) => void;
+      message: WorkerInMessage;
+      kind: "frame";
     };
 const requestQueue: QueuedRequest[] = [];
 
@@ -169,6 +180,17 @@ function onMessage(event: MessageEvent<WorkerOutMessage>): void {
   }
   if (msg.type === "entities" && pending && pending.kind === "entities") {
     pending.resolve(rawToSnapshots(msg.entities));
+    pending = null;
+    flushQueue();
+    return;
+  }
+  if (msg.type === "frame" && pending && pending.kind === "frame") {
+    pending.resolve({
+      entities: rawToSnapshots(msg.entities),
+      previous: msg.previous,
+      alpha: msg.alpha,
+      tick: msg.tick,
+    });
     pending = null;
     flushQueue();
     return;
@@ -301,27 +323,31 @@ export function snapshot(): Promise<EntitySnapshot[]> {
   });
 }
 
+/** One rendered frame: state at the current tick plus what the renderer needs to interpolate. */
+export interface FrameResult {
+  entities: EntitySnapshot[];
+  /** Positions at the tick before `tick`, keyed by entity id. */
+  previous: Record<string, Pos>;
+  /** Blend factor between `previous` and `entities`, in [0, 1). */
+  alpha: number;
+  tick: number;
+}
+
 /**
- * Advance simulation by `dt` seconds and return updated world snapshots.
- * The worker converts to the integer milliseconds the WASM tick takes.
+ * Report `elapsedMs` of real time. The worker runs as many fixed ticks as fit (possibly none)
+ * and replies with the current state and the interpolation inputs.
  */
-export function tick(dt: number): Promise<EntitySnapshot[]> {
+export function frame(elapsedMs: number): Promise<FrameResult> {
   if (!worker || !initialized)
     return Promise.reject(new Error("WASM not initialized"));
   return new Promise((resolve, reject) => {
-    const message: WorkerInMessage = { type: "tick", dt };
-    if (pending === null && requestQueue.length === 0) {
-      pending = { resolve, reject, kind: "entities" };
-      worker!.postMessage(message);
-    } else {
-      requestQueue.push({ resolve, reject, message, kind: "entities" });
-    }
+    enqueue({ type: "frame", elapsedMs }, { resolve, reject, kind: "frame" });
   });
 }
 
 /**
  * Queue move-to order for the given entity ids (snapshot id strings).
- * Does not advance simulation; call `tick` to apply movement over time.
+ * Does not advance simulation; movement is applied as `frame` runs ticks.
  */
 export function moveSelectedTo(
   entityIds: string[],

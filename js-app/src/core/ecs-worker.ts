@@ -1,20 +1,19 @@
 /**
  * ECS web worker: loads WASM and runs the simulation.
- * Listens for init/snapshot/tick/spawn_at/move_to/group and boarding messages; posts back
+ * Listens for init/snapshot/frame/spawn_at/move_to/group and boarding messages; posts back
  * ready/entities/spawned/id/error.
  *
  * The world crosses the boundary as JSON (`getWorldAsJson`), which this module adapts into the
  * flat `EntitySnapshot` rows the visualization layer expects.
  */
-import initWasmModule, { Simulation } from "open_entities_wasm";
-import type { EntitySnapshot, WorldExport, WorldExportRow } from "./types";
+import initWasmModule, { Simulation, tickMs } from "open_entities_wasm";
+import { FrameClock, TICK_MS } from "./fixed-step";
+import type { EntitySnapshot, Pos, WorldExport, WorldExportRow } from "./types";
 import { entityIdToKey, keyToEntityId } from "./types";
 import type { WorkerInMessage, WorkerOutMessage } from "./worker-types";
 
-/** Smallest tick the WASM side accepts is 1 ms; it rejects zero. */
-const MIN_TICK_MS = 1;
-
 let sim: Simulation | null = null;
+let clock: FrameClock | null = null;
 
 function post(msg: WorkerOutMessage): void {
   self.postMessage(msg);
@@ -80,6 +79,12 @@ function readWorld(simulation: Simulation): EntitySnapshot[] {
   return snapshots;
 }
 
+function positionsOf(simulation: Simulation): Record<string, Pos> {
+  const positions: Record<string, Pos> = {};
+  for (const entity of readWorld(simulation)) positions[entity.id] = entity.pos;
+  return positions;
+}
+
 function entitiesMessage(simulation: Simulation): WorkerOutMessage {
   return { type: "entities", entities: readWorld(simulation) };
 }
@@ -90,10 +95,19 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
     if (msg.type === "init") {
       await initWasmModule({ module_or_path: msg.wasmBuffer });
       try {
+        if (tickMs() !== TICK_MS) {
+          throw new Error(
+            `core tick is ${tickMs()} ms but the host clock uses ${TICK_MS} ms`
+          );
+        }
         const simulation = new Simulation();
         simulation.loadTemplatesYaml(msg.templatesYaml);
         simulation.loadMapYaml(msg.mapYaml);
         sim = simulation;
+        clock = new FrameClock({
+          step: () => simulation.step(),
+          positions: () => positionsOf(simulation),
+        });
       } catch (e) {
         post({
           type: "error",
@@ -105,15 +119,20 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
       return;
     }
 
-    if (!sim) {
+    if (!sim || !clock) {
       post({ type: "error", message: "Worker not initialized" });
       return;
     }
 
-    if (msg.type === "tick") {
-      const dtMs = Math.max(MIN_TICK_MS, Math.round(msg.dt * 1000));
-      sim.tick(dtMs);
-      post(entitiesMessage(sim));
+    if (msg.type === "frame") {
+      const { previous, alpha } = clock.frame(msg.elapsedMs);
+      post({
+        type: "frame",
+        entities: readWorld(sim),
+        previous,
+        alpha,
+        tick: sim.currentTick(),
+      });
       return;
     }
 

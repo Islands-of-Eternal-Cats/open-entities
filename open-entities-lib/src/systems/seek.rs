@@ -3,19 +3,19 @@
 use bevy_ecs::prelude::*;
 
 use crate::components::{BaseMoveSpeed, MoveTarget, OrderSource, PassengerOf, Position, Velocity};
-use crate::simulation::{ArrivedThisTick, SimDelta};
+use crate::simulation::{ArrivedThisTick, TICK_SECS};
 
 use super::ARRIVAL_THRESHOLD;
 
 /// Steers entities toward their [`MoveTarget`] and detects arrival.
 ///
 /// An entity arrives when it is already within [`ARRIVAL_THRESHOLD`] of the target, or when the
-/// step it would take this tick (`speed * dt`) reaches it. Either way the position snaps to the
+/// step it would take this tick (`speed * TICK_SECS`) reaches it. Either way the position snaps to the
 /// target, velocity is zeroed, [`MoveTarget`] and its [`OrderSource`] are removed, and the
 /// entity is recorded in
 /// [`ArrivedThisTick`] so [`movement_system`](super::movement_system) skips it this frame.
 ///
-/// Without the step check, a unit faster than `2 * ARRIVAL_THRESHOLD / dt` overshoots the target
+/// Without the step check, a unit faster than `2 * ARRIVAL_THRESHOLD / TICK_SECS` overshoots the target
 /// every tick, turns around on the next one and oscillates forever.
 #[allow(clippy::needless_pass_by_value)] // Bevy `Res` system parameters
 pub fn seek_system(
@@ -32,14 +32,13 @@ pub fn seek_system(
         Without<PassengerOf>,
     >,
     mut arrived: ResMut<ArrivedThisTick>,
-    delta: Res<SimDelta>,
 ) {
     for (entity, mut position, target, speed, mut velocity) in &mut query {
         let dx = target.x - position.x;
         let dy = target.y - position.y;
         let dist = dx.hypot(dy);
         let speed = speed.0.max(0.0);
-        let step = speed * delta.dt_secs;
+        let step = speed * TICK_SECS;
 
         if dist <= ARRIVAL_THRESHOLD || step >= dist {
             position.x = target.x;
@@ -64,20 +63,15 @@ pub fn seek_system(
 mod tests {
     use super::*;
     use crate::components::{BaseMoveSpeed, MoveTarget, Position, Velocity};
-    use crate::simulation::{ArrivedThisTick, SimDelta};
+    use crate::simulation::ArrivedThisTick;
     use bevy_ecs::prelude::{Schedule, World};
 
-    fn run_seek_with_dt(world: &mut World, dt_ms: u32) {
+    fn run_seek(world: &mut World) {
         let mut schedule = Schedule::default();
         schedule.add_systems(seek_system);
         world.insert_resource(ArrivedThisTick::default());
-        world.insert_resource(SimDelta::from_ms(dt_ms));
         schedule.run(world);
         world.flush();
-    }
-
-    fn run_seek(world: &mut World) {
-        run_seek_with_dt(world, 16);
     }
 
     #[test]
@@ -132,8 +126,8 @@ mod tests {
             ))
             .id();
 
-        // step = 45 * 0.1 = 4.5 world units, far past the target 1.0 away.
-        run_seek_with_dt(&mut world, 100);
+        // step = 45 * 0.05 = 2.25 world units, far past the target 1.0 away.
+        run_seek(&mut world);
 
         let position = world.get::<Position>(entity).expect("position");
         assert_eq!(position.x, 1.0);
@@ -155,7 +149,7 @@ mod tests {
             Velocity { vx: 0.0, vy: 0.0 },
         ));
 
-        run_seek_with_dt(&mut world, 100);
+        run_seek(&mut world);
 
         let velocity = world.query::<&Velocity>().single(&world).expect("velocity");
         assert!((velocity.vx - 45.0).abs() < 1e-5);

@@ -187,8 +187,8 @@ mod tests {
         let mission = api.create_mission(MoveTarget { x: 30.0, y: 0.0 }, 1.0);
         api.assign_group(mission, group).expect("assign");
 
-        for _ in 0..100 {
-            api.tick(100).expect("tick");
+        for _ in 0..200 {
+            api.step();
             if api.is_mission_completed(mission) {
                 break;
             }
@@ -217,8 +217,8 @@ mod tests {
         api.assign_group(mission, near).expect("assign");
         api.assign_group(mission, far).expect("assign");
 
-        for _ in 0..100 {
-            api.tick(100).expect("tick");
+        for _ in 0..200 {
+            api.step();
             if api.is_mission_completed(mission) {
                 break;
             }
@@ -247,7 +247,7 @@ mod tests {
 
         api.order_group_move_to(group, MoveTarget { x: -10.0, y: 0.0 })
             .expect("manual order");
-        api.tick(16).expect("tick");
+        api.step();
 
         let entity = unit.to_entity().expect("live entity");
         let world = api.core().world();
@@ -267,7 +267,7 @@ mod tests {
         api.assign_group(mission, group).expect("assign");
         api.order_move_to(&[unit], MoveTarget { x: 3.0, y: 0.0 });
 
-        api.tick(16).expect("tick");
+        api.step();
 
         let entity = unit.to_entity().expect("live entity");
         assert_eq!(
@@ -301,7 +301,7 @@ mod tests {
         api.assign_group(mission, group).expect("assign");
 
         assert_eq!(api.despawn(&[unit]), 1);
-        api.tick(16).expect("tick");
+        api.step();
 
         assert_eq!(api.mission_of(group), None);
         assert!(!api.is_mission_completed(mission), "nobody arrived");
@@ -313,7 +313,7 @@ mod tests {
         let (group, _) = group_with_one_unit(&mut api);
         let mission = api.create_mission(MoveTarget { x: 0.0, y: 0.0 }, 1.0);
         api.assign_group(mission, group).expect("assign");
-        api.tick(16).expect("tick"); // the unit is already standing on the target
+        api.step(); // the unit is already standing on the target
 
         assert!(api.is_mission_completed(mission));
         let second = api.create_group(1);
@@ -346,7 +346,7 @@ mod tests {
         api.assign_group(near, group).expect("assign");
 
         // The unit is standing on `near`, so it closes on the first tick and the planner runs.
-        api.tick(16).expect("tick");
+        api.step();
 
         assert!(api.is_mission_completed(near));
         assert_eq!(
@@ -365,7 +365,7 @@ mod tests {
         let near = api.create_mission(MoveTarget { x: 20.0, y: 0.0 }, 1.0);
         api.assign_group(done, group).expect("assign");
 
-        api.tick(16).expect("tick");
+        api.step();
 
         assert_eq!(api.mission_of(group), Some(near));
         assert!(api.mission_assignees(far).is_empty());
@@ -378,8 +378,8 @@ mod tests {
         let only = api.create_mission(MoveTarget { x: 0.0, y: 0.0 }, 1.0);
         api.assign_group(only, group).expect("assign");
 
-        api.tick(16).expect("tick");
-        api.tick(16).expect("tick");
+        api.step();
+        api.step();
 
         assert!(api.is_mission_completed(only));
         assert_eq!(api.mission_of(group), None);
@@ -398,7 +398,7 @@ mod tests {
             .entity_mut(group_entity)
             .insert((NeedsMission, ManualActive));
 
-        api.tick(16).expect("tick");
+        api.step();
 
         assert_eq!(api.mission_of(group), None, "the player keeps the group");
         assert!(
@@ -423,7 +423,7 @@ mod tests {
             .entity_mut(group_entity)
             .insert(NeedsMission);
 
-        api.tick(16).expect("tick");
+        api.step();
 
         assert!(api.mission_assignees(open).is_empty());
         assert_eq!(api.mission_of(group), None);

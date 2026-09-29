@@ -57,7 +57,7 @@ export interface EntityId {
   generation: number;
 }
 
-/** One row of the world export (schema version 4); component keys are absent, never null. */
+/** One row of the world export (schema version 5); component keys are absent, never null. */
 export interface WorldExportRow {
   id: EntityId;
   entity_type?: string;
@@ -73,6 +73,8 @@ export interface WorldExportRow {
 /** Payload of `Simulation.getWorldAsJson()`. */
 export interface WorldExport {
   version: number;
+  /** Simulation tick the export was taken at. */
+  tick: number;
   entities: WorldExportRow[];
 }
 
