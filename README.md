@@ -75,7 +75,7 @@ Members already following a **personal** order keep it. Orders carry an `OrderSo
 one. The claim is released when the unit arrives or is stopped.
 
 See [`docs/design/group-mission-contract.md`](docs/design/group-mission-contract.md) for the full
-behaviour; missions and the replanner are not implemented yet.
+behaviour, including missions and the replanner (below).
 
 ## Missions
 

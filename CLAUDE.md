@@ -1,5 +1,48 @@
 # open-entities
 
-- **open-entities-lib/** — Rust library core
-- **wasm-bindings/** — WASM bindings for web
-- Built with Rust, WASM, and TypeScript
+Deterministic RTS simulation core in Rust (`bevy_ecs` only, not full Bevy).
+Target: 100 000 units, lockstep multiplayer, replays.
+
+## Layout
+
+- `open-entities-lib/` — core library, crate `open_entities`
+- `wasm-bindings/` — wasm-bindgen bindings (`Simulation` mirrors `Api`)
+- `js-app/` — PixiJS demo; the simulation runs in a web worker, see `js-app/CORE-API.md`
+- `docs/design/` — design contracts; `docs/design/lockstep-roadmap.md` is the current migration plan
+
+## Commands
+
+- `make test` (or `cargo test`)
+- `cargo fmt --all` and `cargo clippy --workspace --all-targets -- -D warnings`
+- `make wasm-check`
+- js-app: typecheck and vitest, as run in CI (`.github/workflows/`)
+
+## Simulation invariants
+
+Items marked (target) are being migrated per the roadmap. Do not write new code that
+depends on the old behaviour they replace.
+
+1. (target) Fixed timestep: the simulation advances only in whole ticks of constant length.
+   No system reads wall-clock time or a host-supplied delta.
+2. Determinism: the same initial state and the same command log produce bit-identical state
+   on every platform, native and wasm32.
+   - (target) Simulation state uses integers, never `f32`/`f64`.
+   - No iteration over `std` `HashMap`/`HashSet` in simulation code; use `BTreeMap`,
+     `IndexMap` or a sorted `Vec`.
+   - Randomness comes only from the match-seeded RNG resource.
+   - Ties are broken by `EntityId`, never by query iteration order.
+   - Systems in the simulation schedule are strictly ordered (`.chain()`).
+3. (target) Host input enters the simulation only as `Command` values applied at the start of a tick.
+4. Host and renderer code read simulation state and never write to it.
+5. Public API: no `bevy_ecs` types in the normal path; entities are named by
+   `EntityId { index, generation }`. `Api::core()` / `core_mut()` stay the one documented escape hatch.
+
+## Working agreements
+
+- Every behaviour change starts with a failing test.
+- README.md describes current behaviour only; update it and CHANGELOG.md (Keep a Changelog)
+  in the same change as the behaviour.
+- Breaking changes are acceptable until 0.1.0 (crates are `publish = false`); record them
+  under **Changed** with a **Breaking.** prefix.
+- clippy `pedantic` stays clean; CI denies warnings.
+- Work on one roadmap step at a time; do not start the next step unasked.
