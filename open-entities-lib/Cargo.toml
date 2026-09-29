@@ -9,8 +9,8 @@ publish = false
 [dependencies]
 bevy_ecs = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
 yaml_serde = { workspace = true }
 
 [dev-dependencies]
+serde_json = { workspace = true }
 trybuild = "1"

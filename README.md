@@ -7,7 +7,7 @@ The library uses [Bevy ECS](https://crates.io/crates/bevy_ecs) (`bevy_ecs` only,
 - [`Api`](open-entities-lib/src/api.rs) — the facade: spawn, orders, lifecycle, import, export
 - [`EntityId`](open-entities-lib/src/orders.rs) — how every call names an entity: an `{index, generation}` pair
 - [`Core`](open-entities-lib/src/core.rs) — owns the ECS [`World`](https://docs.rs/bevy_ecs/latest/bevy_ecs/world/struct.World.html); reachable through `Api::core()` / `core_mut()`
-- [`export`](open-entities-lib/src/export/mod.rs) — `Api::world_json()` serializes **every entity** in the world to JSON **schema version 4**; registered gameplay fields are omitted when absent (not `null`)
+- [`export`](open-entities-lib/src/export/mod.rs) — `Api::world_snapshot()` captures **every entity** in the world as a `WorldSnapshot` (**schema version 4**); it serializes flat, and registered gameplay fields are omitted when absent (not `null`). The WASM bindings turn it into JSON
 - [`EntityComponents`](open-entities-lib/src/entity_components.rs) — shared struct for YAML templates, `spawn_entity` overrides, and flattened export rows
 
 ## Where bevy stops
@@ -36,7 +36,7 @@ api.tick(16)?; // ~60 Hz step
 ## Move orders
 
 `Api::order_move_to(ids, target)` gives a group of entities a destination. Ids are
-[`EntityId`](open-entities-lib/src/orders.rs) — the `{index, generation}` pair `world_json` reports
+[`EntityId`](open-entities-lib/src/orders.rs) — the `{index, generation}` pair `world_snapshot` reports
 as each entity's `id`, so a host can feed them straight back from a snapshot.
 
 Entities without `Position` or `BaseMoveSpeed` are skipped: immobile things cannot take a move
@@ -388,14 +388,15 @@ Or:
 cargo run -p open_entities --example world_json
 ```
 
-Compact JSON is available from the library API:
+The library returns the snapshot as data; serialize it with any `serde` format:
 
 ```rust
 use open_entities::{Api, components::Position};
 
 let mut api = Api::new();
 api.core_mut().world_mut().spawn(Position { x: 1.0, y: 2.0 });
-let json = api.world_json().expect("export world");
+let snapshot = api.world_snapshot();
+let json = serde_json::to_string(&snapshot).expect("export world");
 ```
 
 ### Exported JSON (schema version 4)

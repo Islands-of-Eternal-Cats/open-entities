@@ -1,3 +1,5 @@
+//! The [`Api`] facade: the single entry point a host integrates against.
+
 use crate::core::Core;
 use crate::import::EntityTemplates;
 use crate::map::MapBounds;
@@ -112,9 +114,7 @@ mod tests {
 
         assert!(!api.is_alive(first));
         assert!(api.is_alive(second));
-        let json = api.world_json().expect("export");
-        let value: serde_json::Value = serde_json::from_str(&json).expect("parse");
-        assert_eq!(value["entities"].as_array().map(Vec::len), Some(1));
+        assert_eq!(api.world_snapshot().entities.len(), 1);
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! Gameplay commands issued from outside the simulation.
 //!
 //! Orders address entities by [`EntityId`] — the same `{index, generation}` pair that
-//! [`Api::world_json`](crate::Api::world_json) exports as each entity's `id`, so a host can feed
+//! [`Api::world_snapshot`](crate::Api::world_snapshot) reports as each entity's `id`, so a host can feed
 //! ids straight back from a snapshot.
 
 use bevy_ecs::entity::{Entity, EntityGeneration, EntityIndex};
@@ -16,7 +16,7 @@ use crate::components::{
 /// World units between adjacent slots of a group move destination.
 const MOVE_GROUP_GRID_SPACING: f32 = 5.0;
 
-/// Stable external identity of an entity, as exported in `world_json`.
+/// Stable external identity of an entity, as reported in a world snapshot.
 ///
 /// An id stays valid while the entity lives. After it is despawned the same `index` may be reused
 /// with a higher `generation`, and the old id no longer resolves.

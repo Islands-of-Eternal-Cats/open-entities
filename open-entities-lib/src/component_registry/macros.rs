@@ -21,6 +21,7 @@ macro_rules! define_registered_components {
         #[serde(deny_unknown_fields)]
         pub struct EntityComponents {
             $(
+                #[allow(missing_docs)]
                 #[serde(skip_serializing_if = "Option::is_none")]
                 pub $field: Option<$ty>,
             )*

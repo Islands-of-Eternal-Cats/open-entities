@@ -1,4 +1,4 @@
-//! Spawns sample RTS entities and prints a pretty-printed world JSON snapshot (schema v2).
+//! Spawns sample RTS entities and prints a pretty-printed world snapshot as JSON.
 
 use open_entities::{
     Api,
@@ -18,15 +18,7 @@ fn main() {
     world.spawn(Faction(2));
     world.spawn((Position { x: 0.0, y: 0.0 }, Velocity { vx: 0.25, vy: -0.5 }));
 
-    match api.world_json() {
-        Ok(json) => match serde_json::from_str::<serde_json::Value>(&json) {
-            Ok(value) => {
-                let pretty =
-                    serde_json::to_string_pretty(&value).expect("pretty-print valid JSON value");
-                println!("{pretty}");
-            }
-            Err(err) => eprintln!("export returned invalid JSON: {err}"),
-        },
-        Err(err) => eprintln!("export failed: {err}"),
-    }
+    let pretty = serde_json::to_string_pretty(&api.world_snapshot())
+        .expect("world snapshot serializes to JSON");
+    println!("{pretty}");
 }

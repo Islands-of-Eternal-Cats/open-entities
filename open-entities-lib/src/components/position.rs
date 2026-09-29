@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 /// 2D position in world/simulation space.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Position {
+    /// X coordinate, world units.
     pub x: f32,
+    /// Y coordinate, world units.
     pub y: f32,
 }
 

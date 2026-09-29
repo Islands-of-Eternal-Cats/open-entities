@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 /// Hit points for a unit or structure.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Health {
+    /// Remaining hit points.
     pub current: u32,
+    /// Hit points when undamaged.
     pub max: u32,
 }
 

@@ -7,5 +7,6 @@ use bevy_ecs::prelude::Component;
 /// units, in [`MemberOf`](super::MemberOf) — one place to read, one place to change.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Group {
+    /// The only faction whose units may join.
     pub faction: u32,
 }

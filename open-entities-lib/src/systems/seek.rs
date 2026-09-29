@@ -1,3 +1,5 @@
+//! Steering towards a [`MoveTarget`](crate::components::MoveTarget) and arrival.
+
 use bevy_ecs::prelude::*;
 
 use crate::components::{BaseMoveSpeed, MoveTarget, OrderSource, PassengerOf, Position, Velocity};

@@ -1,8 +1,11 @@
+//! Velocity integration.
+
 use bevy_ecs::prelude::*;
 
 use crate::components::{PassengerOf, Position, Velocity};
 use crate::simulation::{ArrivedThisTick, SimDelta};
 
+/// Moves every non-passenger by its `Velocity`, skipping entities that arrived this tick.
 #[allow(clippy::needless_pass_by_value)] // Bevy `Res` system parameters
 pub fn movement_system(
     // Passengers are carried, not integrated: `passenger_sync_system` owns their position.

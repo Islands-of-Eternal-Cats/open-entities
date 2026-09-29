@@ -25,7 +25,12 @@ pub enum GroupError {
     /// A unit without a [`Faction`] cannot join anything: the faction rule could not be checked.
     UnitHasNoFaction(EntityId),
     /// A group commands one faction only.
-    FactionMismatch { unit: u32, group: u32 },
+    FactionMismatch {
+        /// Faction of the unit.
+        unit: u32,
+        /// Faction the group commands.
+        group: u32,
+    },
 }
 
 impl std::fmt::Display for GroupError {

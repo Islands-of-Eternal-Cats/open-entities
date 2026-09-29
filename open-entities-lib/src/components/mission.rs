@@ -8,6 +8,7 @@ use super::MoveTarget;
 /// outlives the units that walk to it.
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub struct Mission {
+    /// Point to reach.
     pub target: MoveTarget,
     /// Arrival radius — the `Rg` of the contract.
     pub radius: f32,

@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 /// 2D velocity in world/simulation space.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Velocity {
+    /// X component, world units per second.
     pub vx: f32,
+    /// Y component, world units per second.
     pub vy: f32,
 }
 

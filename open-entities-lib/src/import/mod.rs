@@ -1,3 +1,6 @@
+//! YAML entity templates and spawning from them: [`Api::load_templates_yaml`](crate::Api::load_templates_yaml),
+//! [`Api::spawn_entity`](crate::Api::spawn_entity).
+
 use std::collections::BTreeMap;
 
 use bevy_ecs::prelude::{Entity, World};
@@ -21,9 +24,17 @@ pub enum ImportError {
     /// No template with this name in the loaded map.
     UnknownTemplate(String),
     /// Referenced parent name missing from `entities` map.
-    UnknownTemplateParent { child: String, parent: String },
+    UnknownTemplateParent {
+        /// Template that names the parent.
+        child: String,
+        /// The missing parent.
+        parent: String,
+    },
     /// Circular `template` chain detected during load.
-    TemplateCycle { chain: Vec<String> },
+    TemplateCycle {
+        /// Template names along the cycle.
+        chain: Vec<String>,
+    },
 }
 
 impl std::fmt::Display for ImportError {
@@ -674,7 +685,7 @@ entities:
     }
 
     #[test]
-    fn spawn_entity_exports_entity_type_in_world_json() {
+    fn spawn_entity_exports_entity_type_in_world_snapshot() {
         let mut api = Api::new();
         load_fixture(&mut api);
         api.spawn_entity("scout", EntityComponents::default())
@@ -682,26 +693,23 @@ entities:
         api.spawn_entity("marker", EntityComponents::default())
             .expect("spawn marker");
 
-        let json = api.world_json().expect("serialize world");
-        let value: serde_json::Value =
-            serde_json::from_str(&json).expect("exported JSON should parse");
+        let snapshot = api.world_snapshot();
+        assert_eq!(snapshot.entities.len(), 2);
 
-        let entities = value["entities"].as_array().expect("entities array");
-        assert_eq!(entities.len(), 2);
+        let row = |name: &str| {
+            snapshot
+                .entities
+                .iter()
+                .find(|row| row.entity_type == Some(EntityType(name.to_owned())))
+                .expect("row by entity type")
+        };
+        let scout = row("scout");
+        assert_eq!(scout.components.position, Some(Position { x: 0.0, y: 0.0 }));
+        assert_eq!(scout.components.faction, Some(Faction(1)));
 
-        let scout = entities
-            .iter()
-            .find(|row| row["entity_type"] == "scout")
-            .expect("scout row");
-        assert_eq!(scout["position"]["x"], 0.0);
-        assert_eq!(scout["faction"], 1);
-
-        let marker = entities
-            .iter()
-            .find(|row| row["entity_type"] == "marker")
-            .expect("marker row");
-        assert!(marker.get("position").is_none());
-        assert!(marker.get("faction").is_none());
+        let marker = row("marker");
+        assert!(marker.components.position.is_none());
+        assert!(marker.components.faction.is_none());
     }
 
     #[test]

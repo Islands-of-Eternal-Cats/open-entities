@@ -1,5 +1,5 @@
 use open_entities::components::MoveTarget;
-use open_entities::{Api, EntityComponents, EntityId, ExportError, ImportError, hello};
+use open_entities::{Api, EntityComponents, EntityId, ImportError, hello};
 use open_entities::{BoardError, GroupError, MissionError};
 use wasm_bindgen::prelude::*;
 
@@ -57,9 +57,8 @@ impl Simulation {
     /// JS: `getWorldAsJson()`
     #[wasm_bindgen(js_name = getWorldAsJson)]
     pub fn world_json(&mut self) -> Result<String, JsValue> {
-        self.api
-            .world_json()
-            .map_err(|e: ExportError| JsValue::from_str(&e.to_string()))
+        serde_json::to_string(&self.api.world_snapshot())
+            .map_err(|e| JsValue::from_str(&format!("JSON export failed: {e}")))
     }
 
     /// JS: `orderMoveTo(ids, x, y)` — move order for a group of entities.

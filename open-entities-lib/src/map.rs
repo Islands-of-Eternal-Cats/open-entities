@@ -18,7 +18,9 @@ use crate::orders::EntityId;
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MapBounds {
+    /// Extent along X, world units.
     pub width: f32,
+    /// Extent along Y, world units.
     pub height: f32,
 }
 
@@ -30,7 +32,12 @@ pub enum MapError {
     /// `load_map_yaml` called before a successful `load_templates_yaml`.
     TemplatesNotLoaded,
     /// An entry names a template that was not loaded; nothing was spawned.
-    UnknownTemplate { index: usize, name: String },
+    UnknownTemplate {
+        /// Position of the entry in the map list.
+        index: usize,
+        /// The template it names.
+        name: String,
+    },
     /// A spawn failed after validation passed.
     Spawn(ImportError),
 }

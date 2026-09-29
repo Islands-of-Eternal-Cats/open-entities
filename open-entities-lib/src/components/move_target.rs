@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 /// World-space movement goal point.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct MoveTarget {
+    /// X coordinate, world units.
     pub x: f32,
+    /// Y coordinate, world units.
     pub y: f32,
 }
 

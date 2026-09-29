@@ -40,15 +40,7 @@ fn main() {
         }
     }
 
-    match api.world_json() {
-        Ok(json) => match serde_json::from_str::<serde_json::Value>(&json) {
-            Ok(value) => {
-                let pretty =
-                    serde_json::to_string_pretty(&value).expect("pretty-print valid JSON value");
-                println!("\n{pretty}");
-            }
-            Err(err) => eprintln!("export returned invalid JSON: {err}"),
-        },
-        Err(err) => eprintln!("export failed: {err}"),
-    }
+    let pretty = serde_json::to_string_pretty(&api.world_snapshot())
+        .expect("world snapshot serializes to JSON");
+    println!("\n{pretty}");
 }

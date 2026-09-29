@@ -39,7 +39,10 @@ pub enum BoardError {
     /// The unit is already riding something.
     AlreadyAboard(EntityId),
     /// Every seat is taken.
-    NoSeatsLeft { seats: u8 },
+    NoSeatsLeft {
+        /// Seat count of the vehicle.
+        seats: u8,
+    },
     /// The unit or the vehicle has no position, so it has no place in the world to board from.
     NoPosition(EntityId),
     /// The unit is not riding anything.

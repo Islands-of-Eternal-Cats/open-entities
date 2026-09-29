@@ -1,20 +1,24 @@
-pub mod assigned_to;
-pub mod base_move_speed;
-pub mod boardable;
-pub mod boarding_target;
-pub mod entity_type;
-pub mod faction;
-pub mod group;
-pub mod health;
-pub mod manual_active;
-pub mod member_of;
-pub mod mission;
-pub mod move_target;
-pub mod needs_mission;
-pub mod order_source;
-pub mod passenger_of;
-pub mod position;
-pub mod velocity;
+//! Gameplay ECS components. Most hosts only meet these as fields of
+//! [`EntityComponents`](crate::EntityComponents); querying them directly goes through
+//! [`Api::core`](crate::Api::core).
+
+mod assigned_to;
+mod base_move_speed;
+mod boardable;
+mod boarding_target;
+mod entity_type;
+mod faction;
+mod group;
+mod health;
+mod manual_active;
+mod member_of;
+mod mission;
+mod move_target;
+mod needs_mission;
+mod order_source;
+mod passenger_of;
+mod position;
+mod velocity;
 
 pub use assigned_to::AssignedTo;
 pub use base_move_speed::BaseMoveSpeed;

@@ -1,3 +1,5 @@
+//! Tick-time resources and [`TickError`] for [`Api::tick`](crate::Api::tick).
+
 use std::collections::HashSet;
 
 use bevy_ecs::prelude::{Entity, Resource};
@@ -7,10 +9,12 @@ pub use crate::systems::ARRIVAL_THRESHOLD;
 /// Per-tick delta time in seconds (from clamped `dt_ms`).
 #[derive(Resource, Debug, Clone, Copy, PartialEq)]
 pub struct SimDelta {
+    /// Delta in seconds.
     pub dt_secs: f32,
 }
 
 impl SimDelta {
+    /// Converts a millisecond delta to seconds.
     #[must_use]
     #[allow(clippy::cast_precision_loss)] // dt_ms ≤ MAX_DT_MS (100); exact f32 representation
     pub const fn from_ms(ms: u32) -> Self {
@@ -24,9 +28,10 @@ impl SimDelta {
 #[derive(Resource, Debug, Default)]
 pub struct ArrivedThisTick(pub HashSet<Entity>);
 
-/// Errors from [`Api::tick`].
+/// Errors from [`Api::tick`](crate::Api::tick).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TickError {
+    /// `dt_ms` was `0`.
     ZeroDeltaTime,
 }
 
