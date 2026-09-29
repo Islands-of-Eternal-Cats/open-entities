@@ -7,6 +7,8 @@
 //! See `docs/design/group-mission-contract.md` for the behaviour this implements; missions and the
 //! replanner are the next slices.
 
+#![deny(clippy::float_arithmetic)]
+
 use bevy_ecs::prelude::Entity;
 
 use crate::api::Api;
@@ -234,14 +236,14 @@ mod tests {
     use super::*;
     use crate::components::{BaseMoveSpeed, Position, Velocity};
 
-    fn spawn_unit(api: &mut Api, faction: u32, x: f32) -> EntityId {
+    fn spawn_unit(api: &mut Api, faction: u32, x: i32) -> EntityId {
         let entity = api
             .core_mut()
             .world_mut()
             .spawn((
-                Position { x, y: 0.0 },
-                BaseMoveSpeed(10.0),
-                Velocity { vx: 0.0, vy: 0.0 },
+                Position { x, y: 0 },
+                BaseMoveSpeed(500),
+                Velocity { vx: 0, vy: 0 },
                 Faction(faction),
             ))
             .id();
@@ -262,7 +264,7 @@ mod tests {
         let mut api = Api::new();
         let first = api.create_group(1);
         let second = api.create_group(1);
-        let unit = spawn_unit(&mut api, 1, 0.0);
+        let unit = spawn_unit(&mut api, 1, 0);
 
         api.add_to_group(first, unit).expect("join first");
         api.add_to_group(second, unit).expect("move to second");
@@ -276,7 +278,7 @@ mod tests {
     fn a_group_commands_its_own_faction_only() {
         let mut api = Api::new();
         let group = api.create_group(1);
-        let enemy = spawn_unit(&mut api, 2, 0.0);
+        let enemy = spawn_unit(&mut api, 2, 0);
 
         let err = api
             .add_to_group(group, enemy)
@@ -293,7 +295,7 @@ mod tests {
         let entity = api
             .core_mut()
             .world_mut()
-            .spawn(Position { x: 0.0, y: 0.0 })
+            .spawn(Position { x: 0, y: 0 })
             .id();
         let stray = EntityId::of(entity);
 
@@ -306,10 +308,10 @@ mod tests {
     #[test]
     fn a_unit_id_is_not_a_group_id() {
         let mut api = Api::new();
-        let unit = spawn_unit(&mut api, 1, 0.0);
+        let unit = spawn_unit(&mut api, 1, 0);
 
         assert_eq!(
-            api.order_group_move_to(unit, MoveTarget { x: 1.0, y: 1.0 }),
+            api.order_group_move_to(unit, MoveTarget { x: 1000, y: 1000 }),
             Err(GroupError::UnknownGroup(unit))
         );
     }
@@ -318,13 +320,19 @@ mod tests {
     fn a_group_order_steers_members_and_turns_manual_on() {
         let mut api = Api::new();
         let group = api.create_group(1);
-        let first = spawn_unit(&mut api, 1, 0.0);
-        let second = spawn_unit(&mut api, 1, 1.0);
+        let first = spawn_unit(&mut api, 1, 0);
+        let second = spawn_unit(&mut api, 1, 1000);
         api.add_to_group(group, first).expect("join");
         api.add_to_group(group, second).expect("join");
 
         let report = api
-            .order_group_move_to(group, MoveTarget { x: 50.0, y: 50.0 })
+            .order_group_move_to(
+                group,
+                MoveTarget {
+                    x: 50_000,
+                    y: 50_000,
+                },
+            )
             .expect("group order");
 
         assert_eq!(report.ordered, 2);
@@ -334,7 +342,7 @@ mod tests {
         for unit in [first, second] {
             let entity = unit.to_entity().expect("live entity");
             let target = world.get::<MoveTarget>(entity).expect("move target");
-            assert!((target.x - 50.0).abs() <= 5.0);
+            assert!((target.x - 50_000).abs() <= 5000);
             assert_eq!(
                 world.get::<OrderSource>(entity),
                 Some(&OrderSource::GroupSteering)
@@ -346,14 +354,20 @@ mod tests {
     fn a_personal_order_survives_a_group_order() {
         let mut api = Api::new();
         let group = api.create_group(1);
-        let loyal = spawn_unit(&mut api, 1, 0.0);
-        let detached = spawn_unit(&mut api, 1, 1.0);
+        let loyal = spawn_unit(&mut api, 1, 0);
+        let detached = spawn_unit(&mut api, 1, 1000);
         api.add_to_group(group, loyal).expect("join");
         api.add_to_group(group, detached).expect("join");
 
-        api.order_move_to(&[detached], MoveTarget { x: 5.0, y: 0.0 });
+        api.order_move_to(&[detached], MoveTarget { x: 5000, y: 0 });
         let report = api
-            .order_group_move_to(group, MoveTarget { x: 80.0, y: 80.0 })
+            .order_group_move_to(
+                group,
+                MoveTarget {
+                    x: 80_000,
+                    y: 80_000,
+                },
+            )
             .expect("group order");
 
         assert_eq!(report.ordered, 1, "only the unit without a personal order");
@@ -362,7 +376,7 @@ mod tests {
         let world = api.core().world();
         let detached_entity = detached.to_entity().expect("live entity");
         let target = world.get::<MoveTarget>(detached_entity).expect("target");
-        assert_eq!(target.x, 5.0);
+        assert_eq!(target.x, 5000);
         assert_eq!(
             world.get::<OrderSource>(detached_entity),
             Some(&OrderSource::PlayerUnit)
@@ -373,14 +387,14 @@ mod tests {
     fn a_group_survives_losing_every_member() {
         let mut api = Api::new();
         let group = api.create_group(1);
-        let unit = spawn_unit(&mut api, 1, 0.0);
+        let unit = spawn_unit(&mut api, 1, 0);
         api.add_to_group(group, unit).expect("join");
 
         assert_eq!(api.despawn(&[unit]), 1);
 
         assert!(api.group_members(group).is_empty());
         assert!(
-            api.order_group_move_to(group, MoveTarget { x: 1.0, y: 1.0 })
+            api.order_group_move_to(group, MoveTarget { x: 1000, y: 1000 })
                 .is_ok(),
             "an empty group is still a group"
         );
@@ -390,9 +404,9 @@ mod tests {
     fn manual_control_is_released_only_on_request() {
         let mut api = Api::new();
         let group = api.create_group(1);
-        let unit = spawn_unit(&mut api, 1, 0.0);
+        let unit = spawn_unit(&mut api, 1, 0);
         api.add_to_group(group, unit).expect("join");
-        api.order_group_move_to(group, MoveTarget { x: 2.0, y: 0.0 })
+        api.order_group_move_to(group, MoveTarget { x: 2000, y: 0 })
             .expect("group order");
 
         // Arriving does not hand the group back to automation.
@@ -410,7 +424,7 @@ mod tests {
     fn leaving_a_group_is_reported() {
         let mut api = Api::new();
         let group = api.create_group(1);
-        let unit = spawn_unit(&mut api, 1, 0.0);
+        let unit = spawn_unit(&mut api, 1, 0);
         api.add_to_group(group, unit).expect("join");
 
         assert!(api.remove_from_group(unit));

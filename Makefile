@@ -1,7 +1,11 @@
-.PHONY: test example example-world-json wasm-demo wasm-test wasm-check
+.PHONY: test float-check example example-world-json wasm-demo wasm-test wasm-check
 
 test:
 	cargo test
+
+# Simulation modules must not mention f32/f64; CI runs this too.
+float-check:
+	./scripts/check-no-floats.sh
 
 EXAMPLE ?= spawn_entity
 

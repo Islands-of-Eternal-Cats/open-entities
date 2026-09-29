@@ -24,7 +24,7 @@ fn main() {
     for name in ["marker", "heavy_tank", "tank", "scout", "unit"] {
         let overrides = if name == "scout" {
             EntityComponents {
-                position: Some(Position { x: 50.0, y: 25.0 }),
+                position: Some(Position::from_units(50.0, 25.0)),
                 health: Some(Health {
                     current: 40,
                     max: 100,

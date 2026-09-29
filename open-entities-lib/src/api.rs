@@ -94,11 +94,11 @@ mod tests {
     use super::*;
     use crate::components::{EntityType, Position};
 
-    fn spawn_marker(api: &mut Api, x: f32) -> EntityId {
+    fn spawn_marker(api: &mut Api, x: i32) -> EntityId {
         let entity = api
             .core_mut()
             .world_mut()
-            .spawn((Position { x, y: 0.0 }, EntityType("marker".to_owned())))
+            .spawn((Position { x, y: 0 }, EntityType("marker".to_owned())))
             .id();
         EntityId::of(entity)
     }
@@ -106,8 +106,8 @@ mod tests {
     #[test]
     fn despawn_removes_entities_and_counts_them() {
         let mut api = Api::new();
-        let first = spawn_marker(&mut api, 1.0);
-        let second = spawn_marker(&mut api, 2.0);
+        let first = spawn_marker(&mut api, 1000);
+        let second = spawn_marker(&mut api, 2000);
 
         assert_eq!(api.despawn(&[first]), 1);
 
@@ -119,7 +119,7 @@ mod tests {
     #[test]
     fn despawn_counts_entities_not_ids() {
         let mut api = Api::new();
-        let id = spawn_marker(&mut api, 1.0);
+        let id = spawn_marker(&mut api, 1000);
         let stale = EntityId::new(id.index, id.generation.wrapping_add(3));
 
         // The same id twice plus one that never resolved: one entity goes away.
@@ -130,10 +130,10 @@ mod tests {
     #[test]
     fn a_reused_index_does_not_revive_an_old_id() {
         let mut api = Api::new();
-        let old = spawn_marker(&mut api, 1.0);
+        let old = spawn_marker(&mut api, 1000);
         api.despawn(&[old]);
 
-        let fresh = spawn_marker(&mut api, 2.0);
+        let fresh = spawn_marker(&mut api, 2000);
 
         assert!(api.is_alive(fresh));
         assert!(

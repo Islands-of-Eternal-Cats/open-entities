@@ -1,6 +1,16 @@
 use open_entities::components::MoveTarget;
 use open_entities::{Api, EntityComponents, EntityId, ImportError, hello};
-use open_entities::{BoardError, GroupError, MissionError};
+use open_entities::{BoardError, GroupError, MissionError, units};
+
+/// Converts a JS point in map units to a [`MoveTarget`] in milli-units.
+fn move_target(x: f64, y: f64, call: &str) -> Result<MoveTarget, JsValue> {
+    let convert =
+        |v: f64| units::to_milli(v).map_err(|e| JsValue::from_str(&format!("{call}: {e}")));
+    Ok(MoveTarget {
+        x: convert(x)?,
+        y: convert(y)?,
+    })
+}
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -67,7 +77,7 @@ impl Simulation {
     /// each entity's `id`. Returns how many entities took the order; immobile and unknown ids are
     /// skipped. Destinations are spread over a grid so a group does not pile onto one point.
     #[wasm_bindgen(js_name = orderMoveTo)]
-    pub fn order_move_to(&mut self, ids: JsValue, x: f32, y: f32) -> Result<u32, JsValue> {
+    pub fn order_move_to(&mut self, ids: JsValue, x: f64, y: f64) -> Result<u32, JsValue> {
         let ids: Vec<EntityId> = serde_wasm_bindgen::from_value(ids)
             .map_err(|e| JsValue::from_str(&format!("invalid entity ids: {e}")))?;
         if ids.is_empty() {
@@ -80,7 +90,8 @@ impl Simulation {
                 "orderMoveTo(ids, x, y) requires finite coordinates",
             ));
         }
-        let report = self.api.order_move_to(&ids, MoveTarget { x, y });
+        let target = move_target(x, y, "orderMoveTo")?;
+        let report = self.api.order_move_to(&ids, target);
         u32::try_from(report.ordered)
             .map_err(|_| JsValue::from_str("orderMoveTo ordered more entities than u32 can hold"))
     }
@@ -204,7 +215,7 @@ impl Simulation {
     /// Returns how many members took it. The group is left under manual control, and members
     /// following a personal order keep it.
     #[wasm_bindgen(js_name = orderGroupMoveTo)]
-    pub fn order_group_move_to(&mut self, group: JsValue, x: f32, y: f32) -> Result<u32, JsValue> {
+    pub fn order_group_move_to(&mut self, group: JsValue, x: f64, y: f64) -> Result<u32, JsValue> {
         let group: EntityId = serde_wasm_bindgen::from_value(group)
             .map_err(|e| JsValue::from_str(&format!("invalid group id: {e}")))?;
         if !x.is_finite() || !y.is_finite() {
@@ -212,9 +223,10 @@ impl Simulation {
                 "orderGroupMoveTo(groupId, x, y) requires finite coordinates",
             ));
         }
+        let target = move_target(x, y, "orderGroupMoveTo")?;
         let report = self
             .api
-            .order_group_move_to(group, MoveTarget { x, y })
+            .order_group_move_to(group, target)
             .map_err(|e: GroupError| JsValue::from_str(&e.to_string()))?;
         u32::try_from(report.ordered)
             .map_err(|_| JsValue::from_str("orderGroupMoveTo ordered more than u32 can hold"))
@@ -240,13 +252,16 @@ impl Simulation {
 
     /// JS: `createMission(x, y, radius)`.
     #[wasm_bindgen(js_name = createMission)]
-    pub fn create_mission(&mut self, x: f32, y: f32, radius: f32) -> Result<JsValue, JsValue> {
+    pub fn create_mission(&mut self, x: f64, y: f64, radius: f64) -> Result<JsValue, JsValue> {
         if !x.is_finite() || !y.is_finite() || !radius.is_finite() {
             return Err(JsValue::from_str(
                 "createMission(x, y, radius) requires finite numbers",
             ));
         }
-        let id = self.api.create_mission(MoveTarget { x, y }, radius);
+        let target = move_target(x, y, "createMission")?;
+        let radius = units::to_milli(radius)
+            .map_err(|e| JsValue::from_str(&format!("createMission: radius {e}")))?;
+        let id = self.api.create_mission(target, radius);
         serde_wasm_bindgen::to_value(&id)
             .map_err(|e| JsValue::from_str(&format!("failed to serialize id: {e}")))
     }
@@ -429,7 +444,7 @@ mod wasm_tests {
 
     fn scout_overrides() -> JsValue {
         serde_wasm_bindgen::to_value(&EntityComponents {
-            position: Some(Position { x: 50.0, y: 25.0 }),
+            position: Some(Position::from_units(50.0, 25.0)),
             health: Some(Health {
                 current: 40,
                 max: 100,
@@ -650,7 +665,7 @@ mod wasm_tests {
             .spawn_entity(
                 "marker",
                 serde_wasm_bindgen::to_value(&EntityComponents {
-                    position: Some(Position { x: 10.5, y: 5.0 }),
+                    position: Some(Position::from_units(10.5, 5.0)),
                     ..Default::default()
                 })
                 .expect("rider overrides"),
@@ -721,7 +736,7 @@ mod wasm_tests {
             .spawn_entity(
                 "marker",
                 serde_wasm_bindgen::to_value(&EntityComponents {
-                    position: Some(Position { x: 0.0, y: 0.0 }),
+                    position: Some(Position { x: 0, y: 0 }),
                     boardable: Some(Boardable(4)),
                     ..Default::default()
                 })
@@ -733,8 +748,8 @@ mod wasm_tests {
             .spawn_entity(
                 "marker",
                 serde_wasm_bindgen::to_value(&EntityComponents {
-                    position: Some(Position { x: 30.0, y: 0.0 }),
-                    base_move_speed: Some(BaseMoveSpeed(10.0)),
+                    position: Some(Position::from_units(30.0, 0.0)),
+                    base_move_speed: Some(BaseMoveSpeed(500)), // 10 units/s
                     ..Default::default()
                 })
                 .expect("rider overrides"),
@@ -788,7 +803,7 @@ mod wasm_tests {
             .spawn_entity(
                 "marker",
                 serde_wasm_bindgen::to_value(&EntityComponents {
-                    position: Some(Position { x: 0.0, y: 0.0 }),
+                    position: Some(Position { x: 0, y: 0 }),
                     ..Default::default()
                 })
                 .expect("rock overrides"),
@@ -798,7 +813,7 @@ mod wasm_tests {
             .spawn_entity(
                 "marker",
                 serde_wasm_bindgen::to_value(&EntityComponents {
-                    position: Some(Position { x: 0.5, y: 0.0 }),
+                    position: Some(Position::from_units(0.5, 0.0)),
                     ..Default::default()
                 })
                 .expect("unit overrides"),

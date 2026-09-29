@@ -31,11 +31,12 @@ same state at the same tick whatever the host's frame rate. `Api::current_tick()
 run so far, and every `WorldSnapshot` carries it as `tick`.
 
 A tick runs the ECS schedule: `seek_system` (entities with `MoveTarget` + `BaseMoveSpeed` +
-`Velocity`) then `movement_system` (all `Position` + `Velocity`). Speeds stay in units per second
-in YAML and components; systems move `speed × TICK_MS / 1000` per tick.
+`Velocity`) then `movement_system` (all `Position` + `Velocity`). Components hold speeds and
+velocities in milli-units per tick, so movement adds `Velocity` to `Position` once per tick; see
+[Units](#units).
 
-Arrival (distance ≤ 0.1, or this tick's step would reach the target): snap to target, remove
-`MoveTarget`, zero `Velocity`, skip movement that tick.
+Arrival (distance ≤ `ARRIVAL_RADIUS` = 100 milli-units, or this tick's step would reach the
+target): snap to target, remove `MoveTarget`, zero `Velocity`, skip movement that tick.
 
 A host with a variable frame rate accumulates real elapsed time and calls `step()` while at least
 one tick is in the accumulator; the remainder, `accumulator / TICK_MS`, is how far to interpolate
@@ -50,6 +51,36 @@ while accumulator >= open_entities::TICK_MS {
 }
 ```
 
+## Units
+
+The simulation runs on integers only, so the same inputs give bit-identical state on every
+platform. Its unit is the **milli-unit**: `MILLI_PER_UNIT` = 1000 per map unit.
+
+- Positions, move targets, mission radii, `BOARDING_RANGE` and the unboarding offset are `i32`
+  milli-units.
+- Speeds (`BaseMoveSpeed`) and velocities (`Velocity`) are `i32` milli-units **per tick**.
+- Seek and range checks work in `i64`/`u128`, divide truncating toward zero, and take lengths with
+  an integer square root. No system uses `f32` or `f64`; the crate enforces this with
+  `#![deny(clippy::float_arithmetic)]` in every simulation module, and CI fails if `f32`/`f64`
+  appears in one (`make float-check`).
+
+The outside world keeps **map units as decimals**: YAML templates and maps, `spawn_entity`
+overrides, the JSON export and the JavaScript API all read and write `1.5`, not `1500`, with the
+same shape as before. Conversion happens in one place, `open_entities::units`, at the boundary:
+
+- In: `round(value × 1000)`, half away from zero. A value that does not fit in `i32` milli-units
+  (beyond about ±2 147 483 map units) is an import error.
+- Out: `milli / 1000`, which is exact — a position with up to three decimals exports as the same
+  decimal it was imported as.
+- Speeds in: `round(units_per_second × TICK_MS)`; out: `per_tick / TICK_MS`.
+
+At `TICK_MS` = 50 one milli-unit per tick is **0.02 units/s**, so speeds are quantised to that
+step: `base_move_speed: 0.51` is simulated as 26 milli-units per tick and exported as `0.52`. The
+export shows the speed actually simulated.
+
+Rust host code that builds components directly writes milli-units, or uses the constructors
+`Position::from_units(x, y)` and `MoveTarget::from_units(x, y)`.
+
 ## Move orders
 
 `Api::order_move_to(ids, target)` gives a group of entities a destination. Ids are
@@ -61,7 +92,7 @@ order. With more than one id the destinations are spread over a grid around the 
 does not pile onto one spot. The returned `OrderReport` says how many took the order.
 
 ```rust
-api.order_move_to(&[id], MoveTarget { x: 20.0, y: 0.0 });
+api.order_move_to(&[id], MoveTarget::from_units(20.0, 0.0));
 ```
 
 `Api::order_stop(ids)` is the counterpart: it zeroes `Velocity` and drops any `MoveTarget`. It does
@@ -76,7 +107,7 @@ is one place to read it and one place to change it.
 ```rust
 let group = api.create_group(1);
 api.add_to_group(group, unit)?;
-api.order_group_move_to(group, MoveTarget { x: 50.0, y: 50.0 })?;
+api.order_group_move_to(group, MoveTarget::from_units(50.0, 50.0))?;
 ```
 
 A unit belongs to at most one group — joining a second one leaves the first — and a group commands
@@ -100,7 +131,7 @@ A mission is a point somebody should reach, and how close counts as reached. Gro
 it; the first arrival finishes it for everyone.
 
 ```rust
-let mission = api.create_mission(MoveTarget { x: 80.0, y: 20.0 }, 2.0);
+let mission = api.create_mission(MoveTarget::from_units(80.0, 20.0), 2000); // radius in milli-units
 api.assign_group(mission, group)?;
 ```
 
@@ -411,7 +442,7 @@ The library returns the snapshot as data; serialize it with any `serde` format:
 use open_entities::{Api, components::Position};
 
 let mut api = Api::new();
-api.core_mut().world_mut().spawn(Position { x: 1.0, y: 2.0 });
+api.core_mut().world_mut().spawn(Position::from_units(1.0, 2.0));
 let snapshot = api.world_snapshot();
 let json = serde_json::to_string(&snapshot).expect("export world");
 ```

@@ -12,6 +12,8 @@
 //!
 //! See `docs/design/vehicle-seats.md`.
 
+#![deny(clippy::float_arithmetic)]
+
 use bevy_ecs::prelude::{Entity, World};
 
 use crate::api::Api;
@@ -20,14 +22,14 @@ use crate::components::{
 };
 use crate::orders::{EntityId, OrderReport, can_take_a_move_order};
 
-/// How close a unit has to be for the boarding system to put it aboard, in world units.
+/// How close a unit has to be for the boarding system to put it aboard, in milli-units (3 map units).
 ///
 /// Not a limit on [`Api::board`], which takes a unit from anywhere: it is the point on the way
 /// over at which an [`Api::order_board`] order turns into boarding.
-pub const BOARDING_RANGE: f32 = 3.0;
+pub const BOARDING_RANGE: i32 = 3000;
 
-/// Where a unit is put down when it leaves a vehicle, in world units from it.
-const UNBOARD_OFFSET: f32 = 1.5;
+/// Where a unit is put down when it leaves a vehicle, in milli-units from it (1.5 map units).
+const UNBOARD_OFFSET: i32 = 1500;
 
 /// Errors from boarding and unboarding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -126,8 +128,8 @@ pub(crate) fn board_now(
         .remove::<(MoveTarget, OrderSource, BoardingTarget)>()
         .insert(PassengerOf(vehicle));
     if let Some(mut velocity) = world.get_mut::<Velocity>(unit) {
-        velocity.vx = 0.0;
-        velocity.vy = 0.0;
+        velocity.vx = 0;
+        velocity.vy = 0;
     }
     Ok(())
 }
@@ -221,7 +223,7 @@ impl Api {
         let beside = world
             .get::<Position>(passenger_of.0)
             .map(|position| Position {
-                x: position.x + UNBOARD_OFFSET,
+                x: position.x.saturating_add(UNBOARD_OFFSET),
                 y: position.y,
             });
 
@@ -291,27 +293,27 @@ mod tests {
     use super::*;
     use crate::components::{BaseMoveSpeed, Faction};
 
-    fn spawn_unit(api: &mut Api, x: f32) -> EntityId {
+    fn spawn_unit(api: &mut Api, x: i32) -> EntityId {
         let entity = api
             .core_mut()
             .world_mut()
             .spawn((
-                Position { x, y: 0.0 },
-                BaseMoveSpeed(10.0),
-                Velocity { vx: 0.0, vy: 0.0 },
+                Position { x, y: 0 },
+                BaseMoveSpeed(500),
+                Velocity { vx: 0, vy: 0 },
             ))
             .id();
         EntityId::of(entity)
     }
 
-    fn spawn_vehicle(api: &mut Api, x: f32, seats: u8) -> EntityId {
+    fn spawn_vehicle(api: &mut Api, x: i32, seats: u8) -> EntityId {
         let entity = api
             .core_mut()
             .world_mut()
             .spawn((
-                Position { x, y: 0.0 },
-                BaseMoveSpeed(30.0),
-                Velocity { vx: 0.0, vy: 0.0 },
+                Position { x, y: 0 },
+                BaseMoveSpeed(1500),
+                Velocity { vx: 0, vy: 0 },
                 Boardable(seats),
             ))
             .id();
@@ -321,11 +323,11 @@ mod tests {
     #[test]
     fn a_passenger_rides_along() {
         let mut api = Api::new();
-        let truck = spawn_vehicle(&mut api, 0.0, 2);
-        let rider = spawn_unit(&mut api, 1.0);
+        let truck = spawn_vehicle(&mut api, 0, 2);
+        let rider = spawn_unit(&mut api, 1000);
         api.board(rider, truck).expect("board");
 
-        api.order_move_to(&[truck], MoveTarget { x: 40.0, y: 0.0 });
+        api.order_move_to(&[truck], MoveTarget { x: 40_000, y: 0 });
         for _ in 0..100 {
             api.step();
         }
@@ -337,7 +339,7 @@ mod tests {
         let rider_position = world
             .get::<Position>(rider.to_entity().expect("live"))
             .expect("position");
-        assert!((truck_position.x - 40.0).abs() < 1e-3, "the truck arrives");
+        assert!(truck_position.x == 40_000, "the truck arrives");
         assert_eq!(rider_position.x, truck_position.x, "and carries the rider");
         assert_eq!(rider_position.y, truck_position.y);
     }
@@ -345,13 +347,13 @@ mod tests {
     #[test]
     fn a_passenger_ignores_its_own_orders() {
         let mut api = Api::new();
-        let truck = spawn_vehicle(&mut api, 0.0, 2);
-        let rider = spawn_unit(&mut api, 1.0);
+        let truck = spawn_vehicle(&mut api, 0, 2);
+        let rider = spawn_unit(&mut api, 1000);
         api.board(rider, truck).expect("board");
 
         // Nothing stops a host from *trying* to order a passenger about. The order is refused
         // at the door — see `can_take_a_move_order` — so nothing is left to act on later.
-        api.order_move_to(&[rider], MoveTarget { x: 100.0, y: 0.0 });
+        api.order_move_to(&[rider], MoveTarget { x: 100_000, y: 0 });
         for _ in 0..40 {
             api.step();
         }
@@ -360,19 +362,19 @@ mod tests {
         let rider_position = world
             .get::<Position>(rider.to_entity().expect("live"))
             .expect("position");
-        assert_eq!(rider_position.x, 0.0, "it stays with the parked truck");
+        assert_eq!(rider_position.x, 0, "it stays with the parked truck");
     }
 
     #[test]
     fn a_move_order_does_not_stick_to_a_passenger() {
         let mut api = Api::new();
-        let truck = spawn_vehicle(&mut api, 0.0, 2);
-        let rider = spawn_unit(&mut api, 1.0);
+        let truck = spawn_vehicle(&mut api, 0, 2);
+        let rider = spawn_unit(&mut api, 1000);
         api.board(rider, truck).expect("board");
 
         // The player boxes the truck and its passenger and clicks the ground: the order reaches
         // both ids, and the passenger must not take it.
-        let report = api.order_move_to(&[truck, rider], MoveTarget { x: 40.0, y: 0.0 });
+        let report = api.order_move_to(&[truck, rider], MoveTarget { x: 40_000, y: 0 });
         assert_eq!(report.ordered, 1, "only the vehicle can take a move order");
         assert_eq!(report.skipped, 1);
 
@@ -402,8 +404,8 @@ mod tests {
     #[test]
     fn boarding_works_from_across_the_map() {
         let mut api = Api::new();
-        let truck = spawn_vehicle(&mut api, 0.0, 2);
-        let rider = spawn_unit(&mut api, 50.0);
+        let truck = spawn_vehicle(&mut api, 0, 2);
+        let rider = spawn_unit(&mut api, 50_000);
 
         api.board(rider, truck)
             .expect("distance is the game's concern, not the core's");
@@ -413,15 +415,15 @@ mod tests {
         let rider_position = world
             .get::<Position>(rider.to_entity().expect("live"))
             .expect("position");
-        assert_eq!(rider_position.x, 0.0, "it is inside the truck now");
+        assert_eq!(rider_position.x, 0, "it is inside the truck now");
     }
 
     #[test]
     fn seats_run_out() {
         let mut api = Api::new();
-        let truck = spawn_vehicle(&mut api, 0.0, 1);
-        let first = spawn_unit(&mut api, 1.0);
-        let second = spawn_unit(&mut api, 1.0);
+        let truck = spawn_vehicle(&mut api, 0, 1);
+        let first = spawn_unit(&mut api, 1000);
+        let second = spawn_unit(&mut api, 1000);
 
         api.board(first, truck).expect("first aboard");
         assert_eq!(api.free_seats(truck), Some(0));
@@ -435,9 +437,9 @@ mod tests {
     #[test]
     fn a_unit_rides_one_vehicle_at_a_time() {
         let mut api = Api::new();
-        let first = spawn_vehicle(&mut api, 0.0, 2);
-        let second = spawn_vehicle(&mut api, 1.0, 2);
-        let rider = spawn_unit(&mut api, 0.5);
+        let first = spawn_vehicle(&mut api, 0, 2);
+        let second = spawn_vehicle(&mut api, 1000, 2);
+        let rider = spawn_unit(&mut api, 500);
 
         api.board(rider, first).expect("board");
         assert_eq!(
@@ -453,11 +455,11 @@ mod tests {
             let entity = api
                 .core_mut()
                 .world_mut()
-                .spawn(Position { x: 0.0, y: 0.0 })
+                .spawn(Position { x: 0, y: 0 })
                 .id();
             EntityId::of(entity)
         };
-        let rider = spawn_unit(&mut api, 1.0);
+        let rider = spawn_unit(&mut api, 1000);
 
         assert_eq!(api.board(rider, rock), Err(BoardError::NotBoardable(rock)));
         assert_eq!(api.free_seats(rock), None);
@@ -466,10 +468,10 @@ mod tests {
     #[test]
     fn unboarding_puts_the_unit_beside_the_vehicle() {
         let mut api = Api::new();
-        let truck = spawn_vehicle(&mut api, 0.0, 2);
-        let rider = spawn_unit(&mut api, 1.0);
+        let truck = spawn_vehicle(&mut api, 0, 2);
+        let rider = spawn_unit(&mut api, 1000);
         api.board(rider, truck).expect("board");
-        api.order_move_to(&[truck], MoveTarget { x: 20.0, y: 0.0 });
+        api.order_move_to(&[truck], MoveTarget { x: 20_000, y: 0 });
         for _ in 0..100 {
             api.step();
         }
@@ -482,7 +484,7 @@ mod tests {
             .get::<Position>(rider.to_entity().expect("live"))
             .expect("position");
         assert!(
-            (rider_position.x - (20.0 + UNBOARD_OFFSET)).abs() < 1e-3,
+            rider_position.x == 20_000 + UNBOARD_OFFSET,
             "it steps off next to where the truck stopped"
         );
     }
@@ -490,15 +492,15 @@ mod tests {
     #[test]
     fn a_unit_that_is_not_aboard_cannot_step_off() {
         let mut api = Api::new();
-        let rider = spawn_unit(&mut api, 0.0);
+        let rider = spawn_unit(&mut api, 0);
         assert_eq!(api.unboard(rider), Err(BoardError::NotAboard(rider)));
     }
 
     #[test]
     fn losing_the_vehicle_lets_the_passenger_go() {
         let mut api = Api::new();
-        let truck = spawn_vehicle(&mut api, 0.0, 2);
-        let rider = spawn_unit(&mut api, 1.0);
+        let truck = spawn_vehicle(&mut api, 0, 2);
+        let rider = spawn_unit(&mut api, 1000);
         api.board(rider, truck).expect("board");
 
         assert_eq!(api.despawn(&[truck]), 1);
@@ -510,12 +512,12 @@ mod tests {
     #[test]
     fn a_boarded_unit_moves_again_after_stepping_off() {
         let mut api = Api::new();
-        let truck = spawn_vehicle(&mut api, 0.0, 2);
-        let rider = spawn_unit(&mut api, 1.0);
+        let truck = spawn_vehicle(&mut api, 0, 2);
+        let rider = spawn_unit(&mut api, 1000);
         api.board(rider, truck).expect("board");
         api.unboard(rider).expect("unboard");
 
-        api.order_move_to(&[rider], MoveTarget { x: 10.0, y: 0.0 });
+        api.order_move_to(&[rider], MoveTarget { x: 10_000, y: 0 });
         for _ in 0..100 {
             api.step();
         }
@@ -524,7 +526,7 @@ mod tests {
         let rider_position = world
             .get::<Position>(rider.to_entity().expect("live"))
             .expect("position");
-        assert!((rider_position.x - 10.0).abs() < 1e-3);
+        assert_eq!(rider_position.x, 10_000);
     }
 
     fn position_of(api: &Api, id: EntityId) -> Position {
@@ -537,8 +539,8 @@ mod tests {
     #[test]
     fn an_ordered_unit_walks_over_and_gets_in() {
         let mut api = Api::new();
-        let truck = spawn_vehicle(&mut api, 0.0, 2);
-        let rider = spawn_unit(&mut api, 50.0);
+        let truck = spawn_vehicle(&mut api, 0, 2);
+        let rider = spawn_unit(&mut api, 50_000);
 
         let report = api.order_board(&[rider], truck).expect("order");
         assert_eq!(
@@ -556,7 +558,7 @@ mod tests {
         assert_eq!(api.vehicle_of(rider), None);
         let after_one = position_of(&api, rider);
         assert!(
-            after_one.x < 50.0 && after_one.x > 40.0,
+            after_one.x < 50_000 && after_one.x > 40_000,
             "walking, at {}",
             after_one.x
         );
@@ -571,28 +573,24 @@ mod tests {
         );
         assert_eq!(api.boarding_target_of(rider), None, "the order is spent");
         assert_eq!(api.approaching(truck), Vec::<EntityId>::new());
-        assert_eq!(
-            position_of(&api, rider).x,
-            0.0,
-            "and it is inside the truck"
-        );
+        assert_eq!(position_of(&api, rider).x, 0, "and it is inside the truck");
     }
 
     #[test]
     fn an_ordered_unit_follows_a_vehicle_that_drives_off() {
         let mut api = Api::new();
-        let truck = spawn_vehicle(&mut api, 20.0, 2);
-        let rider = spawn_unit(&mut api, 0.0);
+        let truck = spawn_vehicle(&mut api, 20_000, 2);
+        let rider = spawn_unit(&mut api, 0);
         api.order_board(&[rider], truck).expect("order");
         // The truck (30/s) pulls away from the rider (10/s), then parks at 60.
-        api.order_move_to(&[truck], MoveTarget { x: 60.0, y: 0.0 });
+        api.order_move_to(&[truck], MoveTarget { x: 60_000, y: 0 });
 
         for _ in 0..60 {
             api.step();
         }
         assert_eq!(api.vehicle_of(rider), None, "still chasing");
         assert!(
-            position_of(&api, rider).x > 20.0,
+            position_of(&api, rider).x > 20_000,
             "past where the truck used to be"
         );
         for _ in 0..120 {
@@ -603,15 +601,15 @@ mod tests {
             Some(truck),
             "caught up at the new spot"
         );
-        assert!((position_of(&api, rider).x - 60.0).abs() < 1e-3);
+        assert_eq!(position_of(&api, rider).x, 60_000);
     }
 
     #[test]
     fn no_seat_on_arrival_leaves_the_unit_outside_with_no_order() {
         let mut api = Api::new();
-        let truck = spawn_vehicle(&mut api, 0.0, 1);
-        let first = spawn_unit(&mut api, 1.0);
-        let second = spawn_unit(&mut api, 20.0);
+        let truck = spawn_vehicle(&mut api, 0, 1);
+        let first = spawn_unit(&mut api, 1000);
+        let second = spawn_unit(&mut api, 20_000);
         api.board(first, truck).expect("first aboard");
         api.order_board(&[second], truck).expect("order");
 
@@ -626,7 +624,7 @@ mod tests {
         );
         let stood = position_of(&api, second);
         assert!(
-            stood.x <= BOARDING_RANGE + 1e-3 && stood.x > 0.0,
+            stood.x <= BOARDING_RANGE && stood.x > 0,
             "stopped at the door, at {}",
             stood.x
         );
@@ -637,8 +635,8 @@ mod tests {
     #[test]
     fn losing_the_vehicle_drops_the_boarding_order() {
         let mut api = Api::new();
-        let truck = spawn_vehicle(&mut api, 0.0, 2);
-        let rider = spawn_unit(&mut api, 30.0);
+        let truck = spawn_vehicle(&mut api, 0, 2);
+        let rider = spawn_unit(&mut api, 30_000);
         api.order_board(&[rider], truck).expect("order");
         api.step();
 
@@ -653,14 +651,14 @@ mod tests {
     #[test]
     fn stop_and_a_new_move_order_both_cancel_boarding() {
         let mut api = Api::new();
-        let truck = spawn_vehicle(&mut api, 0.0, 2);
-        let a = spawn_unit(&mut api, 30.0);
-        let b = spawn_unit(&mut api, 30.0);
+        let truck = spawn_vehicle(&mut api, 0, 2);
+        let a = spawn_unit(&mut api, 30_000);
+        let b = spawn_unit(&mut api, 30_000);
         api.order_board(&[a, b], truck).expect("order");
         api.step();
 
         api.order_stop(&[a]);
-        api.order_move_to(&[b], MoveTarget { x: 60.0, y: 0.0 });
+        api.order_move_to(&[b], MoveTarget { x: 60_000, y: 0 });
         assert_eq!(api.boarding_target_of(a), None);
         assert_eq!(api.boarding_target_of(b), None);
 
@@ -670,7 +668,7 @@ mod tests {
         assert_eq!(api.vehicle_of(a), None);
         assert_eq!(api.vehicle_of(b), None);
         assert!(
-            (position_of(&api, b).x - 60.0).abs() < 1e-3,
+            position_of(&api, b).x == 60_000,
             "b went where it was last told"
         );
     }
@@ -678,8 +676,8 @@ mod tests {
     #[test]
     fn a_boarding_order_is_the_units_own_and_automation_does_not_take_it() {
         let mut api = Api::new();
-        let truck = spawn_vehicle(&mut api, 0.0, 2);
-        let rider = spawn_unit(&mut api, 30.0);
+        let truck = spawn_vehicle(&mut api, 0, 2);
+        let rider = spawn_unit(&mut api, 30_000);
         api.core_mut()
             .world_mut()
             .entity_mut(rider.to_entity().expect("live"))
@@ -690,7 +688,7 @@ mod tests {
         api.step();
 
         // Group steering is weaker than a personal order and must not pull the rider off course.
-        api.order_group_move_to(group, MoveTarget { x: 100.0, y: 0.0 })
+        api.order_group_move_to(group, MoveTarget { x: 100_000, y: 0 })
             .expect("group order");
         for _ in 0..120 {
             api.step();
@@ -705,11 +703,11 @@ mod tests {
             let entity = api
                 .core_mut()
                 .world_mut()
-                .spawn(Position { x: 0.0, y: 0.0 })
+                .spawn(Position { x: 0, y: 0 })
                 .id();
             EntityId::of(entity)
         };
-        let rider = spawn_unit(&mut api, 10.0);
+        let rider = spawn_unit(&mut api, 10_000);
         assert_eq!(
             api.order_board(&[rider], rock),
             Err(BoardError::NotBoardable(rock))
@@ -720,9 +718,9 @@ mod tests {
     #[test]
     fn a_passenger_and_the_vehicle_itself_are_skipped_by_the_order() {
         let mut api = Api::new();
-        let truck = spawn_vehicle(&mut api, 0.0, 2);
-        let aboard = spawn_unit(&mut api, 1.0);
-        let walker = spawn_unit(&mut api, 10.0);
+        let truck = spawn_vehicle(&mut api, 0, 2);
+        let aboard = spawn_unit(&mut api, 1000);
+        let walker = spawn_unit(&mut api, 10_000);
         api.board(aboard, truck).expect("aboard");
 
         // The player boxes the truck and everyone near it and presses B.

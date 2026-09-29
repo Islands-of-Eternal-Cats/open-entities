@@ -8,6 +8,8 @@ use crate::components::{
 };
 use crate::orders::group_slot;
 
+use super::{squared_length, within};
+
 /// Steers the members of every assigned group toward their mission.
 ///
 /// Three kinds of group are left alone: one under [`ManualActive`], because the player is driving
@@ -65,9 +67,7 @@ pub fn mission_steering_system(
                 continue;
             }
             if velocity.is_none() {
-                commands
-                    .entity(entity)
-                    .insert(Velocity { vx: 0.0, vy: 0.0 });
+                commands.entity(entity).insert(Velocity { vx: 0, vy: 0 });
             }
             commands.entity(entity).insert((
                 group_slot(mission.target, slot, count),
@@ -109,9 +109,9 @@ pub fn mission_completion_system(
 
         let arrived = roster.iter().any(|entity| {
             positions.get(*entity).is_ok_and(|position| {
-                let dx = mission.target.x - position.x;
-                let dy = mission.target.y - position.y;
-                dx.hypot(dy) <= mission.radius
+                let dx = i64::from(mission.target.x) - i64::from(position.x);
+                let dy = i64::from(mission.target.y) - i64::from(position.y);
+                within(dx, dy, mission.radius)
             })
         });
         if !arrived {
@@ -148,8 +148,9 @@ pub fn mission_completion_system(
 /// one with no live members, because it cannot arrive anywhere. The marker is cleared either way,
 /// so nothing keeps asking.
 ///
-/// Choice among open missions is the nearest to the group's centre of mass, ties broken by entity
-/// index so the same world always plans the same way.
+/// Choice among open missions is the nearest to the group's centre of mass, compared by exact
+/// squared distance in milli-units, ties broken by entity index so the same world always plans the
+/// same way.
 #[allow(clippy::type_complexity)] // a query declaration, see `mission_steering_system`
 pub fn replanner_system(
     mut commands: Commands,
@@ -176,12 +177,12 @@ pub fn replanner_system(
         let pick = missions
             .iter()
             .map(|(entity, mission)| {
-                let dx = mission.target.x - centre.x;
-                let dy = mission.target.y - centre.y;
-                (entity, dx.hypot(dy))
+                let dx = i64::from(mission.target.x) - i64::from(centre.x);
+                let dy = i64::from(mission.target.y) - i64::from(centre.y);
+                (entity, squared_length(dx, dy))
             })
             .min_by(|(left_entity, left), (right_entity, right)| {
-                left.total_cmp(right)
+                left.cmp(right)
                     .then_with(|| left_entity.index_u32().cmp(&right_entity.index_u32()))
             });
 
@@ -191,24 +192,22 @@ pub fn replanner_system(
     }
 }
 
-/// Average position of the live members, or `None` when nobody is left to average.
+/// Average position of the live members (truncated toward zero), or `None` when nobody is left to average.
 fn centre_of_mass(roster: &[Entity], positions: &Query<&Position>) -> Option<Position> {
-    let mut sum = Position { x: 0.0, y: 0.0 };
-    let mut count = 0_u32;
+    let (mut sum_x, mut sum_y, mut count) = (0_i64, 0_i64, 0_i64);
     for entity in roster {
         if let Ok(position) = positions.get(*entity) {
-            sum.x += position.x;
-            sum.y += position.y;
+            sum_x += i64::from(position.x);
+            sum_y += i64::from(position.y);
             count += 1;
         }
     }
     if count == 0 {
         return None;
     }
-    #[allow(clippy::cast_precision_loss)] // a roster large enough to lose precision is not a squad
-    let divisor = count as f32;
+    // The mean of i32 values, truncated toward zero, is an i32 value.
     Some(Position {
-        x: sum.x / divisor,
-        y: sum.y / divisor,
+        x: i32::try_from(sum_x / count).expect("mean of i32 fits i32"),
+        y: i32::try_from(sum_y / count).expect("mean of i32 fits i32"),
     })
 }

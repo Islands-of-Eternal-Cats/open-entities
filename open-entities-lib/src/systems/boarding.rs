@@ -2,6 +2,7 @@
 
 use bevy_ecs::prelude::*;
 
+use super::within;
 use crate::boarding::{BOARDING_RANGE, board_now};
 use crate::components::{
     Boardable, BoardingTarget, MoveTarget, OrderSource, PassengerOf, Position, Velocity,
@@ -48,9 +49,9 @@ pub fn boarding_approach_system(world: &mut World) {
             continue;
         }
 
-        let dx = vehicle_position.x - unit_position.x;
-        let dy = vehicle_position.y - unit_position.y;
-        if dx.hypot(dy) <= BOARDING_RANGE {
+        let dx = i64::from(vehicle_position.x) - i64::from(unit_position.x);
+        let dy = i64::from(vehicle_position.y) - i64::from(unit_position.y);
+        if within(dx, dy, BOARDING_RANGE) {
             // The expected refusal is `NoSeatsLeft`; the rest were checked above, and a refusal
             // there means the world changed under us. Either way the order is over.
             if board_now(world, unit, vehicle).is_err() {
@@ -60,7 +61,7 @@ pub fn boarding_approach_system(world: &mut World) {
         }
 
         if world.get::<Velocity>(unit).is_none() {
-            world.entity_mut(unit).insert(Velocity { vx: 0.0, vy: 0.0 });
+            world.entity_mut(unit).insert(Velocity { vx: 0, vy: 0 });
         }
         world.entity_mut(unit).insert((
             MoveTarget {
@@ -78,8 +79,8 @@ fn drop_order(world: &mut World, unit: Entity) {
         .entity_mut(unit)
         .remove::<(BoardingTarget, MoveTarget, OrderSource)>();
     if let Some(mut velocity) = world.get_mut::<Velocity>(unit) {
-        velocity.vx = 0.0;
-        velocity.vy = 0.0;
+        velocity.vx = 0;
+        velocity.vy = 0;
     }
 }
 
@@ -103,8 +104,8 @@ pub fn passenger_sync_system(
         if let Some(mut velocity) = velocity {
             // The vehicle does the travelling; a passenger with its own velocity would be
             // integrated twice the moment it steps off.
-            velocity.vx = 0.0;
-            velocity.vy = 0.0;
+            velocity.vx = 0;
+            velocity.vy = 0;
         }
     }
 }

@@ -1,17 +1,15 @@
 //! Tick-time constants and resources for [`Api::step`](crate::Api::step).
 
+#![deny(clippy::float_arithmetic)]
+
 use std::collections::HashSet;
 
 use bevy_ecs::prelude::{Entity, Resource};
 
-pub use crate::systems::ARRIVAL_THRESHOLD;
+pub use crate::systems::ARRIVAL_RADIUS;
 
 /// Length of one simulation tick in milliseconds (20 Hz).
 pub const TICK_MS: u32 = 50;
-
-/// Length of one simulation tick in seconds, for per-second speeds.
-#[allow(clippy::cast_precision_loss)] // TICK_MS is small; exact conversion
-pub const TICK_SECS: f32 = TICK_MS as f32 / 1000.0;
 
 /// Number of ticks the simulation has advanced; incremented once per [`Api::step`](crate::Api::step).
 #[derive(Resource, Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -34,10 +32,10 @@ mod tests {
             .core_mut()
             .world_mut()
             .spawn((
-                Position { x: 19.95, y: 0.0 },
-                MoveTarget { x: 20.0, y: 0.0 },
-                BaseMoveSpeed(2.0),
-                Velocity { vx: 100.0, vy: 0.0 },
+                Position { x: 19_950, y: 0 },
+                MoveTarget { x: 20_000, y: 0 },
+                BaseMoveSpeed(100),
+                Velocity { vx: 5000, vy: 0 },
             ))
             .id();
 
@@ -45,8 +43,7 @@ mod tests {
 
         let world = api.core_mut().world();
         let position = world.get::<Position>(entity).expect("position");
-        assert!((position.x - 20.0).abs() < 1e-4);
-        assert!((position.y - 0.0).abs() < 1e-4);
+        assert_eq!(*position, Position { x: 20_000, y: 0 });
         assert!(world.get::<MoveTarget>(entity).is_none());
     }
 
@@ -57,14 +54,14 @@ mod tests {
             .core_mut()
             .world_mut()
             .spawn((
-                Position { x: 0.0, y: 0.0 },
-                MoveTarget { x: 20.0, y: 0.0 },
-                BaseMoveSpeed(45.0),
-                Velocity { vx: 0.0, vy: 0.0 },
+                Position { x: 0, y: 0 },
+                MoveTarget { x: 20_000, y: 0 },
+                BaseMoveSpeed(2250),
+                Velocity { vx: 0, vy: 0 },
             ))
             .id();
 
-        // Regression for overshoot: 45 units/s steps 2.25 per tick, far above ARRIVAL_THRESHOLD,
+        // Regression for overshoot: 45 units/s steps 2250 milli-units per tick, far above ARRIVAL_RADIUS,
         // so without the step check the unit would jump past the target and oscillate.
         // 8 full steps cover 18 units; the 9th reaches the target.
         let mut ticks = 0;
@@ -80,11 +77,9 @@ mod tests {
 
         let world = api.core_mut().world();
         let position = world.get::<Position>(entity).expect("position");
-        assert!((position.x - 20.0).abs() < 1e-4);
-        assert!((position.y - 0.0).abs() < 1e-4);
+        assert_eq!(*position, Position { x: 20_000, y: 0 });
         let velocity = world.get::<Velocity>(entity).expect("velocity");
-        assert_eq!(velocity.vx, 0.0);
-        assert_eq!(velocity.vy, 0.0);
+        assert_eq!(*velocity, Velocity { vx: 0, vy: 0 });
     }
 
     const FIXTURE_YAML: &str = include_str!(concat!(
@@ -111,8 +106,7 @@ mod tests {
 
         let world = api.core_mut().world();
         let position = world.get::<Position>(entity).expect("position");
-        assert!((position.x - 20.0).abs() < 0.01);
-        assert!((position.y - 0.0).abs() < 0.01);
+        assert_eq!(*position, Position { x: 20_000, y: 0 });
         assert!(world.get::<MoveTarget>(entity).is_none());
     }
 }

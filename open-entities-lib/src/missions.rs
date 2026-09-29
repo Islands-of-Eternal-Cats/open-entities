@@ -6,6 +6,8 @@
 //! See `docs/design/group-mission-contract.md`. The replanner that picks a group's next mission is
 //! the last slice and is not here yet.
 
+#![deny(clippy::float_arithmetic)]
+
 use bevy_ecs::prelude::Entity;
 
 use crate::api::Api;
@@ -46,14 +48,15 @@ impl std::error::Error for MissionError {}
 impl Api {
     /// Creates a mission: a point to reach and how close counts as reached.
     ///
-    /// A negative radius is clamped to zero, which means the unit has to land on the point.
-    pub fn create_mission(&mut self, target: MoveTarget, radius: f32) -> EntityId {
+    /// `radius` is in milli-units. A negative radius is clamped to zero, which means the unit has
+    /// to land on the point.
+    pub fn create_mission(&mut self, target: MoveTarget, radius: i32) -> EntityId {
         let entity = self
             .core_mut()
             .world_mut()
             .spawn(Mission {
                 target,
-                radius: radius.max(0.0),
+                radius: radius.max(0),
             })
             .id();
         EntityId::of(entity)
@@ -158,14 +161,14 @@ mod tests {
         BaseMoveSpeed, Faction, ManualActive, NeedsMission, OrderSource, Position, Velocity,
     };
 
-    fn spawn_unit(api: &mut Api, faction: u32, x: f32, y: f32) -> EntityId {
+    fn spawn_unit(api: &mut Api, faction: u32, x: i32, y: i32) -> EntityId {
         let entity = api
             .core_mut()
             .world_mut()
             .spawn((
                 Position { x, y },
-                BaseMoveSpeed(20.0),
-                Velocity { vx: 0.0, vy: 0.0 },
+                BaseMoveSpeed(1000),
+                Velocity { vx: 0, vy: 0 },
                 Faction(faction),
             ))
             .id();
@@ -175,7 +178,7 @@ mod tests {
     /// A group of one, standing at the origin.
     fn group_with_one_unit(api: &mut Api) -> (EntityId, EntityId) {
         let group = api.create_group(1);
-        let unit = spawn_unit(api, 1, 0.0, 0.0);
+        let unit = spawn_unit(api, 1, 0, 0);
         api.add_to_group(group, unit).expect("join");
         (group, unit)
     }
@@ -184,7 +187,7 @@ mod tests {
     fn an_assigned_group_walks_to_the_mission_and_closes_it() {
         let mut api = Api::new();
         let (group, unit) = group_with_one_unit(&mut api);
-        let mission = api.create_mission(MoveTarget { x: 30.0, y: 0.0 }, 1.0);
+        let mission = api.create_mission(MoveTarget { x: 30_000, y: 0 }, 1000);
         api.assign_group(mission, group).expect("assign");
 
         for _ in 0..200 {
@@ -209,11 +212,11 @@ mod tests {
         let mut api = Api::new();
         let near = api.create_group(1);
         let far = api.create_group(1);
-        let near_unit = spawn_unit(&mut api, 1, 28.0, 0.0);
-        let far_unit = spawn_unit(&mut api, 1, -200.0, 0.0);
+        let near_unit = spawn_unit(&mut api, 1, 28_000, 0);
+        let far_unit = spawn_unit(&mut api, 1, -200_000, 0);
         api.add_to_group(near, near_unit).expect("join");
         api.add_to_group(far, far_unit).expect("join");
-        let mission = api.create_mission(MoveTarget { x: 30.0, y: 0.0 }, 1.0);
+        let mission = api.create_mission(MoveTarget { x: 30_000, y: 0 }, 1000);
         api.assign_group(mission, near).expect("assign");
         api.assign_group(mission, far).expect("assign");
 
@@ -242,17 +245,17 @@ mod tests {
     fn a_manual_group_is_not_steered_by_its_mission() {
         let mut api = Api::new();
         let (group, unit) = group_with_one_unit(&mut api);
-        let mission = api.create_mission(MoveTarget { x: 500.0, y: 0.0 }, 1.0);
+        let mission = api.create_mission(MoveTarget { x: 500_000, y: 0 }, 1000);
         api.assign_group(mission, group).expect("assign");
 
-        api.order_group_move_to(group, MoveTarget { x: -10.0, y: 0.0 })
+        api.order_group_move_to(group, MoveTarget { x: -10_000, y: 0 })
             .expect("manual order");
         api.step();
 
         let entity = unit.to_entity().expect("live entity");
         let world = api.core().world();
         let target = world.get::<MoveTarget>(entity).expect("target");
-        assert_eq!(target.x, -10.0, "the manual order stands");
+        assert_eq!(target.x, -10_000, "the manual order stands");
         assert_eq!(
             world.get::<OrderSource>(entity),
             Some(&OrderSource::GroupSteering)
@@ -263,9 +266,9 @@ mod tests {
     fn a_personal_order_outranks_mission_steering() {
         let mut api = Api::new();
         let (group, unit) = group_with_one_unit(&mut api);
-        let mission = api.create_mission(MoveTarget { x: 500.0, y: 0.0 }, 1.0);
+        let mission = api.create_mission(MoveTarget { x: 500_000, y: 0 }, 1000);
         api.assign_group(mission, group).expect("assign");
-        api.order_move_to(&[unit], MoveTarget { x: 3.0, y: 0.0 });
+        api.order_move_to(&[unit], MoveTarget { x: 3000, y: 0 });
 
         api.step();
 
@@ -280,10 +283,10 @@ mod tests {
     fn a_manual_order_takes_the_group_off_its_mission() {
         let mut api = Api::new();
         let (group, _) = group_with_one_unit(&mut api);
-        let mission = api.create_mission(MoveTarget { x: 300.0, y: 0.0 }, 1.0);
+        let mission = api.create_mission(MoveTarget { x: 300_000, y: 0 }, 1000);
         api.assign_group(mission, group).expect("assign");
 
-        api.order_group_move_to(group, MoveTarget { x: -5.0, y: 0.0 })
+        api.order_group_move_to(group, MoveTarget { x: -5000, y: 0 })
             .expect("manual order");
 
         assert_eq!(api.mission_of(group), None);
@@ -297,7 +300,7 @@ mod tests {
     fn an_empty_group_releases_its_mission() {
         let mut api = Api::new();
         let (group, unit) = group_with_one_unit(&mut api);
-        let mission = api.create_mission(MoveTarget { x: 300.0, y: 0.0 }, 1.0);
+        let mission = api.create_mission(MoveTarget { x: 300_000, y: 0 }, 1000);
         api.assign_group(mission, group).expect("assign");
 
         assert_eq!(api.despawn(&[unit]), 1);
@@ -311,7 +314,7 @@ mod tests {
     fn a_completed_mission_takes_no_more_groups() {
         let mut api = Api::new();
         let (group, _) = group_with_one_unit(&mut api);
-        let mission = api.create_mission(MoveTarget { x: 0.0, y: 0.0 }, 1.0);
+        let mission = api.create_mission(MoveTarget { x: 0, y: 0 }, 1000);
         api.assign_group(mission, group).expect("assign");
         api.step(); // the unit is already standing on the target
 
@@ -327,8 +330,8 @@ mod tests {
     fn a_group_works_one_mission_at_a_time() {
         let mut api = Api::new();
         let (group, _) = group_with_one_unit(&mut api);
-        let first = api.create_mission(MoveTarget { x: 100.0, y: 0.0 }, 1.0);
-        let second = api.create_mission(MoveTarget { x: 200.0, y: 0.0 }, 1.0);
+        let first = api.create_mission(MoveTarget { x: 100_000, y: 0 }, 1000);
+        let second = api.create_mission(MoveTarget { x: 200_000, y: 0 }, 1000);
 
         api.assign_group(first, group).expect("assign first");
         api.assign_group(second, group).expect("assign second");
@@ -341,8 +344,8 @@ mod tests {
     fn a_freed_group_picks_up_the_next_mission() {
         let mut api = Api::new();
         let (group, _) = group_with_one_unit(&mut api);
-        let near = api.create_mission(MoveTarget { x: 0.0, y: 0.0 }, 1.0);
-        let next = api.create_mission(MoveTarget { x: 40.0, y: 0.0 }, 1.0);
+        let near = api.create_mission(MoveTarget { x: 0, y: 0 }, 1000);
+        let next = api.create_mission(MoveTarget { x: 40_000, y: 0 }, 1000);
         api.assign_group(near, group).expect("assign");
 
         // The unit is standing on `near`, so it closes on the first tick and the planner runs.
@@ -360,9 +363,9 @@ mod tests {
     fn the_planner_takes_the_nearest_open_mission() {
         let mut api = Api::new();
         let (group, _) = group_with_one_unit(&mut api);
-        let done = api.create_mission(MoveTarget { x: 0.0, y: 0.0 }, 1.0);
-        let far = api.create_mission(MoveTarget { x: 500.0, y: 0.0 }, 1.0);
-        let near = api.create_mission(MoveTarget { x: 20.0, y: 0.0 }, 1.0);
+        let done = api.create_mission(MoveTarget { x: 0, y: 0 }, 1000);
+        let far = api.create_mission(MoveTarget { x: 500_000, y: 0 }, 1000);
+        let near = api.create_mission(MoveTarget { x: 20_000, y: 0 }, 1000);
         api.assign_group(done, group).expect("assign");
 
         api.step();
@@ -375,7 +378,7 @@ mod tests {
     fn a_freed_group_with_nothing_left_to_do_stands_idle() {
         let mut api = Api::new();
         let (group, _) = group_with_one_unit(&mut api);
-        let only = api.create_mission(MoveTarget { x: 0.0, y: 0.0 }, 1.0);
+        let only = api.create_mission(MoveTarget { x: 0, y: 0 }, 1000);
         api.assign_group(only, group).expect("assign");
 
         api.step();
@@ -389,7 +392,7 @@ mod tests {
     fn the_planner_leaves_a_manual_group_alone() {
         let mut api = Api::new();
         let (group, _) = group_with_one_unit(&mut api);
-        api.create_mission(MoveTarget { x: 40.0, y: 0.0 }, 1.0);
+        api.create_mission(MoveTarget { x: 40_000, y: 0 }, 1000);
 
         // A group the planner owes a mission to, that the player has taken over in the meantime.
         let group_entity = group.to_entity().expect("live entity");
@@ -414,7 +417,7 @@ mod tests {
     fn the_planner_skips_a_group_with_nobody_left() {
         let mut api = Api::new();
         let (group, unit) = group_with_one_unit(&mut api);
-        let open = api.create_mission(MoveTarget { x: 40.0, y: 0.0 }, 1.0);
+        let open = api.create_mission(MoveTarget { x: 40_000, y: 0 }, 1000);
         assert_eq!(api.despawn(&[unit]), 1);
 
         let group_entity = group.to_entity().expect("live entity");
@@ -433,7 +436,7 @@ mod tests {
     fn ids_of_the_wrong_kind_are_refused() {
         let mut api = Api::new();
         let (group, unit) = group_with_one_unit(&mut api);
-        let mission = api.create_mission(MoveTarget { x: 1.0, y: 0.0 }, 1.0);
+        let mission = api.create_mission(MoveTarget { x: 1000, y: 0 }, 1000);
 
         assert_eq!(
             api.assign_group(group, group),
@@ -449,7 +452,7 @@ mod tests {
     fn unassigning_is_reported() {
         let mut api = Api::new();
         let (group, _) = group_with_one_unit(&mut api);
-        let mission = api.create_mission(MoveTarget { x: 100.0, y: 0.0 }, 1.0);
+        let mission = api.create_mission(MoveTarget { x: 100_000, y: 0 }, 1000);
         api.assign_group(mission, group).expect("assign");
 
         assert!(api.unassign_group(group));

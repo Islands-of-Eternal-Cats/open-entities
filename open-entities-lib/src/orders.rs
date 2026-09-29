@@ -4,6 +4,8 @@
 //! [`Api::world_snapshot`](crate::Api::world_snapshot) reports as each entity's `id`, so a host can feed
 //! ids straight back from a snapshot.
 
+#![deny(clippy::float_arithmetic)]
+
 use bevy_ecs::entity::{Entity, EntityGeneration, EntityIndex};
 use bevy_ecs::prelude::World;
 use serde::{Deserialize, Serialize};
@@ -13,8 +15,8 @@ use crate::components::{
     BaseMoveSpeed, BoardingTarget, MoveTarget, OrderSource, PassengerOf, Position, Velocity,
 };
 
-/// World units between adjacent slots of a group move destination.
-const MOVE_GROUP_GRID_SPACING: f32 = 5.0;
+/// Milli-units between adjacent slots of a group move destination (5 map units).
+const MOVE_GROUP_GRID_SPACING: i32 = 5000;
 
 /// Stable external identity of an entity, as reported in a world snapshot.
 ///
@@ -69,29 +71,38 @@ pub struct OrderReport {
 
 /// Destination for one member of a group, on a grid centred on `target`.
 ///
-/// Columns are `ceil(sqrt(count))`, so the extent around the clicked point grows with about `√n`
+/// Columns are `ceil(sqrt(count))`, computed with `isqrt`, so the extent around the clicked point grows with about `√n`
 /// instead of linearly as it would on a single ring.
 pub(crate) fn group_slot(target: MoveTarget, index: usize, count: usize) -> MoveTarget {
     if count <= 1 {
         return target;
     }
 
-    #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]
-    #[allow(clippy::cast_possible_truncation)]
-    let cols = ((count as f32).sqrt().ceil() as usize).max(1);
+    let mut cols = count.isqrt();
+    if cols * cols < count {
+        cols += 1;
+    }
     let rows = count.div_ceil(cols);
     let row = index / cols;
     let col = index % cols;
 
-    #[allow(clippy::cast_precision_loss)]
-    let offset_x = (col as f32 - (cols.saturating_sub(1) as f32) / 2.0) * MOVE_GROUP_GRID_SPACING;
-    #[allow(clippy::cast_precision_loss)]
-    let offset_y = (row as f32 - (rows.saturating_sub(1) as f32) / 2.0) * MOVE_GROUP_GRID_SPACING;
-
     MoveTarget {
-        x: target.x + offset_x,
-        y: target.y + offset_y,
+        x: saturate(i64::from(target.x) + grid_offset(col, cols)),
+        y: saturate(i64::from(target.y) + grid_offset(row, rows)),
     }
+}
+
+/// Offset of slot `i` of `n` from the centre: `(2i − (n − 1)) · spacing / 2`. The spacing is even,
+/// so the halving is exact.
+fn grid_offset(i: usize, n: usize) -> i64 {
+    let i = i64::try_from(i).expect("slot index fits i64");
+    let n = i64::try_from(n).expect("slot count fits i64");
+    (2 * i - (n - 1)) * i64::from(MOVE_GROUP_GRID_SPACING) / 2
+}
+
+/// Clamps an `i64` coordinate into `i32`: a slot past the edge of the world stays on the edge.
+fn saturate(value: i64) -> i32 {
+    i32::try_from(value).unwrap_or(if value < 0 { i32::MIN } else { i32::MAX })
 }
 
 /// `true` when the entity is something a move order can reach: it exists, it has a place in the
@@ -129,9 +140,7 @@ pub(crate) fn steer(
             continue;
         }
         if world.get::<Velocity>(entity).is_none() {
-            world
-                .entity_mut(entity)
-                .insert(Velocity { vx: 0.0, vy: 0.0 });
+            world.entity_mut(entity).insert(Velocity { vx: 0, vy: 0 });
         }
         world
             .entity_mut(entity)
@@ -206,8 +215,8 @@ impl Api {
                 let Some(mut velocity) = world.get_mut::<Velocity>(entity) else {
                     continue;
                 };
-                velocity.vx = 0.0;
-                velocity.vy = 0.0;
+                velocity.vx = 0;
+                velocity.vy = 0;
             }
             // The source goes with the target: a leftover PlayerUnit claim on an entity that
             // is no longer going anywhere would block every later group or mission order. A
@@ -230,14 +239,14 @@ mod tests {
     use super::*;
     use crate::components::{BaseMoveSpeed, MoveTarget, Position, Velocity};
 
-    fn spawn_mover(api: &mut Api, x: f32, y: f32) -> EntityId {
+    fn spawn_mover(api: &mut Api, x: i32, y: i32) -> EntityId {
         let entity = api
             .core_mut()
             .world_mut()
             .spawn((
                 Position { x, y },
-                BaseMoveSpeed(10.0),
-                Velocity { vx: 0.0, vy: 0.0 },
+                BaseMoveSpeed(500),
+                Velocity { vx: 0, vy: 0 },
             ))
             .id();
         EntityId::of(entity)
@@ -246,9 +255,9 @@ mod tests {
     #[test]
     fn single_unit_targets_the_exact_point() {
         let mut api = Api::new();
-        let id = spawn_mover(&mut api, 0.0, 0.0);
+        let id = spawn_mover(&mut api, 0, 0);
 
-        let report = api.order_move_to(&[id], MoveTarget { x: 7.0, y: -3.0 });
+        let report = api.order_move_to(&[id], MoveTarget { x: 7000, y: -3000 });
 
         assert_eq!(report.ordered, 1);
         assert_eq!(report.skipped, 0);
@@ -257,18 +266,24 @@ mod tests {
             .world()
             .get::<MoveTarget>(id.to_entity().expect("entity"))
             .expect("move target");
-        assert_eq!(target.x, 7.0);
-        assert_eq!(target.y, -3.0);
+        assert_eq!(target.x, 7000);
+        assert_eq!(target.y, -3000);
     }
 
     #[test]
     fn group_members_get_distinct_slots_around_the_point() {
         let mut api = Api::new();
         let ids: Vec<EntityId> = (0..4_u8)
-            .map(|i| spawn_mover(&mut api, f32::from(i), 0.0))
+            .map(|i| spawn_mover(&mut api, i32::from(i) * 1000, 0))
             .collect();
 
-        let report = api.order_move_to(&ids, MoveTarget { x: 50.0, y: 50.0 });
+        let report = api.order_move_to(
+            &ids,
+            MoveTarget {
+                x: 50_000,
+                y: 50_000,
+            },
+        );
         assert_eq!(report.ordered, 4);
 
         let world = api.core_mut().world();
@@ -285,8 +300,8 @@ mod tests {
             for b in targets.iter().skip(i + 1) {
                 assert!(a != b, "group members share a destination: {a:?}");
             }
-            assert!((a.x - 50.0).abs() <= MOVE_GROUP_GRID_SPACING);
-            assert!((a.y - 50.0).abs() <= MOVE_GROUP_GRID_SPACING);
+            assert!((a.x - 50_000).abs() <= MOVE_GROUP_GRID_SPACING);
+            assert!((a.y - 50_000).abs() <= MOVE_GROUP_GRID_SPACING);
         }
     }
 
@@ -296,13 +311,13 @@ mod tests {
         let statue = api
             .core_mut()
             .world_mut()
-            .spawn(Position { x: 1.0, y: 1.0 })
+            .spawn(Position { x: 1000, y: 1000 })
             .id();
         let statue_id = EntityId::of(statue);
         let stale = EntityId::new(statue_id.index, statue_id.generation.wrapping_add(7));
-        let mover = spawn_mover(&mut api, 0.0, 0.0);
+        let mover = spawn_mover(&mut api, 0, 0);
 
-        let report = api.order_move_to(&[statue_id, stale, mover], MoveTarget { x: 5.0, y: 5.0 });
+        let report = api.order_move_to(&[statue_id, stale, mover], MoveTarget { x: 5000, y: 5000 });
 
         assert_eq!(report.ordered, 1);
         assert_eq!(report.skipped, 2);
@@ -318,9 +333,9 @@ mod tests {
     #[test]
     fn repeated_ids_count_once() {
         let mut api = Api::new();
-        let id = spawn_mover(&mut api, 0.0, 0.0);
+        let id = spawn_mover(&mut api, 0, 0);
 
-        let report = api.order_move_to(&[id, id, id], MoveTarget { x: 2.0, y: 2.0 });
+        let report = api.order_move_to(&[id, id, id], MoveTarget { x: 2000, y: 2000 });
 
         assert_eq!(report.ordered, 1);
         assert_eq!(report.skipped, 2);
@@ -329,8 +344,8 @@ mod tests {
             .world()
             .get::<MoveTarget>(id.to_entity().expect("entity"))
             .expect("move target");
-        assert_eq!(target.x, 2.0);
-        assert_eq!(target.y, 2.0);
+        assert_eq!(target.x, 2000);
+        assert_eq!(target.y, 2000);
     }
 
     #[test]
@@ -339,10 +354,10 @@ mod tests {
         let entity = api
             .core_mut()
             .world_mut()
-            .spawn((Position { x: 0.0, y: 0.0 }, BaseMoveSpeed(4.0)))
+            .spawn((Position { x: 0, y: 0 }, BaseMoveSpeed(200)))
             .id();
 
-        let report = api.order_move_to(&[EntityId::of(entity)], MoveTarget { x: 9.0, y: 0.0 });
+        let report = api.order_move_to(&[EntityId::of(entity)], MoveTarget { x: 9000, y: 0 });
 
         assert_eq!(report.ordered, 1);
         let velocity = api
@@ -350,15 +365,15 @@ mod tests {
             .world()
             .get::<Velocity>(entity)
             .expect("velocity inserted");
-        assert_eq!(velocity.vx, 0.0);
-        assert_eq!(velocity.vy, 0.0);
+        assert_eq!(velocity.vx, 0);
+        assert_eq!(velocity.vy, 0);
     }
 
     #[test]
     fn stop_zeroes_velocity_and_drops_the_target() {
         let mut api = Api::new();
-        let id = spawn_mover(&mut api, 0.0, 0.0);
-        api.order_move_to(&[id], MoveTarget { x: 30.0, y: 0.0 });
+        let id = spawn_mover(&mut api, 0, 0);
+        api.order_move_to(&[id], MoveTarget { x: 30_000, y: 0 });
         api.step();
 
         let report = api.order_stop(&[id]);
@@ -367,8 +382,8 @@ mod tests {
         let entity = id.to_entity().expect("entity");
         let world = api.core_mut().world();
         let velocity = world.get::<Velocity>(entity).expect("velocity");
-        assert_eq!(velocity.vx, 0.0);
-        assert_eq!(velocity.vy, 0.0);
+        assert_eq!(velocity.vx, 0);
+        assert_eq!(velocity.vy, 0);
         assert!(world.get::<MoveTarget>(entity).is_none());
     }
 
@@ -379,7 +394,7 @@ mod tests {
         let entity = api
             .core_mut()
             .world_mut()
-            .spawn((Position { x: 0.0, y: 0.0 }, Velocity { vx: 0.5, vy: 0.0 }))
+            .spawn((Position { x: 0, y: 0 }, Velocity { vx: 25, vy: 0 }))
             .id();
         let id = EntityId::of(entity);
 
@@ -390,11 +405,10 @@ mod tests {
             .get::<Position>(entity)
             .expect("position")
             .x;
-        assert!(drifted > 0.0, "entity should have drifted");
+        assert!(drifted > 0, "entity should have drifted");
 
         assert_eq!(
-            api.order_move_to(&[id], MoveTarget { x: 0.0, y: 0.0 })
-                .ordered,
+            api.order_move_to(&[id], MoveTarget { x: 0, y: 0 }).ordered,
             0
         );
         assert_eq!(api.order_stop(&[id]).ordered, 1);
@@ -406,10 +420,7 @@ mod tests {
             .get::<Position>(entity)
             .expect("position")
             .x;
-        assert!(
-            (after - drifted).abs() < 1e-6,
-            "entity should stay put after stop"
-        );
+        assert_eq!(after, drifted, "entity should stay put after stop");
     }
 
     #[test]
@@ -418,7 +429,7 @@ mod tests {
         let statue = api
             .core_mut()
             .world_mut()
-            .spawn(Position { x: 1.0, y: 1.0 })
+            .spawn(Position { x: 1000, y: 1000 })
             .id();
 
         let report = api.order_stop(&[EntityId::of(statue)]);
@@ -430,8 +441,8 @@ mod tests {
     #[test]
     fn ordered_unit_reaches_its_destination() {
         let mut api = Api::new();
-        let id = spawn_mover(&mut api, 0.0, 0.0);
-        api.order_move_to(&[id], MoveTarget { x: 12.0, y: 0.0 });
+        let id = spawn_mover(&mut api, 0, 0);
+        api.order_move_to(&[id], MoveTarget { x: 12_000, y: 0 });
 
         let entity = id.to_entity().expect("entity");
         for _ in 0..400 {
@@ -446,7 +457,7 @@ mod tests {
             .world()
             .get::<Position>(entity)
             .expect("position");
-        assert!((position.x - 12.0).abs() < 1e-4);
-        assert!((position.y - 0.0).abs() < 1e-4);
+        assert_eq!(position.x, 12_000);
+        assert_eq!(position.y, 0);
     }
 }

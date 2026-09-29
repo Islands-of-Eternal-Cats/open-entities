@@ -27,7 +27,7 @@ mod tests {
     #[test]
     fn entity_components_has_any_detects_base_move_speed() {
         let doc = EntityComponents {
-            base_move_speed: Some(BaseMoveSpeed(1.5)),
+            base_move_speed: Some(BaseMoveSpeed(75)),
             ..Default::default()
         };
         assert!(entity_components_has_any(&doc));
@@ -46,13 +46,13 @@ mod tests {
     #[test]
     fn collect_world_export_rows_reads_registered_components() {
         let mut world = World::new();
-        world.spawn((Position { x: 3.0, y: 4.0 }, Health { current: 7, max: 9 }));
+        world.spawn((Position { x: 3000, y: 4000 }, Health { current: 7, max: 9 }));
 
         let rows = collect_world_export_rows(&mut world);
         assert_eq!(rows.len(), 1);
         assert_eq!(
             rows[0].components.position,
-            Some(Position { x: 3.0, y: 4.0 })
+            Some(Position { x: 3000, y: 4000 })
         );
         assert_eq!(
             rows[0].components.health,

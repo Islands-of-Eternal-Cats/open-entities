@@ -14,6 +14,16 @@ to a click on the canvas.
 
 ### Changed
 
+- **Breaking. Integer simulation space.** Simulation state is integer milli-units
+  (`MILLI_PER_UNIT` = 1000): `Position`, `MoveTarget` and `Mission::radius` are `i32` milli-units,
+  `Velocity` and `BaseMoveSpeed` are `i32` milli-units per tick, and `BOARDING_RANGE` is `i32`.
+  `Api::create_mission` takes the radius as `i32` milli-units. `ARRIVAL_THRESHOLD` (0.1) becomes
+  `ARRIVAL_RADIUS` (100) and `TICK_SECS` is removed. Seek, arrival, range checks, the group grid
+  and the replanner compute in integers with an integer square root, so results no longer depend
+  on platform float behaviour. YAML, spawn overrides, the JSON export and the JS API keep map units
+  as decimals, converted in the new `units` module; the export schema stays **5**. Speeds are
+  quantised to 1 milli-unit per tick (0.02 units/s at `TICK_MS` = 50): `0.51` runs and exports as
+  `0.52`. A value beyond `i32` milli-units is an import error.
 - **Breaking. Fixed timestep.** The simulation advances only in whole ticks of
   `TICK_MS` = 50 ms: `Api::step()` runs one tick and `Api::current_tick()` counts them.
   `Api::tick(dt_ms)`, `MAX_DT_MS`, `TickError` and the `SimDelta` resource are removed; systems
@@ -30,9 +40,28 @@ to a click on the canvas.
   itself no longer refuses on distance (`BoardError::TooFarAway` is gone): it is the primitive
   underneath. `boarding_target_of` and `approaching` read the order back, and the demo's **B**
   now sends units over instead of refusing the far ones.
+- `BoardError::TooFarAway` carries the measured distance, so a refusal says whether to walk the
+  unit over or to stop the vehicle first. `BoardError` is no longer `Eq`, since a distance is a
+  float.
+- **Breaking.** The export is **schema version 4**: registering `Boardable` adds a `boardable`
+  field to entities that have seats.
+- **Breaking.** `spawn_entity` and `load_map_yaml` return `EntityId` instead of a bevy `Entity`,
+  and the crate root no longer re-exports `Component`, `Entity`, `Query` and `World`. No
+  `bevy_ecs` type appears in the normal path, so the ECS version is not part of this library's
+  public contract. `Api::core()` / `core_mut()` remain the documented escape hatch.
+- **Breaking.** In JavaScript, `spawnEntity` returns a plain `{index, generation}` object — the
+  same shape the export reports and every other call accepts. The `SpawnedEntity` class is gone.
+- Licensed as **MIT OR Apache-2.0** (was GPL-3.0-or-later), so the library can be used from
+  closed-source projects, including the author's own.
+- `clippy::nursery` dropped from the crate lints; `pedantic` stays and CI denies warnings.
 
 ### Added
 
+- **`units` module.** `to_milli`, `from_milli`, `speed_to_per_tick`, `speed_from_per_tick` and
+  the constructors `Position::from_units` / `MoveTarget::from_units` for host code.
+- **Float gates.** `#![deny(clippy::float_arithmetic)]` in every simulation module, and
+  `scripts/check-no-floats.sh` (`make float-check`, run in CI) fails if `f32` or `f64` appears in
+  one.
 - **Transport in the browser demo.** `board`, `unboard`, `vehicleOf`, `passengers` and `freeSeats`
   are exposed through `Simulation`, the snapshot carries `seats` and `aboard`, and the demo starts
   with a truck parked beside one mover and out of reach of the other. **B** loads the selected
@@ -89,24 +118,6 @@ to a click on the canvas.
   pan and zoom, with the simulation in a web worker.
 - **CI**: `cargo test`, `fmt + clippy`, `wasm-check`, and js-app typecheck plus vitest on every
   push and pull request.
-
-### Changed
-
-- `BoardError::TooFarAway` carries the measured distance, so a refusal says whether to walk the
-  unit over or to stop the vehicle first. `BoardError` is no longer `Eq`, since a distance is a
-  float.
-- **Breaking.** The export is **schema version 4**: registering `Boardable` adds a `boardable`
-  field to entities that have seats.
-
-- **Breaking.** `spawn_entity` and `load_map_yaml` return `EntityId` instead of a bevy `Entity`,
-  and the crate root no longer re-exports `Component`, `Entity`, `Query` and `World`. No
-  `bevy_ecs` type appears in the normal path, so the ECS version is not part of this library's
-  public contract. `Api::core()` / `core_mut()` remain the documented escape hatch.
-- **Breaking.** In JavaScript, `spawnEntity` returns a plain `{index, generation}` object — the
-  same shape the export reports and every other call accepts. The `SpawnedEntity` class is gone.
-- Licensed as **MIT OR Apache-2.0** (was GPL-3.0-or-later), so the library can be used from
-  closed-source projects, including the author's own.
-- `clippy::nursery` dropped from the crate lints; `pedantic` stays and CI denies warnings.
 
 ### Fixed
 
