@@ -4,8 +4,7 @@ use crate::core::Core;
 use crate::import::EntityTemplates;
 use crate::map::MapBounds;
 use crate::orders::EntityId;
-use crate::simulation::{ArrivedThisTick, SimDelta, TickError};
-use crate::systems::MAX_DT_MS;
+use crate::simulation::{ArrivedThisTick, SimTick};
 
 /// Public facade over [`Core`] for simulation operations, export, and import.
 pub struct Api {
@@ -65,22 +64,22 @@ impl Api {
         removed
     }
 
-    /// Advances simulation by `dt_ms` milliseconds (clamped to [`MAX_DT_MS`]).
+    /// Advances the simulation by exactly one tick of [`TICK_MS`](crate::TICK_MS).
     ///
-    /// # Errors
-    ///
-    /// Returns [`TickError::ZeroDeltaTime`] when `dt_ms == 0`.
-    pub fn tick(&mut self, dt_ms: u32) -> Result<(), TickError> {
-        if dt_ms == 0 {
-            return Err(TickError::ZeroDeltaTime);
-        }
-        let dt_ms = dt_ms.min(MAX_DT_MS);
+    /// The host never passes a delta: it accumulates its own frame time and calls `step` once per
+    /// whole tick, so the resulting state does not depend on frame rate.
+    pub fn step(&mut self) {
         let core = self.core_mut();
         let world = core.world_mut();
-        world.insert_resource(SimDelta::from_ms(dt_ms));
         world.resource_mut::<ArrivedThisTick>().0.clear();
         core.run_schedule();
-        Ok(())
+        core.world_mut().resource_mut::<SimTick>().0 += 1;
+    }
+
+    /// Number of ticks advanced since the `Api` was created.
+    #[must_use]
+    pub fn current_tick(&self) -> u64 {
+        self.core().world().resource::<SimTick>().0
     }
 }
 

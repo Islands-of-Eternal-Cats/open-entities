@@ -28,8 +28,11 @@ export type WorkerInMessage =
       mapYaml: string;
     }
   | { type: "snapshot" }
-  /** Delta in **seconds**; the worker converts to the integer milliseconds WASM takes. */
-  | { type: "tick"; dt: number }
+  /**
+   * Real time since the previous frame, in milliseconds. The worker accumulates it and runs as
+   * many fixed ticks as fit; the reply is a `frame` message.
+   */
+  | { type: "frame"; elapsedMs: number }
   | {
       type: "spawn_at";
       typeName: string;
@@ -55,5 +58,15 @@ export type WorkerOutMessage =
   | { type: "ready" }
   | { type: "error"; message: string }
   | { type: "entities"; entities: RawEntitySnapshot[] }
+  | {
+      type: "frame";
+      /** State at the current tick. */
+      entities: RawEntitySnapshot[];
+      /** Positions at the tick before, keyed by entity id. */
+      previous: Record<string, Pos>;
+      /** How far the frame is between `previous` and `entities`, in [0, 1). */
+      alpha: number;
+      tick: number;
+    }
   | { type: "spawned"; entity: RawEntitySnapshot }
   | { type: "id"; id: EntityId };

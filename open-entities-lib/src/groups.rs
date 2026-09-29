@@ -396,8 +396,8 @@ mod tests {
             .expect("group order");
 
         // Arriving does not hand the group back to automation.
-        for _ in 0..50 {
-            api.tick(100).expect("tick");
+        for _ in 0..100 {
+            api.step();
         }
         assert!(api.is_group_manual(group));
 

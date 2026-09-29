@@ -11,15 +11,18 @@ use crate::component_registry::collect_world_export_rows;
 use crate::components::EntityType;
 use crate::entity_components::EntityComponents;
 use crate::orders::EntityId;
+use crate::simulation::SimTick;
 
 /// Schema version reported in [`WorldSnapshot::version`].
-pub const SCHEMA_VERSION: u32 = 4;
+pub const SCHEMA_VERSION: u32 = 5;
 
 /// Every entity in the world at one moment.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct WorldSnapshot {
     /// Snapshot schema version, [`SCHEMA_VERSION`].
     pub version: u32,
+    /// Simulation tick the snapshot was taken at, [`Api::current_tick`].
+    pub tick: u64,
     /// One row per entity.
     pub entities: Vec<EntitySnapshot>,
 }
@@ -40,7 +43,7 @@ pub struct EntitySnapshot {
 }
 
 impl Api {
-    /// Captures every entity in the world (schema version 4).
+    /// Captures every entity in the world (schema version 5).
     #[must_use]
     pub fn world_snapshot(&mut self) -> WorldSnapshot {
         world_snapshot_from_world(self.core_mut().world_mut())
@@ -48,6 +51,7 @@ impl Api {
 }
 
 fn world_snapshot_from_world(world: &mut World) -> WorldSnapshot {
+    let tick = world.resource::<SimTick>().0;
     let entities = collect_world_export_rows(world)
         .into_iter()
         .map(|row| EntitySnapshot {
@@ -59,6 +63,7 @@ fn world_snapshot_from_world(world: &mut World) -> WorldSnapshot {
 
     WorldSnapshot {
         version: SCHEMA_VERSION,
+        tick,
         entities,
     }
 }
@@ -72,7 +77,8 @@ mod tests {
     fn empty_world() {
         let mut api = Api::new();
         let snapshot = api.world_snapshot();
-        assert_eq!(snapshot.version, 4);
+        assert_eq!(snapshot.version, 5);
+        assert_eq!(snapshot.tick, 0);
         assert!(snapshot.entities.is_empty());
     }
 
@@ -165,7 +171,8 @@ mod tests {
         api.core_mut().world_mut().spawn(Faction(2));
 
         let value = serde_json::to_value(api.world_snapshot()).expect("serialize");
-        assert_eq!(value["version"], 4);
+        assert_eq!(value["version"], 5);
+        assert_eq!(value["tick"], 0);
         let entities = value["entities"].as_array().expect("entities array");
         let scout = entities
             .iter()

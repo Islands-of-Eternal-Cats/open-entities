@@ -1,4 +1,4 @@
-//! Tick-time resources and [`TickError`] for [`Api::tick`](crate::Api::tick).
+//! Tick-time constants and resources for [`Api::step`](crate::Api::step).
 
 use std::collections::HashSet;
 
@@ -6,82 +6,26 @@ use bevy_ecs::prelude::{Entity, Resource};
 
 pub use crate::systems::ARRIVAL_THRESHOLD;
 
-/// Per-tick delta time in seconds (from clamped `dt_ms`).
-#[derive(Resource, Debug, Clone, Copy, PartialEq)]
-pub struct SimDelta {
-    /// Delta in seconds.
-    pub dt_secs: f32,
-}
+/// Length of one simulation tick in milliseconds (20 Hz).
+pub const TICK_MS: u32 = 50;
 
-impl SimDelta {
-    /// Converts a millisecond delta to seconds.
-    #[must_use]
-    #[allow(clippy::cast_precision_loss)] // dt_ms ≤ MAX_DT_MS (100); exact f32 representation
-    pub const fn from_ms(ms: u32) -> Self {
-        Self {
-            dt_secs: ms as f32 / 1000.0,
-        }
-    }
-}
+/// Length of one simulation tick in seconds, for per-second speeds.
+#[allow(clippy::cast_precision_loss)] // TICK_MS is small; exact conversion
+pub const TICK_SECS: f32 = TICK_MS as f32 / 1000.0;
+
+/// Number of ticks the simulation has advanced; incremented once per [`Api::step`](crate::Api::step).
+#[derive(Resource, Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct SimTick(pub u64);
 
 /// Entities that arrived this tick; `movement_system` skips them.
 #[derive(Resource, Debug, Default)]
 pub struct ArrivedThisTick(pub HashSet<Entity>);
 
-/// Errors from [`Api::tick`](crate::Api::tick).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TickError {
-    /// `dt_ms` was `0`.
-    ZeroDeltaTime,
-}
-
-impl std::fmt::Display for TickError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::ZeroDeltaTime => f.write_str("tick delta must be greater than zero"),
-        }
-    }
-}
-
-impl std::error::Error for TickError {}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::api::Api;
     use crate::components::{BaseMoveSpeed, MoveTarget, Position, Velocity};
     use crate::entity_components::EntityComponents;
-
-    #[test]
-    fn tick_zero_delta_fails() {
-        let mut api = Api::new();
-        let err = api.tick(0).unwrap_err();
-        assert_eq!(err, TickError::ZeroDeltaTime);
-    }
-
-    #[test]
-    fn tick_clamps_large_dt() {
-        let mut api = Api::new();
-        let entity = api
-            .core_mut()
-            .world_mut()
-            .spawn((Position { x: 0.0, y: 0.0 }, Velocity { vx: 1.0, vy: 0.0 }))
-            .id();
-
-        api.tick(500).expect("tick with clamp");
-        let pos_after_500 = api.core_mut().world().get::<Position>(entity).unwrap().x;
-
-        let mut api2 = Api::new();
-        let entity2 = api2
-            .core_mut()
-            .world_mut()
-            .spawn((Position { x: 0.0, y: 0.0 }, Velocity { vx: 1.0, vy: 0.0 }))
-            .id();
-        api2.tick(100).expect("tick at cap");
-        let pos_after_100 = api2.core_mut().world().get::<Position>(entity2).unwrap().x;
-
-        assert!((pos_after_500 - pos_after_100).abs() < 1e-5);
-    }
 
     #[test]
     fn movement_skips_arrived_same_frame() {
@@ -97,7 +41,7 @@ mod tests {
             ))
             .id();
 
-        api.tick(16).expect("tick");
+        api.step();
 
         let world = api.core_mut().world();
         let position = world.get::<Position>(entity).expect("position");
@@ -120,17 +64,19 @@ mod tests {
             ))
             .id();
 
-        // 45 units/s at the 100 ms cap steps 4.5 per tick: 4 full steps, then arrival.
+        // Regression for overshoot: 45 units/s steps 2.25 per tick, far above ARRIVAL_THRESHOLD,
+        // so without the step check the unit would jump past the target and oscillate.
+        // 8 full steps cover 18 units; the 9th reaches the target.
         let mut ticks = 0;
         for _ in 0..100 {
-            api.tick(100).expect("tick");
+            api.step();
             ticks += 1;
             if api.core_mut().world().get::<MoveTarget>(entity).is_none() {
                 break;
             }
         }
 
-        assert!(ticks <= 6, "expected arrival in a few ticks, took {ticks}");
+        assert_eq!(ticks, 9, "expected arrival in a few ticks, took {ticks}");
 
         let world = api.core_mut().world();
         let position = world.get::<Position>(entity).expect("position");
@@ -157,7 +103,7 @@ mod tests {
             .expect("live entity");
 
         for _ in 0..1000 {
-            api.tick(16).expect("tick");
+            api.step();
             if api.core_mut().world().get::<MoveTarget>(entity).is_none() {
                 break;
             }

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Simulation } from "../pkg/open_entities_wasm.js";
+import { Simulation, tickMs } from "../pkg/open_entities_wasm.js";
 
 const fixturePath = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -30,8 +30,11 @@ for (const name of names) {
 const json = sim.getWorldAsJson();
 const parsed = JSON.parse(json);
 
-if (parsed.version !== 4) {
-  throw new Error(`expected version 4, got ${parsed.version}`);
+if (parsed.version !== 5) {
+  throw new Error(`expected version 5, got ${parsed.version}`);
+}
+if (parsed.tick !== 0) {
+  throw new Error(`expected tick 0 before any step, got ${parsed.tick}`);
 }
 if (!Array.isArray(parsed.entities) || parsed.entities.length !== 5) {
   throw new Error(`expected 5 entities, got ${parsed.entities?.length}`);
@@ -64,15 +67,24 @@ const tickSim = new Simulation();
 tickSim.loadTemplatesYaml(yaml);
 tickSim.spawnEntity("scout", {});
 
+if (tickMs() !== 50) {
+  throw new Error(`expected tickMs() 50, got ${tickMs()}`);
+}
 const maxTicks = 1000;
 for (let i = 0; i < maxTicks; i++) {
-  tickSim.tick(16);
+  tickSim.step();
   if (i > 0 && i % 30 === 0) {
     console.log(`tick ${i}`);
   }
 }
 
+if (tickSim.currentTick() !== maxTicks) {
+  throw new Error(`tick demo: currentTick() ${tickSim.currentTick()}, expected ${maxTicks}`);
+}
 const tickJson = JSON.parse(tickSim.getWorldAsJson());
+if (tickJson.tick !== maxTicks) {
+  throw new Error(`tick demo: snapshot tick ${tickJson.tick}, expected ${maxTicks}`);
+}
 const tickScout = tickJson.entities.find((e) => e.entity_type === "scout");
 if (!tickScout) {
   throw new Error("tick demo: scout missing");
@@ -123,8 +135,9 @@ if (rideSim.passengers(truck).length !== 1) {
   throw new Error("transport demo: the truck should carry exactly one unit");
 }
 
-for (let i = 0; i < 60; i++) {
-  rideSim.tick(16);
+// One second of simulation.
+for (let i = 0; i < 1000 / tickMs(); i++) {
+  rideSim.step();
 }
 
 const rideRows = JSON.parse(rideSim.getWorldAsJson()).entities;

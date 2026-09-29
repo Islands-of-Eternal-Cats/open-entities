@@ -14,6 +14,9 @@ declare module "open_entities_wasm" {
 
   export default function init(options?: InitOptions): Promise<void>;
 
+  /** Length of one simulation tick in milliseconds. */
+  export function tickMs(): number;
+
   /** Stable entity identity, exactly as the world export reports each entity's `id`. */
   export interface EntityId {
     index: number;
@@ -26,7 +29,7 @@ declare module "open_entities_wasm" {
     height: number;
   }
 
-  /** ECS world: load templates, spawn, order, tick, export. */
+  /** ECS world: load templates, spawn, order, step, export. */
   export class Simulation {
     constructor();
 
@@ -57,7 +60,7 @@ declare module "open_entities_wasm" {
     /** True while the entity behind this id is spawned. */
     isAlive(id: EntityId): boolean;
 
-    /** Whole world as JSON (schema version 4). */
+    /** Whole world as JSON (schema version 5). */
     getWorldAsJson(): string;
 
     /** A new empty group for that faction. */
@@ -120,7 +123,10 @@ declare module "open_entities_wasm" {
     /** Seats still empty, or null when the entity has no seats at all. */
     freeSeats(vehicle: EntityId): number | null;
 
-    /** Advance the simulation; delta is a positive integer number of milliseconds. */
-    tick(dtMs: number): void;
+    /** Advance the simulation by exactly one tick of `tickMs()` milliseconds. */
+    step(): void;
+
+    /** Ticks advanced since the simulation was created. */
+    currentTick(): number;
   }
 }

@@ -359,7 +359,7 @@ mod tests {
         let mut api = Api::new();
         let id = spawn_mover(&mut api, 0.0, 0.0);
         api.order_move_to(&[id], MoveTarget { x: 30.0, y: 0.0 });
-        api.tick(16).expect("tick");
+        api.step();
 
         let report = api.order_stop(&[id]);
 
@@ -383,7 +383,7 @@ mod tests {
             .id();
         let id = EntityId::of(entity);
 
-        api.tick(100).expect("tick");
+        api.step();
         let drifted = api
             .core_mut()
             .world()
@@ -399,7 +399,7 @@ mod tests {
         );
         assert_eq!(api.order_stop(&[id]).ordered, 1);
 
-        api.tick(100).expect("tick");
+        api.step();
         let after = api
             .core_mut()
             .world()
@@ -434,8 +434,8 @@ mod tests {
         api.order_move_to(&[id], MoveTarget { x: 12.0, y: 0.0 });
 
         let entity = id.to_entity().expect("entity");
-        for _ in 0..200 {
-            api.tick(100).expect("tick");
+        for _ in 0..400 {
+            api.step();
             if api.core_mut().world().get::<MoveTarget>(entity).is_none() {
                 break;
             }

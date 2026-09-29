@@ -81,7 +81,12 @@ vi.mock("./core/wasm", () => ({
   boardUnits: state.boardUnits,
   stopSelected: state.stopSelected,
   unboardUnits: state.unboardUnits,
-  tick: vi.fn(async () => [] as EntitySnapshot[]),
+  frame: vi.fn(async () => ({
+    entities: [] as EntitySnapshot[],
+    previous: {},
+    alpha: 0,
+    tick: 0,
+  })),
   // main.ts imports these two as well; leaving them out made run() throw on the first
   // `await snapshot()` and swallow the rest of the wiring.
   snapshot: vi.fn(async () => state.world),

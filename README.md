@@ -7,7 +7,7 @@ The library uses [Bevy ECS](https://crates.io/crates/bevy_ecs) (`bevy_ecs` only,
 - [`Api`](open-entities-lib/src/api.rs) — the facade: spawn, orders, lifecycle, import, export
 - [`EntityId`](open-entities-lib/src/orders.rs) — how every call names an entity: an `{index, generation}` pair
 - [`Core`](open-entities-lib/src/core.rs) — owns the ECS [`World`](https://docs.rs/bevy_ecs/latest/bevy_ecs/world/struct.World.html); reachable through `Api::core()` / `core_mut()`
-- [`export`](open-entities-lib/src/export/mod.rs) — `Api::world_snapshot()` captures **every entity** in the world as a `WorldSnapshot` (**schema version 4**); it serializes flat, and registered gameplay fields are omitted when absent (not `null`). The WASM bindings turn it into JSON
+- [`export`](open-entities-lib/src/export/mod.rs) — `Api::world_snapshot()` captures **every entity** in the world as a `WorldSnapshot` (**schema version 5**); it serializes flat, and registered gameplay fields are omitted when absent (not `null`). The WASM bindings turn it into JSON
 - [`EntityComponents`](open-entities-lib/src/entity_components.rs) — shared struct for YAML templates, `spawn_entity` overrides, and flattened export rows
 
 ## Where bevy stops
@@ -25,12 +25,29 @@ Domain components live under `open_entities::components`: `Position`, `Velocity`
 
 ## Simulation tick
 
-`Api::tick(dt_ms)` advances the ECS schedule: `seek_system` (entities with `MoveTarget` + `BaseMoveSpeed` + `Velocity`) then `movement_system` (all `Position` + `Velocity`). Delta is unsigned milliseconds; `0` returns `TickError::ZeroDeltaTime`; values above **100 ms** are clamped.
+The simulation advances only in whole ticks of constant length, `TICK_MS` = **50 ms** (20 Hz).
+`Api::step()` runs exactly one tick; the host never passes a delta, so the same orders give the
+same state at the same tick whatever the host's frame rate. `Api::current_tick()` counts the ticks
+run so far, and every `WorldSnapshot` carries it as `tick`.
 
-Arrival (distance ≤ 0.1): snap to target, remove `MoveTarget`, zero `Velocity`, skip movement that frame.
+A tick runs the ECS schedule: `seek_system` (entities with `MoveTarget` + `BaseMoveSpeed` +
+`Velocity`) then `movement_system` (all `Position` + `Velocity`). Speeds stay in units per second
+in YAML and components; systems move `speed × TICK_MS / 1000` per tick.
+
+Arrival (distance ≤ 0.1, or this tick's step would reach the target): snap to target, remove
+`MoveTarget`, zero `Velocity`, skip movement that tick.
+
+A host with a variable frame rate accumulates real elapsed time and calls `step()` while at least
+one tick is in the accumulator; the remainder, `accumulator / TICK_MS`, is how far to interpolate
+between the last two ticks when drawing.
 
 ```rust
-api.tick(16)?; // ~60 Hz step
+let mut accumulator = 0;
+accumulator += frame_ms;
+while accumulator >= open_entities::TICK_MS {
+    api.step();
+    accumulator -= open_entities::TICK_MS;
+}
 ```
 
 ## Move orders
@@ -288,7 +305,8 @@ make wasm-check
 | `loadTemplatesYaml(yaml)` | `load_templates_yaml` |
 | `spawnEntity(name, overrides)` | `spawn_entity` → id `{index, generation}` |
 | `getWorldAsJson()` | `world_json` |
-| `tick(dtMs)` | `tick` |
+| `step()` | `step` |
+| `currentTick()` | `current_tick` |
 | `orderMoveTo(ids, x, y)` | `order_move_to` |
 | `orderStop(ids)` | `order_stop` |
 | `despawn(ids)` | `despawn` → count removed |
@@ -307,8 +325,7 @@ make wasm-check
 | `loadMapYaml(yaml)` | `load_map_yaml` → array of ids |
 | `mapBounds()` | `map_bounds` → `{width, height}` or `null` |
 | `hello()` | `hello` |
-
-`tick(0)`, non-integer, NaN, or non-finite `dtMs` are rejected in JavaScript before Rust runs.
+| `tickMs()` (module function) | `TICK_MS` |
 
 Override objects use the same snake_case keys as YAML and export (`position`, `move_target`, etc.). See [`wasm-bindings/demo/run.mjs`](wasm-bindings/demo/run.mjs) for a full example.
 
@@ -399,13 +416,14 @@ let snapshot = api.world_snapshot();
 let json = serde_json::to_string(&snapshot).expect("export world");
 ```
 
-### Exported JSON (schema version 4)
+### Exported JSON (schema version 5)
 
-Every entity in the world appears in `entities`. Component keys are omitted when the entity does not have that component (not `null`).
+`tick` is the simulation tick the snapshot was taken at. Every entity in the world appears in `entities`. Component keys are omitted when the entity does not have that component (not `null`).
 
 ```json
 {
-  "version": 4,
+  "version": 5,
+  "tick": 0,
   "entities": [
     {
       "id": { "index": 0, "generation": 0 },

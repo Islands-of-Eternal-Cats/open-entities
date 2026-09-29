@@ -389,22 +389,26 @@ impl Simulation {
         }
     }
 
-    /// JS: `tick(dtMs)` — positive integer milliseconds only.
-    #[wasm_bindgen(js_name = tick)]
-    pub fn tick(&mut self, dt_ms: f64) -> Result<(), JsValue> {
-        if !dt_ms.is_finite() || dt_ms <= 0.0 || dt_ms.fract() != 0.0 {
-            return Err(JsValue::from_str(
-                "tick(dtMs) requires a positive finite integer",
-            ));
-        }
-        if dt_ms > f64::from(u32::MAX) {
-            return Err(JsValue::from_str("tick(dtMs) exceeds u32::MAX"));
-        }
-        let dt_ms = dt_ms as u32;
-        self.api
-            .tick(dt_ms)
-            .map_err(|e| JsValue::from_str(&e.to_string()))
+    /// JS: `step()` — advances exactly one tick of [`tickMs`](tick_ms) milliseconds.
+    #[wasm_bindgen(js_name = step)]
+    pub fn step(&mut self) {
+        self.api.step();
     }
+
+    /// JS: `currentTick()` — ticks advanced since the simulation was created.
+    #[wasm_bindgen(js_name = currentTick)]
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)] // exact below 2^53 ticks, ~14 million years at 20 Hz
+    pub fn current_tick(&self) -> f64 {
+        self.api.current_tick() as f64
+    }
+}
+
+/// JS: `tickMs()` — length of one simulation tick in milliseconds.
+#[wasm_bindgen(js_name = tickMs)]
+#[must_use]
+pub fn tick_ms() -> u32 {
+    open_entities::TICK_MS
 }
 
 #[cfg(test)]
@@ -450,7 +454,7 @@ mod wasm_tests {
             .expect("spawn marker");
         let json = sim.world_json().expect("export world");
         let value: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
-        assert_eq!(value["version"], 4);
+        assert_eq!(value["version"], 5);
         let entities = value["entities"].as_array().expect("entities array");
         assert!(!entities.is_empty());
     }
@@ -485,7 +489,7 @@ mod wasm_tests {
     }
 
     #[wasm_bindgen_test]
-    fn tick_advances_scout() {
+    fn step_advances_scout() {
         let mut sim = Simulation::new();
         sim.load_templates_yaml(FIXTURE_YAML).expect("load fixture");
         sim.spawn_entity("scout", scout_overrides())
@@ -501,8 +505,9 @@ mod wasm_tests {
             .expect("scout row");
         let x0 = scout_before["position"]["x"].as_f64().unwrap();
 
-        for _ in 0..60 {
-            sim.tick(16.0).expect("tick");
+        // One second of simulation.
+        for _ in 0..20 {
+            sim.step();
         }
 
         let after = sim.world_json().expect("export after");
@@ -519,14 +524,16 @@ mod wasm_tests {
     }
 
     #[wasm_bindgen_test]
-    fn tick_zero_rejected() {
+    fn step_counts_ticks() {
         let mut sim = Simulation::new();
-        let err = sim.tick(0.0).unwrap_err();
-        let msg = err.as_string().expect("string error");
-        assert!(
-            msg.contains("positive finite integer"),
-            "expected JS validation error for tick(0), got: {msg}"
-        );
+        assert_eq!(sim.current_tick(), 0.0);
+        sim.step();
+        sim.step();
+        assert_eq!(sim.current_tick(), 2.0);
+        let value: serde_json::Value =
+            serde_json::from_str(&sim.world_json().expect("export")).expect("parse JSON");
+        assert_eq!(value["version"], 5);
+        assert_eq!(value["tick"], 2);
     }
 
     #[wasm_bindgen_test]
@@ -543,8 +550,9 @@ mod wasm_tests {
         let ordered = sim.order_move_to(ids, 10.0, 7.0).expect("order accepted");
         assert_eq!(ordered, 1);
 
-        for _ in 0..200 {
-            sim.tick(16.0).expect("tick");
+        // Just over three seconds.
+        for _ in 0..64 {
+            sim.step();
         }
 
         let json = sim.world_json().expect("export world");
@@ -658,8 +666,9 @@ mod wasm_tests {
             .expect("the rider is close enough to board");
         assert_eq!(free_seats_of(&mut sim, vehicle.clone()), Some(3.0));
 
-        for _ in 0..60 {
-            sim.tick(16.0).expect("tick");
+        // One second of simulation.
+        for _ in 0..20 {
+            sim.step();
         }
 
         let vehicle_id: EntityId = serde_wasm_bindgen::from_value(vehicle.clone()).expect("id");
@@ -754,7 +763,7 @@ mod wasm_tests {
         );
 
         for _ in 0..200 {
-            sim.tick(50.0).expect("tick");
+            sim.step();
         }
 
         assert_eq!(

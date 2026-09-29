@@ -326,8 +326,8 @@ mod tests {
         api.board(rider, truck).expect("board");
 
         api.order_move_to(&[truck], MoveTarget { x: 40.0, y: 0.0 });
-        for _ in 0..50 {
-            api.tick(100).expect("tick");
+        for _ in 0..100 {
+            api.step();
         }
 
         let world = api.core().world();
@@ -352,8 +352,8 @@ mod tests {
         // Nothing stops a host from *trying* to order a passenger about. The order is refused
         // at the door — see `can_take_a_move_order` — so nothing is left to act on later.
         api.order_move_to(&[rider], MoveTarget { x: 100.0, y: 0.0 });
-        for _ in 0..20 {
-            api.tick(100).expect("tick");
+        for _ in 0..40 {
+            api.step();
         }
 
         let world = api.core().world();
@@ -384,7 +384,7 @@ mod tests {
             .copied()
             .expect("position");
         for _ in 0..30 {
-            api.tick(16).expect("tick");
+            api.step();
         }
         let after = api
             .core_mut()
@@ -408,7 +408,7 @@ mod tests {
         api.board(rider, truck)
             .expect("distance is the game's concern, not the core's");
         assert_eq!(api.vehicle_of(rider), Some(truck));
-        api.tick(16).expect("tick");
+        api.step();
         let world = api.core().world();
         let rider_position = world
             .get::<Position>(rider.to_entity().expect("live"))
@@ -470,8 +470,8 @@ mod tests {
         let rider = spawn_unit(&mut api, 1.0);
         api.board(rider, truck).expect("board");
         api.order_move_to(&[truck], MoveTarget { x: 20.0, y: 0.0 });
-        for _ in 0..50 {
-            api.tick(100).expect("tick");
+        for _ in 0..100 {
+            api.step();
         }
 
         api.unboard(rider).expect("unboard");
@@ -502,7 +502,7 @@ mod tests {
         api.board(rider, truck).expect("board");
 
         assert_eq!(api.despawn(&[truck]), 1);
-        api.tick(16).expect("tick");
+        api.step();
 
         assert_eq!(api.vehicle_of(rider), None, "no dangling passenger");
     }
@@ -516,8 +516,8 @@ mod tests {
         api.unboard(rider).expect("unboard");
 
         api.order_move_to(&[rider], MoveTarget { x: 10.0, y: 0.0 });
-        for _ in 0..50 {
-            api.tick(100).expect("tick");
+        for _ in 0..100 {
+            api.step();
         }
 
         let world = api.core().world();
@@ -552,7 +552,7 @@ mod tests {
         assert_eq!(api.approaching(truck), vec![rider]);
 
         // One tick: it has not teleported, it has taken a step toward the truck.
-        api.tick(100).expect("tick");
+        api.step();
         assert_eq!(api.vehicle_of(rider), None);
         let after_one = position_of(&api, rider);
         assert!(
@@ -561,8 +561,8 @@ mod tests {
             after_one.x
         );
 
-        for _ in 0..60 {
-            api.tick(100).expect("tick");
+        for _ in 0..120 {
+            api.step();
         }
         assert_eq!(
             api.vehicle_of(rider),
@@ -587,16 +587,16 @@ mod tests {
         // The truck (30/s) pulls away from the rider (10/s), then parks at 60.
         api.order_move_to(&[truck], MoveTarget { x: 60.0, y: 0.0 });
 
-        for _ in 0..30 {
-            api.tick(100).expect("tick");
+        for _ in 0..60 {
+            api.step();
         }
         assert_eq!(api.vehicle_of(rider), None, "still chasing");
         assert!(
             position_of(&api, rider).x > 20.0,
             "past where the truck used to be"
         );
-        for _ in 0..60 {
-            api.tick(100).expect("tick");
+        for _ in 0..120 {
+            api.step();
         }
         assert_eq!(
             api.vehicle_of(rider),
@@ -615,8 +615,8 @@ mod tests {
         api.board(first, truck).expect("first aboard");
         api.order_board(&[second], truck).expect("order");
 
-        for _ in 0..40 {
-            api.tick(100).expect("tick");
+        for _ in 0..80 {
+            api.step();
         }
         assert_eq!(api.vehicle_of(second), None);
         assert_eq!(
@@ -630,7 +630,7 @@ mod tests {
             "stopped at the door, at {}",
             stood.x
         );
-        api.tick(100).expect("tick");
+        api.step();
         assert_eq!(position_of(&api, second).x, stood.x, "and stays there");
     }
 
@@ -640,13 +640,13 @@ mod tests {
         let truck = spawn_vehicle(&mut api, 0.0, 2);
         let rider = spawn_unit(&mut api, 30.0);
         api.order_board(&[rider], truck).expect("order");
-        api.tick(100).expect("tick");
+        api.step();
 
         assert_eq!(api.despawn(&[truck]), 1);
-        api.tick(100).expect("tick");
+        api.step();
         assert_eq!(api.boarding_target_of(rider), None);
         let stood = position_of(&api, rider);
-        api.tick(100).expect("tick");
+        api.step();
         assert_eq!(position_of(&api, rider).x, stood.x, "it stops where it was");
     }
 
@@ -657,15 +657,15 @@ mod tests {
         let a = spawn_unit(&mut api, 30.0);
         let b = spawn_unit(&mut api, 30.0);
         api.order_board(&[a, b], truck).expect("order");
-        api.tick(100).expect("tick");
+        api.step();
 
         api.order_stop(&[a]);
         api.order_move_to(&[b], MoveTarget { x: 60.0, y: 0.0 });
         assert_eq!(api.boarding_target_of(a), None);
         assert_eq!(api.boarding_target_of(b), None);
 
-        for _ in 0..50 {
-            api.tick(100).expect("tick");
+        for _ in 0..100 {
+            api.step();
         }
         assert_eq!(api.vehicle_of(a), None);
         assert_eq!(api.vehicle_of(b), None);
@@ -687,13 +687,13 @@ mod tests {
         let group = api.create_group(1);
         api.add_to_group(group, rider).expect("member");
         api.order_board(&[rider], truck).expect("order");
-        api.tick(100).expect("tick");
+        api.step();
 
         // Group steering is weaker than a personal order and must not pull the rider off course.
         api.order_group_move_to(group, MoveTarget { x: 100.0, y: 0.0 })
             .expect("group order");
-        for _ in 0..60 {
-            api.tick(100).expect("tick");
+        for _ in 0..120 {
+            api.step();
         }
         assert_eq!(api.vehicle_of(rider), Some(truck));
     }

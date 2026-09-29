@@ -14,6 +14,15 @@ to a click on the canvas.
 
 ### Changed
 
+- **Breaking. Fixed timestep.** The simulation advances only in whole ticks of
+  `TICK_MS` = 50 ms: `Api::step()` runs one tick and `Api::current_tick()` counts them.
+  `Api::tick(dt_ms)`, `MAX_DT_MS`, `TickError` and the `SimDelta` resource are removed; systems
+  derive per-tick movement from `TICK_MS`, so the world no longer depends on the host's frame rate.
+  The world snapshot carries `tick` and its schema version is now **5**. In JavaScript,
+  `Simulation.tick(dtMs)` is replaced by `step()` and `currentTick()`, plus the module function
+  `tickMs()`. The demo worker accumulates real frame time, runs at most a few ticks per frame and
+  replies to every frame with the current tick, the positions of the tick before and `alpha`; the
+  renderer interpolates between them.
 - **Boarding is an order, not a range check.** `order_board(units, vehicle)` marks units with
   `BoardingTarget`; the new `boarding_approach_system` walks them to the vehicle — following it
   if it drives off — and boards them once within `BOARDING_RANGE`. A unit that arrives to find

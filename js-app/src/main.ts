@@ -12,12 +12,13 @@ import {
   orderGroupTo,
   snapshot,
   stopSelected,
-  tick,
+  frame,
   spawnRandomAt,
   spawnAt,
   unboardUnits,
 } from "./core/wasm";
 import type { EntityId, EntitySnapshot, Pos } from "./core/types";
+import { interpolate } from "./core/fixed-step";
 import { renderEntities } from "./visualization/render";
 import { setHtml, setText } from "./visualization/dom";
 import { initPixiCanvas } from "./visualization/pixi-canvas";
@@ -82,7 +83,7 @@ let groupOrdersOn = false;
 /**
  * Why the last board or unboard did nothing, shown until the next attempt.
  *
- * The HUD is synced after every tick, so a message that is not held somewhere flashes once and
+ * The HUD is synced after every frame, so a message that is not held somewhere flashes once and
  * is gone before it can be read.
  */
 let transportNotice: string | null = null;
@@ -465,16 +466,14 @@ async function createEntity(typeName?: string): Promise<void> {
 }
 
 function gameLoop(timestamp: number): void {
-  const dtSec =
-    lastFrameTime !== null
-      ? Math.min((timestamp - lastFrameTime) / 1000, 0.1)
-      : 1 / 60;
+  // Real elapsed time goes to the worker's fixed-step clock; it decides how many ticks that is.
+  const elapsedMs = lastFrameTime !== null ? timestamp - lastFrameTime : 0;
   lastFrameTime = timestamp;
 
   if (isWasmReady()) {
-    tick(dtSec)
-      .then((entities) => render(entities))
-      .catch((e) => console.error("tick error:", e));
+    frame(elapsedMs)
+      .then((f) => render(interpolate(f.previous, f.entities, f.alpha)))
+      .catch((e) => console.error("frame error:", e));
   }
   requestAnimationFrame(gameLoop);
 }

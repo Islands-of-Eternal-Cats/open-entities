@@ -50,9 +50,10 @@
 //! let report = api.order_move_to(&[scout], MoveTarget { x: 10.0, y: 0.0 });
 //! assert_eq!(report.ordered, 1);
 //!
-//! for _ in 0..10 {
-//!     api.tick(100)?; // milliseconds; 0 is an error, values above 100 are clamped
+//! for _ in 0..20 {
+//!     api.step(); // one tick of TICK_MS (50 ms)
 //! }
+//! assert_eq!(api.current_tick(), 20);
 //!
 //! let snapshot = api.world_snapshot();
 //! assert_eq!(snapshot.entities.len(), 1);
@@ -62,7 +63,7 @@
 //!
 //! # Errors
 //!
-//! Each operation family has its own error enum ([`ImportError`], [`MapError`], [`TickError`],
+//! Each operation family has its own error enum ([`ImportError`], [`MapError`],
 //! [`GroupError`], [`MissionError`], [`BoardError`]); all implement
 //! [`std::error::Error`] and [`Display`](std::fmt::Display). Orders that take many ids do not fail:
 //! they skip what they cannot apply and say so in an [`OrderReport`].
@@ -101,7 +102,7 @@ pub use import::ImportError;
 pub use map::{MapBounds, MapError};
 pub use missions::MissionError;
 pub use orders::{EntityId, OrderReport};
-pub use simulation::TickError;
+pub use simulation::TICK_MS;
 
 /// Returns the canonical hello-world greeting.
 #[must_use]

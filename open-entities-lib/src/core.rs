@@ -3,7 +3,7 @@
 use bevy_ecs::prelude::{Schedule, World};
 use bevy_ecs::schedule::{IntoScheduleConfigs, ScheduleLabel};
 
-use crate::simulation::ArrivedThisTick;
+use crate::simulation::{ArrivedThisTick, SimTick};
 use crate::systems::{
     boarding_approach_system, mission_completion_system, mission_steering_system, movement_system,
     passenger_sync_system, replanner_system, seek_system,
@@ -24,6 +24,7 @@ impl Core {
     pub fn new() -> Self {
         let mut world = World::new();
         world.insert_resource(ArrivedThisTick::default());
+        world.insert_resource(SimTick::default());
 
         let mut schedule = Schedule::new(SimulationSchedule);
         // Order matters: automation proposes, steering resolves, movement integrates, and
