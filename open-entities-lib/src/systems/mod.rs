@@ -1,5 +1,6 @@
 //! The ECS systems [`Core`](crate::Core) runs each tick of [`TICK_MS`](crate::TICK_MS), in order: mission steering, boarding
-//! approach, seek, movement, passenger sync, mission completion, replanner.
+//! approach, seek, movement, passenger sync, mission completion, replanner — the built-ins of the
+//! [`SimSet`](crate::extend::SimSet) phases a game adds its own systems to.
 //!
 //! Public for hosts that build their own schedule through [`Api::core_mut`](crate::Api::core_mut);
 //! [`Api::step`](crate::Api::step) already runs them.

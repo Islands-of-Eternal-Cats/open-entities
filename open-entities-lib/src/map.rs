@@ -8,6 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::api::Api;
+use crate::component_registry::ComponentError;
 use crate::entity_components::EntityComponents;
 use crate::import::ImportError;
 use crate::orders::EntityId;
@@ -38,6 +39,14 @@ pub enum MapError {
         /// The template it names.
         name: String,
     },
+    /// An entry names a component field the registry does not know, or gives a registered one a
+    /// value of the wrong shape; nothing was spawned.
+    Component {
+        /// Position of the entry in the map list.
+        index: usize,
+        /// What was wrong.
+        error: ComponentError,
+    },
     /// A spawn failed after validation passed.
     Spawn(ImportError),
 }
@@ -52,6 +61,7 @@ impl std::fmt::Display for MapError {
             Self::UnknownTemplate { index, name } => {
                 write!(f, "spawn #{index} names unknown template: {name}")
             }
+            Self::Component { index, error } => write!(f, "spawn #{index}: {error}"),
             Self::Spawn(err) => write!(f, "map spawn failed: {err}"),
         }
     }
@@ -62,14 +72,17 @@ impl std::error::Error for MapError {
         match self {
             Self::Yaml(err) => Some(err),
             Self::Spawn(err) => Some(err),
+            Self::Component { error, .. } => Some(error),
             Self::TemplatesNotLoaded | Self::UnknownTemplate { .. } => None,
         }
     }
 }
 
 /// One entry under `spawns`: a template name plus override fields.
+///
+/// No `deny_unknown_fields`: unknown keys land in `EntityComponents::extra` and are checked
+/// against the registry.
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct MapSpawn {
     template: String,
     #[serde(flatten)]
@@ -89,13 +102,16 @@ struct MapFile {
 impl Api {
     /// Spawns a starting layout from YAML and records its bounds.
     ///
-    /// Every entry's template name is checked before anything is spawned, so a typo leaves the
-    /// world untouched instead of half-populated. Returns the spawned entities in file order.
+    /// Every entry's template name and component fields are checked before anything is spawned,
+    /// so a typo leaves the world untouched instead of half-populated. Returns the spawned
+    /// entities in file order.
     ///
     /// # Errors
     ///
     /// [`MapError::Yaml`] for invalid YAML, [`MapError::TemplatesNotLoaded`] when no templates are
-    /// loaded, [`MapError::UnknownTemplate`] when an entry names a template that does not exist.
+    /// loaded, [`MapError::UnknownTemplate`] when an entry names a template that does not exist,
+    /// [`MapError::Component`] when an entry has a component field that is not registered or a
+    /// value of the wrong shape.
     pub fn load_map_yaml(&mut self, yaml: &str) -> Result<Vec<EntityId>, MapError> {
         let file: MapFile = yaml_serde::from_str(yaml).map_err(MapError::Yaml)?;
 
@@ -111,18 +127,22 @@ impl Api {
                         name: spawn.template.clone(),
                     });
                 }
+                self.registry
+                    .resolve(&spawn.overrides)
+                    .map_err(|error| MapError::Component { index, error })?;
             }
         }
 
+        let map_bounds = file.map;
         let mut spawned = Vec::with_capacity(file.spawns.len());
-        for spawn in &file.spawns {
+        for spawn in file.spawns {
             let entity = self
                 .spawn_entity(&spawn.template, spawn.overrides)
                 .map_err(MapError::Spawn)?;
             spawned.push(entity);
         }
 
-        self.map_bounds = file.map;
+        self.map_bounds = map_bounds;
         Ok(spawned)
     }
 
@@ -277,7 +297,14 @@ spawns:
         let err = api
             .load_map_yaml("spawns:\n  - template: marker\n    nope: 1\n")
             .expect_err("unknown field");
-        assert!(matches!(err, MapError::Yaml(_)));
+        assert!(matches!(
+            err,
+            MapError::Component {
+                index: 0,
+                error: ComponentError::Unknown { ref field, .. },
+            } if field == "nope"
+        ));
+        assert_eq!(api.world_snapshot().entities.len(), 0);
     }
 
     #[test]

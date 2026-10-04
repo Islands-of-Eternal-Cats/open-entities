@@ -14,11 +14,13 @@ pub use frame::{FRAME_HEADER_LEN, FRAME_STRIDE, write_frame_header};
 pub(crate) use meta::MetaTracker;
 pub use meta::{EntityMeta, MetaDelta};
 
-use bevy_ecs::prelude::World;
+use bevy_ecs::prelude::{EntityRef, World};
+use bevy_ecs::query::Without;
+use bevy_ecs::resource::IsResource;
 use serde::Serialize;
 
 use crate::api::Api;
-use crate::component_registry::collect_world_export_rows;
+use crate::component_registry::ComponentRegistry;
 use crate::components::EntityType;
 use crate::entity_components::EntityComponents;
 use crate::orders::EntityId;
@@ -40,7 +42,8 @@ pub struct WorldSnapshot {
 
 /// One entity of a [`WorldSnapshot`].
 ///
-/// Serializes flat: registered components sit next to `id`, and absent ones are omitted.
+/// Serializes flat: registered components — built-in and a game's own — sit next to `id`, and
+/// absent ones are omitted.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct EntitySnapshot {
     /// Id to feed back into orders.
@@ -57,18 +60,19 @@ impl Api {
     /// Captures every entity in the world (schema version 5).
     #[must_use]
     pub fn world_snapshot(&mut self) -> WorldSnapshot {
-        world_snapshot_from_world(self.core_mut().world_mut())
+        world_snapshot_from_world(self.core.world_mut(), &self.registry)
     }
 }
 
-fn world_snapshot_from_world(world: &mut World) -> WorldSnapshot {
+fn world_snapshot_from_world(world: &mut World, registry: &ComponentRegistry) -> WorldSnapshot {
     let tick = world.resource::<SimTick>().0;
-    let entities = collect_world_export_rows(world)
-        .into_iter()
-        .map(|row| EntitySnapshot {
-            id: EntityId::of(row.entity),
-            components: row.components,
-            entity_type: row.entity_type,
+    let mut query = world.query_filtered::<EntityRef<'_>, Without<IsResource>>();
+    let entities = query
+        .iter(world)
+        .map(|entity| EntitySnapshot {
+            id: EntityId::of(entity.id()),
+            components: registry.export(&entity),
+            entity_type: entity.get::<EntityType>().cloned(),
         })
         .collect();
 

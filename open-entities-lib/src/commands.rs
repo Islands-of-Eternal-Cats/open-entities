@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::Api;
 use crate::boarding::BoardError;
+use crate::component_registry::ComponentError;
 use crate::components::MoveTarget;
 use crate::entity_components::EntityComponents;
 use crate::groups::GroupError;
@@ -174,6 +175,9 @@ pub enum CommandError {
     TemplatesNotLoaded,
     /// [`Command::Spawn`] named a template that is not loaded.
     UnknownTemplate(String),
+    /// [`Command::Spawn`] carried an override that is not a registered component, or a value of
+    /// the wrong shape for one.
+    Component(ComponentError),
     /// A group command was refused.
     Group(GroupError),
     /// A mission command was refused.
@@ -189,6 +193,7 @@ impl std::fmt::Display for CommandError {
                 f.write_str("templates not loaded; call load_templates_yaml first")
             }
             Self::UnknownTemplate(name) => write!(f, "unknown template name: {name}"),
+            Self::Component(err) => err.fmt(f),
             Self::Group(err) => err.fmt(f),
             Self::Mission(err) => err.fmt(f),
             Self::Board(err) => err.fmt(f),
@@ -200,6 +205,7 @@ impl std::error::Error for CommandError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::TemplatesNotLoaded | Self::UnknownTemplate(_) => None,
+            Self::Component(err) => Some(err),
             Self::Group(err) => Some(err),
             Self::Mission(err) => Some(err),
             Self::Board(err) => Some(err),
@@ -315,9 +321,12 @@ impl Api {
                 if !templates.contains_key(&template) {
                     return Err(CommandError::UnknownTemplate(template));
                 }
+                self.registry
+                    .resolve(&overrides)
+                    .map_err(CommandError::Component)?;
                 let id = self
                     .spawn_entity(&template, overrides)
-                    .expect("templates are loaded and the name was checked");
+                    .expect("templates are loaded, the name and the overrides were checked");
                 CommandResult::Spawned(id)
             }
             Command::Despawn { ids } => {

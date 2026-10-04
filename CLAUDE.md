@@ -46,7 +46,13 @@ depends on the old behaviour they replace.
    the position frame (`Api::write_frame`) and the metadata delta (`Api::meta_delta`); the
    per-frame path creates no JSON. `world_snapshot` / `getWorldAsJson` are for debugging and saves.
 5. Public API: no `bevy_ecs` types in the normal path; entities are named by
-   `EntityId { index, generation }`. `Api::core()` / `core_mut()` stay the one documented escape hatch.
+   `EntityId { index, generation }`. `Api::core()` / `core_mut()` and the `extend` module
+   (`Api::register_component`, `extend::add_systems`) are the documented doors to `bevy_ecs`.
+6. Components are registered, not hard-wired: built-ins and a game's own go through the
+   `ComponentRegistry` (kept by `Api`, not as an ECS resource — a resource is an entity and would
+   shift every id). Registry order is state-hash order; new built-ins go at the end of
+   `component_registry/registered.rs`. Systems live in a `SimSet` (`Commands → Steering →
+   Movement → PostMovement → Resolve`).
 
 ## Working agreements
 
