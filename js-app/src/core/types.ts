@@ -11,9 +11,11 @@ export type Pos = { x: number; y: number };
 export type Velocity = { vx: number; vy: number };
 
 /**
- * One entity as the visualization layer wants it.
+ * One entity as the HUD wants it.
  *
- * Built from a row of `Simulation.getWorldAsJson()`; see `entityIdToKey` for what `id` is.
+ * Built on demand by `WorldView.get` from the position frames and the metadata, for the few
+ * entities the HUD shows; the canvas reads the frames directly. See `entityIdToKey` for what `id`
+ * is.
  */
 export interface EntitySnapshot {
   /**
@@ -24,7 +26,10 @@ export interface EntitySnapshot {
   /** Template name this entity was spawned from (export field `entity_type`). */
   entityType: string;
   pos: Pos;
-  /** null when the entity has no `Velocity` component — in this engine, when it cannot move. */
+  /**
+   * How far it moved over the last tick, in map units per tick; null when the entity has no
+   * `Velocity` component — in this engine, when it cannot move.
+   */
   velocity: Velocity | null;
   /** ECS `Faction` id when present; null if the entity has no faction component. */
   faction: number | null;
@@ -43,10 +48,12 @@ export interface EntitySnapshot {
    * once within range. Cleared when it boards, finds no seat, or is told to do something else.
    */
   boarding: string | null;
+  /** Key of the group it belongs to, or null. */
+  group: string | null;
   /**
    * Where this entity has been told to go, or null when it holds no order.
    *
-   * Straight from the export's `move_target`. Visible in the HUD on purpose: a target is the one
+   * Straight from the metadata's `move_target`. Visible in the HUD on purpose: a target is the one
    * piece of unit state with no appearance on the map, so a unit standing on a stale one looks
    * identical to a unit standing still — until it walks off.
    */
@@ -57,27 +64,6 @@ export interface EntitySnapshot {
 export interface EntityId {
   index: number;
   generation: number;
-}
-
-/** One row of the world export (schema version 5); component keys are absent, never null. */
-export interface WorldExportRow {
-  id: EntityId;
-  entity_type?: string;
-  position?: Pos;
-  velocity?: Velocity;
-  faction?: number;
-  base_move_speed?: number;
-  move_target?: Pos;
-  health?: { current: number; max: number };
-  boardable?: number;
-}
-
-/** Payload of `Simulation.getWorldAsJson()`. */
-export interface WorldExport {
-  version: number;
-  /** Simulation tick the export was taken at. */
-  tick: number;
-  entities: WorldExportRow[];
 }
 
 /** Packs an id pair into the string key the visualization uses. */

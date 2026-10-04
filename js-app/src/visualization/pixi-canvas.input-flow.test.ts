@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { EntitySnapshot } from "../core/types";
+import { fakeWorld } from "../test-support/fake-world";
 import { worldToScreen } from "./coords";
+
+/** Particle layers the mocked Pixi created, newest last. */
+const pixiMock = vi.hoisted(() => ({
+  layers: [] as Array<{ particleChildren: Array<{ x: number; y: number }> }>,
+}));
 
 vi.mock("pixi.js", () => {
   class Graphics {
@@ -39,12 +45,29 @@ vi.mock("pixi.js", () => {
     }
   }
 
+  class Particle {
+    x = 0;
+    y = 0;
+    alpha = 1;
+    constructor(public options: unknown) {}
+  }
+
+  class ParticleContainer extends Container {
+    particleChildren: Particle[] = [];
+    constructor(public options?: unknown) {
+      super();
+      pixiMock.layers.push(this);
+    }
+    update(): void {}
+  }
+
   class Application {
     stage = new Container();
     screen = { width: 640, height: 480 };
     canvas = document.createElement("canvas");
     renderer = {
       on: () => {},
+      generateTexture: () => ({}),
     };
     async init(): Promise<void> {
       Object.defineProperty(this.canvas, "getBoundingClientRect", {
@@ -63,7 +86,7 @@ vi.mock("pixi.js", () => {
     }
   }
 
-  return { Application, Container, Graphics };
+  return { Application, Container, Graphics, Particle, ParticleContainer };
 });
 
 import { initPixiCanvas } from "./pixi-canvas";
@@ -78,6 +101,7 @@ function makeEntity(id: string, x: number, y: number): EntitySnapshot {
     seats: null,
     aboard: null,
     boarding: null,
+    group: null,
     moveTarget: null,
   };
 }
@@ -101,6 +125,39 @@ function emitPointer(
   canvas.dispatchEvent(ev);
 }
 
+describe("pixi-canvas drawing", () => {
+  beforeEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("keeps one particle per unit across frames and drops the ones that are gone", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const pixi = await initPixiCanvas(container);
+    const layer = () => pixiMock.layers[pixiMock.layers.length - 1].particleChildren;
+
+    pixi.drawWorld(fakeWorld([makeEntity("1:0", 1, 1), makeEntity("2:0", 2, 2)]));
+    const [first] = layer();
+    expect(layer()).toHaveLength(2);
+
+    pixi.drawWorld(fakeWorld([makeEntity("1:0", 5, 5)], 1));
+    expect(layer()).toEqual([first]);
+    const p = worldToScreen(5, 5);
+    expect(first).toMatchObject({ x: p.x, y: p.y });
+  });
+
+  it("drops a selected unit from the selection once it is gone", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const pixi = await initPixiCanvas(container);
+    pixi.drawWorld(fakeWorld([makeEntity("1:0", 1, 1), makeEntity("2:0", 2, 2)]));
+    pixi.setSelectedIds(["1:0", "2:0"]);
+
+    pixi.drawWorld(fakeWorld([makeEntity("2:0", 2, 2)], 1));
+    expect([...pixi.getSelectedIds()]).toEqual(["2:0"]);
+  });
+});
+
 describe("pixi-canvas input flow", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
@@ -112,8 +169,8 @@ describe("pixi-canvas input flow", () => {
     const onMoveOrder = vi.fn();
     const pixi = await initPixiCanvas(container, { onMoveOrder });
 
-    pixi.updateEntities([makeEntity("u1", 20, 20)]);
-    pixi.setSelectedIds(["u1"]);
+    pixi.drawWorld(fakeWorld([makeEntity("1:0", 20, 20)]));
+    pixi.setSelectedIds(["1:0"]);
 
     const canvas = container.querySelector("canvas") as HTMLCanvasElement;
     emitPointer(canvas, "pointerdown", 450, 330);
@@ -128,8 +185,8 @@ describe("pixi-canvas input flow", () => {
     const onMoveOrder = vi.fn();
     const pixi = await initPixiCanvas(container, { onMoveOrder });
 
-    pixi.updateEntities([makeEntity("u1", 20, 20)]);
-    pixi.setSelectedIds(["u1"]);
+    pixi.drawWorld(fakeWorld([makeEntity("1:0", 20, 20)]));
+    pixi.setSelectedIds(["1:0"]);
 
     const canvas = container.querySelector("canvas") as HTMLCanvasElement;
     emitPointer(canvas, "pointerdown", 450, 330, { shiftKey: true });
@@ -144,8 +201,8 @@ describe("pixi-canvas input flow", () => {
     const onMoveOrder = vi.fn();
     const pixi = await initPixiCanvas(container, { onMoveOrder });
 
-    pixi.updateEntities([makeEntity("u1", 30, 30)]);
-    pixi.setSelectedIds(["u1"]);
+    pixi.drawWorld(fakeWorld([makeEntity("1:0", 30, 30)]));
+    pixi.setSelectedIds(["1:0"]);
 
     const canvas = container.querySelector("canvas") as HTMLCanvasElement;
     emitPointer(canvas, "pointerdown", 20, 400, { ctrlKey: true });
@@ -158,8 +215,8 @@ describe("pixi-canvas input flow", () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const pixi = await initPixiCanvas(container);
-    pixi.updateEntities([makeEntity("u1", 20, 20)]);
-    pixi.setSelectedIds(["u1"]);
+    pixi.drawWorld(fakeWorld([makeEntity("1:0", 20, 20)]));
+    pixi.setSelectedIds(["1:0"]);
 
     const p = worldToScreen(20, 20);
     const canvas = container.querySelector("canvas") as HTMLCanvasElement;

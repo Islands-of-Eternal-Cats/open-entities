@@ -16,7 +16,8 @@ const state = vi.hoisted(() => {
       faction: 1,
       seats: null,
       aboard: null,
-    boarding: null,
+      boarding: null,
+      group: null,
       moveTarget: null,
     },
     {
@@ -27,7 +28,8 @@ const state = vi.hoisted(() => {
       faction: 1,
       seats: null,
       aboard: null,
-    boarding: null,
+      boarding: null,
+      group: null,
       moveTarget: null,
     },
     {
@@ -38,7 +40,8 @@ const state = vi.hoisted(() => {
       faction: 1,
       seats: 4,
       aboard: null,
-    boarding: null,
+      boarding: null,
+      group: null,
       moveTarget: null,
     },
   ];
@@ -58,10 +61,19 @@ const state = vi.hoisted(() => {
     // Orders resolve with the command's outcome; the world comes from frames only.
     moveSelectedTo: vi.fn(async () => applied),
     renderEntities: vi.fn(),
+    frame: vi.fn(async (_elapsedMs: number) => ({ tick: 0, alpha: 0, stepped: false })),
+    drawWorld: vi.fn(),
+    /** Animation-frame callbacks main.ts asked for, run by hand in the loop test. */
+    animationFrames: [] as FrameRequestCallback[],
   };
 });
 
-vi.mock("./core/wasm", () => ({
+vi.mock("./core/wasm", async () => ({
+  // The world the HUD reads: the same three rows, through the interface main.ts uses.
+  world: Object.assign(
+    (await import("./test-support/fake-world")).fakeWorld(state.world),
+    { extrapolate: vi.fn() }
+  ),
   initWasm: vi.fn(async () => {}),
   isWasmReady: vi.fn(() => true),
   coreBuildInfo: vi.fn(() => ({ id: "deadbeef", bytes: 1024 })),
@@ -71,17 +83,13 @@ vi.mock("./core/wasm", () => ({
   boardUnits: state.boardUnits,
   stopSelected: state.stopSelected,
   unboardUnits: state.unboardUnits,
-  frame: vi.fn(async () => ({
-    entities: [] as EntitySnapshot[],
-    previous: {},
-    alpha: 0,
-    tick: 0,
-  })),
+  frame: state.frame,
   // main.ts imports these two as well; leaving them out made run() throw on the first
   // `await snapshot()` and swallow the rest of the wiring.
-  snapshot: vi.fn(async () => state.world),
-  spawnRandomAt: vi.fn(async () => [] as EntitySnapshot[]),
-  spawnAt: vi.fn(async () => [] as EntitySnapshot[]),
+  snapshot: vi.fn(async () => {}),
+  spawnRandomAt: vi.fn(async () => state.world[0]),
+  spawnAt: vi.fn(async () => state.world[0]),
+  stress: vi.fn(async () => 0),
 }));
 
 vi.mock("./visualization/render", () => ({
@@ -100,7 +108,7 @@ vi.mock("./visualization/pixi-canvas", () => ({
       state.onMoveOrder = options?.onMoveOrder ?? null;
       options?.onSelectionChange?.(state.selectedIds);
       return {
-        updateEntities: vi.fn(),
+        drawWorld: state.drawWorld,
         getSelectedIds: () => state.selectedIds,
         clearSelection: state.clearSelection,
         setSelectedIds: vi.fn((ids: readonly string[]) => {
@@ -153,7 +161,16 @@ describe("main input wiring", () => {
     state.unboardUnits.mockClear();
     state.renderEntities.mockClear();
     for (const entity of state.world) entity.aboard = null;
-    vi.stubGlobal("requestAnimationFrame", vi.fn());
+    state.frame.mockClear();
+    state.drawWorld.mockClear();
+    state.animationFrames.length = 0;
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn((callback: FrameRequestCallback) => {
+        state.animationFrames.push(callback);
+        return state.animationFrames.length;
+      })
+    );
     mountMainDom();
   });
 
@@ -288,6 +305,22 @@ describe("main input wiring", () => {
     expect(state.renderEntities.mock.calls.length).toBe(drawsBefore);
   });
 
+  it("lists only the selection in Forces, with the whole army's count", async () => {
+    await import("./main");
+    await flush();
+
+    const calls = state.renderEntities.mock.calls;
+    const [rows, , selected, total] = calls[calls.length - 1] as unknown as [
+      EntitySnapshot[],
+      HTMLElement,
+      ReadonlySet<string>,
+      number,
+    ];
+    expect(rows.map((row) => row.id)).toEqual(["u1"]);
+    expect([...selected]).toEqual(["u1"]);
+    expect(total).toBe(3);
+  });
+
   it("keeps move-order flow active via onMoveOrder callback", async () => {
     await import("./main");
     await flush();
@@ -297,5 +330,34 @@ describe("main input wiring", () => {
 
     expect(state.moveSelectedTo).toHaveBeenCalledWith(["u1"], { x: 40, y: 50 });
     expect(state.showMoveTarget).toHaveBeenCalledWith({ x: 40, y: 50 });
+  });
+
+  it("draws every animation frame without waiting for the worker, one request at a time", async () => {
+    let reply: (value: { tick: number; alpha: number; stepped: boolean }) => void = () => {};
+    state.frame.mockImplementation(
+      () => new Promise((resolve) => (reply = resolve))
+    );
+    await import("./main");
+    await flush();
+    await flush();
+    const nextFrame = (timestamp: number) => state.animationFrames.shift()!(timestamp);
+
+    nextFrame(0);
+    const drawsAfterFirst = state.drawWorld.mock.calls.length;
+    nextFrame(16);
+    nextFrame(32);
+
+    // Drawn on each frame; only the first request went out, the reply is still pending.
+    expect(state.drawWorld.mock.calls.length).toBe(drawsAfterFirst + 2);
+    expect(state.frame).toHaveBeenCalledTimes(1);
+
+    reply({ tick: 1, alpha: 0, stepped: true });
+    await flush();
+    await flush();
+    nextFrame(48);
+
+    // The time that passed while the request was out goes with the next one.
+    expect(state.frame).toHaveBeenCalledTimes(2);
+    expect(state.frame.mock.calls[1][0]).toBe(48);
   });
 });

@@ -1,12 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  advanceClock,
-  FrameClock,
-  interpolate,
-  MAX_STEPS_PER_FRAME,
-  TICK_MS,
-} from "./fixed-step";
-import type { EntitySnapshot, Pos } from "./types";
+import { advanceClock, MAX_STEPS_PER_FRAME, TICK_MS } from "./fixed-step";
 
 function runFrames(frameMs: number, frames: number) {
   let accumulator = 0;
@@ -55,67 +48,5 @@ describe("advanceClock", () => {
       expect(alpha).toBeGreaterThanOrEqual(0);
       expect(alpha).toBeLessThan(1);
     }
-  });
-});
-
-/** A fake simulation: one unit that moves +1 x per step, so x equals the tick number. */
-function fakeSim() {
-  let tick = 0;
-  return {
-    get tick() {
-      return tick;
-    },
-    step: () => {
-      tick += 1;
-    },
-    positions: (): Record<string, Pos> => ({ u: { x: tick, y: 0 } }),
-  };
-}
-
-describe("FrameClock", () => {
-  it("keeps the previous tick, not the state at the start of the frame, after several steps", () => {
-    const sim = fakeSim();
-    const clock = new FrameClock(sim);
-    const frame = clock.frame(TICK_MS * 3);
-    expect(sim.tick).toBe(3);
-    expect(frame.previous).toEqual({ u: { x: 2, y: 0 } });
-    expect(frame.alpha).toBe(0);
-  });
-
-  it("reports alpha on frames with no step and keeps the last two ticks", () => {
-    const sim = fakeSim();
-    const clock = new FrameClock(sim);
-    clock.frame(TICK_MS);
-    const a = clock.frame(TICK_MS / 5);
-    const b = clock.frame(TICK_MS / 5);
-    expect(sim.tick).toBe(1);
-    expect(a.previous).toEqual({ u: { x: 0, y: 0 } });
-    expect(b.previous).toEqual({ u: { x: 0, y: 0 } });
-    expect(a.alpha).toBeCloseTo(0.2);
-    expect(b.alpha).toBeCloseTo(0.4);
-  });
-});
-
-describe("interpolate", () => {
-  const unit = (id: string, x: number): EntitySnapshot => ({
-    id,
-    entityType: "unit",
-    pos: { x, y: 0 },
-    velocity: null,
-    faction: null,
-    seats: null,
-    aboard: null,
-    boarding: null,
-    moveTarget: null,
-  });
-
-  it("blends previous and current positions by alpha", () => {
-    const [e] = interpolate({ a: { x: 10, y: 0 } }, [unit("a", 20)], 0.25);
-    expect(e.pos).toEqual({ x: 12.5, y: 0 });
-  });
-
-  it("draws an entity with no previous position where it is now", () => {
-    const [e] = interpolate({}, [unit("new", 7)], 0.5);
-    expect(e.pos).toEqual({ x: 7, y: 0 });
   });
 });

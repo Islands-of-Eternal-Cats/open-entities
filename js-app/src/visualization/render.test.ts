@@ -14,6 +14,7 @@ function mockEntity(
     seats: null,
     aboard: null,
     boarding: null,
+    group: null,
     moveTarget: null,
     ...overrides,
   };
@@ -73,6 +74,12 @@ describe("renderEntities", () => {
       container
     );
     expect(container.innerHTML).toContain("→ (40.00, 12.50)");
+  });
+
+  it("shows the total force count while listing only the rows given", () => {
+    renderEntities([mockEntity({ id: "3:0" })], container, new Set(["3:0"]), 100_000);
+    expect(container.querySelector(".entity-count strong")?.textContent).toBe("100000");
+    expect(container.querySelectorAll(".entity-row").length).toBe(1);
   });
 
   it("renders multiple entities", () => {

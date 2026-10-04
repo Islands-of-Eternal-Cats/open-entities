@@ -109,8 +109,22 @@ declare module "open_entities_wasm" {
     /** True while the entity behind this id is spawned. */
     isAlive(id: EntityId): boolean;
 
-    /** Whole world as JSON (schema version 5). */
+    /** Whole world as JSON (schema version 5). For debugging and saves, not for every frame. */
     getWorldAsJson(): string;
+
+    /**
+     * Positions of the current tick: header `[tick_lo, tick_hi, count]`, then per entity
+     * `[index, generation, x, y]` in milli-units, sorted by `index`. A fresh array each call, so
+     * its buffer can be transferred.
+     */
+    writeFrame(): Int32Array;
+
+    /**
+     * JSON `{ changed, removed }` of the metadata (type, faction, seats, mobile, aboard, boarding,
+     * group, move target) that changed since the previous call, or `undefined` when nothing did.
+     * The first call reports every positioned entity.
+     */
+    metaDelta(): string | undefined;
 
     /** A new empty group for that faction. */
     createGroup(faction: number): EntityId;

@@ -1,8 +1,8 @@
 # Entity templates for the browser demo.
 #
 # The demo owns this file: the buttons in index.html spawn `mover`, `another_mover`,
-# `static_obstacle` and `base` by name. The library's own fixtures live in /fixtures and serve the
-# Node demo and the Rust tests.
+# `static_obstacle`, `base` and (Stress) `stress_mover` by name. The library's own fixtures live
+# in /fixtures and serve the Node demo and the Rust tests.
 #
 # Movement rule: a Velocity component IS movement. Only templates that should be able to move carry
 # one; `base_move_speed` on top makes a unit steerable by move orders.
@@ -37,6 +37,14 @@ entities:
   # No velocity and no move speed: cannot be ordered anywhere, and never drifts.
   static_obstacle:
     position: { x: 10.0, y: 10.0 }
+
+  # What the Stress button spawns, by the tens of thousands, each with a random target. Slow on
+  # purpose: across a 120-unit map at 3 units/s a crowd keeps walking for a while.
+  stress_mover:
+    faction: 2
+    position: { x: 0.0, y: 0.0 }
+    velocity: { vx: 0.0, vy: 0.0 }
+    base_move_speed: 3.0
 
   base:
     template: unit

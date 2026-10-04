@@ -2,24 +2,22 @@
  * WASM core wrapper. Initializes ECS in a web worker and re-exports the game API.
  * Visualization layer depends only on this module and types from ./types.
  *
+ * The world lives in `world`, a `WorldView` fed by the worker's replies: position frames as
+ * transferred `Int32Array` buffers, metadata deltas when something changed. Nothing on this path
+ * parses a world export.
+ *
  * Orders are commands: each is submitted to the core for the next tick, and its promise settles
  * when a later `frame` reports the command's outcome. Order replies carry no snapshot; the world
  * is drawn from frames only.
  */
-import type {
-  Command,
-  CommandOutcome,
-  EntityId,
-  EntitySnapshot,
-  Pos,
-} from "./types";
+import type { Command, CommandOutcome, EntityId, EntitySnapshot } from "./types";
 import { entityIdToKey, keyToEntityId } from "./types";
-import type {
-  RawEntitySnapshot,
-  WorkerInMessage,
-  WorkerOutMessage,
-} from "./worker-types";
+import type { WorkerInMessage, WorkerOutMessage } from "./worker-types";
+import { WorldView } from "./world-view";
 import { WORLD_SIZE } from "../visualization/coords";
+
+/** The main thread's copy of the world, updated by every `snapshot()` and `frame()` reply. */
+export const world = new WorldView();
 
 /** First four bytes of every wasm module: \0asm. */
 const WASM_MAGIC = [0x00, 0x61, 0x73, 0x6d];
@@ -86,9 +84,14 @@ let initResolve: (() => void) | null = null;
 let initReject: ((reason: unknown) => void) | null = null;
 type PendingRequest =
   | {
-      resolve: (value: EntitySnapshot[]) => void;
+      resolve: (value: void) => void;
       reject: (reason: unknown) => void;
-      kind: "entities";
+      kind: "snapshot";
+    }
+  | {
+      resolve: (value: number) => void;
+      reject: (reason: unknown) => void;
+      kind: "stressed";
     }
   | {
       resolve: (value: number[]) => void;
@@ -105,26 +108,13 @@ let pending: PendingRequest | null = null;
 type QueuedRequest = PendingRequest & { message: WorkerInMessage };
 const requestQueue: QueuedRequest[] = [];
 
-/** A submitted command waiting for the frame that reports what it did. */
-type OutcomeWaiter = (outcome: CommandOutcome, entities: EntitySnapshot[]) => void;
+/**
+ * A submitted command waiting for the frame that reports what it did. Called after that frame is
+ * in `world`, so a waiter can read the state the command produced.
+ */
+type OutcomeWaiter = (outcome: CommandOutcome) => void;
 /** Keyed by sequence number; a frame settles and removes the ones it reports. */
 const outcomeWaiters = new Map<number, OutcomeWaiter>();
-
-function rawToSnapshots(
-  raw: RawEntitySnapshot[]
-): EntitySnapshot[] {
-  return raw.map((e) => ({
-    id: e.id,
-    entityType: e.entityType,
-    pos: e.pos,
-    velocity: e.velocity,
-    faction: e.faction ?? null,
-    seats: e.seats ?? null,
-    aboard: e.aboard ?? null,
-    boarding: e.boarding ?? null,
-    moveTarget: e.moveTarget ?? null,
-  }));
-}
 
 function onMessage(event: MessageEvent<WorkerOutMessage>): void {
   const msg = event.data;
@@ -151,26 +141,32 @@ function onMessage(event: MessageEvent<WorkerOutMessage>): void {
     }
     return;
   }
-  if (msg.type === "entities" && pending && pending.kind === "entities") {
-    pending.resolve(rawToSnapshots(msg.entities));
+  if (msg.type === "snapshot" && pending && pending.kind === "snapshot") {
+    world.applySnapshot(msg);
+    pending.resolve();
     pending = null;
     flushQueue();
     return;
   }
   if (msg.type === "frame" && pending && pending.kind === "frame") {
-    const entities = rawToSnapshots(msg.entities);
-    for (const outcome of msg.outcomes) {
+    world.applyFrame(msg);
+    for (const outcome of msg.outcomes ?? []) {
       const waiter = outcomeWaiters.get(outcome.seq);
       if (!waiter) continue;
       outcomeWaiters.delete(outcome.seq);
-      waiter(outcome, entities);
+      waiter(outcome);
     }
     pending.resolve({
-      entities,
-      previous: msg.previous,
-      alpha: msg.alpha,
       tick: msg.tick,
+      alpha: msg.alpha,
+      stepped: msg.current !== undefined,
     });
+    pending = null;
+    flushQueue();
+    return;
+  }
+  if (msg.type === "stressed" && pending && pending.kind === "stressed") {
+    pending.resolve(msg.count);
     pending = null;
     flushQueue();
     return;
@@ -278,30 +274,29 @@ export function isWasmReady(): boolean {
 }
 
 /**
- * Read current world state without advancing simulation time.
- * Use this for initial UI sync or on-demand refreshes.
+ * Loads the current tick and every entity's metadata into `world`, without advancing time.
+ * Call once at start, before the first `frame`.
  */
-export function snapshot(): Promise<EntitySnapshot[]> {
+export function snapshot(): Promise<void> {
   if (!worker || !initialized)
     return Promise.reject(new Error("WASM not initialized"));
   return new Promise((resolve, reject) => {
-    enqueue({ type: "snapshot" }, { resolve, reject, kind: "entities" });
+    enqueue({ type: "snapshot" }, { resolve, reject, kind: "snapshot" });
   });
 }
 
-/** One rendered frame: state at the current tick plus what the renderer needs to interpolate. */
+/** What one frame did; the state itself is in `world`. */
 export interface FrameResult {
-  entities: EntitySnapshot[];
-  /** Positions at the tick before `tick`, keyed by entity id. */
-  previous: Record<string, Pos>;
-  /** Blend factor between `previous` and `entities`, in [0, 1). */
-  alpha: number;
   tick: number;
+  /** Blend factor between the last two ticks, in [0, 1). */
+  alpha: number;
+  /** True when the frame ran at least one step and brought new buffers. */
+  stepped: boolean;
 }
 
 /**
- * Report `elapsedMs` of real time. The worker runs as many fixed ticks as fit (possibly none)
- * and replies with the current state and the interpolation inputs.
+ * Report `elapsedMs` of real time. The worker runs as many fixed ticks as fit (possibly none);
+ * the reply updates `world` before the promise resolves.
  */
 export function frame(elapsedMs: number): Promise<FrameResult> {
   if (!worker || !initialized)
@@ -311,10 +306,9 @@ export function frame(elapsedMs: number): Promise<FrameResult> {
   });
 }
 
-/** What a command did once it applied, with the frame state it applied in. */
+/** What a command did once it applied; `world` holds the frame it applied in. */
 interface Applied {
   outcome: CommandOutcome & { ok: true };
-  entities: EntitySnapshot[];
 }
 
 /**
@@ -333,8 +327,8 @@ function submitAll(commands: Command[]): Promise<Applied>[] {
     (_, i) =>
       new Promise<Applied>((resolve, reject) => {
         seqs.then((all) => {
-          outcomeWaiters.set(all[i], (outcome, entities) => {
-            if (outcome.ok) resolve({ outcome, entities });
+          outcomeWaiters.set(all[i], (outcome) => {
+            if (outcome.ok) resolve({ outcome });
             else reject(new Error(outcome.error));
           });
         }, reject);
@@ -490,15 +484,30 @@ export async function spawnAt(
 ): Promise<EntitySnapshot> {
   const overrides: Record<string, unknown> = { position: { x, y } };
   if (faction !== undefined) overrides.faction = faction;
-  const { outcome, entities } = await submit({
+  const { outcome } = await submit({
     type: "spawn",
     template: typeName,
     overrides,
   });
-  const key = outcome.spawned ? entityIdToKey(outcome.spawned) : null;
-  const spawned = entities.find((entity) => entity.id === key);
+  const spawned = outcome.spawned ? world.get(entityIdToKey(outcome.spawned)) : null;
   if (!spawned) {
     throw new Error(`spawned ${typeName} but it is missing from the frame`);
   }
   return spawned;
+}
+
+/**
+ * Stress test: spawns `count` seeded movers (template `stress_mover`) with random targets across
+ * the map, as spawn commands generated in the worker. Resolves with how many were queued; they
+ * appear in the frame that runs the next tick.
+ */
+export function stress(count: number, seed = 1): Promise<number> {
+  if (!worker || !initialized)
+    return Promise.reject(new Error("WASM not initialized"));
+  return new Promise((resolve, reject) => {
+    enqueue(
+      { type: "stress", count, seed, worldSize: WORLD_SIZE },
+      { resolve, reject, kind: "stressed" }
+    );
+  });
 }
