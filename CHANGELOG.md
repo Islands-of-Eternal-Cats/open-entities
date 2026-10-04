@@ -14,6 +14,25 @@ to a click on the canvas.
 
 ### Changed
 
+- **Breaking. Component registry.** `EntityComponents` is no longer `Copy` and no longer denies
+  unknown fields: it gains `extra: BTreeMap<String, yaml_serde::Value>` (flattened), which holds a
+  game's registered components. Keys in templates, spawn overrides, map entries and
+  `Command::Spawn` overrides are checked against the registry instead; an unknown key is now
+  `ImportError::Component { template, error }`, `MapError::Component { index, error }` or
+  `CommandError::Component(error)` with `ComponentError::Unknown { field, known }`, listing the
+  registered fields, instead of a YAML error. A map with a bad entry still spawns nothing.
+- **Breaking.** The registry is a list of descriptors (field, tag, spawn, export and hash
+  functions) kept by the `Api`; `Api::new()` registers the built-ins through it, and
+  `define_registered_components!` is sugar over it. The generated `spawn_registered_components`,
+  `hash_registered_components`, `collect_world_export_rows`, `entity_components_from_query`,
+  `WorldExportQuery` and `WorldExportRow` are gone. Built-in components, their order and the state
+  hash are unchanged: the golden replay hash is still `f9c1bb65ded5037d`.
+- The simulation schedule runs in five chained system sets, `SimSet::Commands → Steering →
+  Movement → PostMovement → Resolve`. The built-ins keep their order: mission steering, boarding
+  approach and seek in `Steering`, movement in `Movement`, passenger sync in `PostMovement`,
+  mission completion and the replanner in `Resolve`; commands are still applied by `step()` just
+  before the schedule runs.
+
 - **Breaking. Binary render boundary in the demo.** The worker no longer sends the world as
   snapshot rows built from `getWorldAsJson()`. A `frame` reply without a step carries only `tick`
   and `alpha`; with steps it carries `current`, the `writeFrame()` buffer of the last tick, as a
@@ -100,6 +119,22 @@ to a click on the canvas.
 - `clippy::nursery` dropped from the crate lints; `pedantic` stays and CI denies warnings.
 
 ### Added
+
+- **Extension API.** `Api::register_component::<T>(field)` makes a game's component (`Component +
+  Serialize + DeserializeOwned + StateHash`) a YAML field, part of the world export
+  (`getWorldAsJson()` included) and of the state hash, after the built-ins in registration order.
+  It must come before `load_templates_yaml` and the first `step()`; duplicate or reserved fields,
+  tags below 64 and duplicate tags are `RegisterError`s. `Api::component_fields()` lists the
+  registry.
+- `open_entities::extend`: `add_systems(&mut api, set, systems)` runs a game's systems in a
+  `SimSet`, after its built-ins and after earlier additions, chained in registration order, so
+  ambiguity detection passes; like `core_mut`, it ties the caller to the `bevy_ecs` version.
+- `impl_state_hash_via_serde!(Type, tag)` derives `StateHash` from `Serialize`
+  (`extend::hash_via_serde`). `register_component` probes the type through serde and refuses a
+  float anywhere in it — field, option, list, any enum variant — with
+  `RegisterError::NotHashable`, naming the field.
+- `examples/fuel.rs`: a `fuel` component and a `burn_fuel` system in `PostMovement`, through the
+  public API only.
 
 - **Render boundary.** `Api::write_frame(&mut Vec<i32>)` writes the current tick as
   `[tick_lo, tick_hi, count]` plus one `[index, generation, x, y]` row per positioned entity,

@@ -4,12 +4,47 @@
 
 use std::collections::BTreeSet;
 
-use bevy_ecs::prelude::{Entity, Resource};
+use bevy_ecs::prelude::{Entity, Resource, SystemSet};
 
 pub use crate::systems::ARRIVAL_RADIUS;
 
 /// Length of one simulation tick in milliseconds (20 Hz).
 pub const TICK_MS: u32 = 50;
+
+/// The phases of one tick, run in this order. Each holds built-in systems first, then the game's
+/// systems added with [`extend::add_systems`](crate::extend::add_systems), in registration order.
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SimSet {
+    /// Commands due at this tick. The built-in part, applying the queued [`Command`]s, runs in
+    /// [`Api::step`](crate::Api::step) just before the schedule starts, so a game system here
+    /// sees every command of the tick applied.
+    ///
+    /// [`Command`]: crate::Command
+    Commands,
+    /// Deciding where units go: mission steering, boarding approach, seek (which sets velocity).
+    Steering,
+    /// Integrating velocity into position.
+    Movement,
+    /// Reacting to where units ended up: passengers follow their vehicle.
+    PostMovement,
+    /// Judging the outcome: mission completion, then the replanner.
+    Resolve,
+}
+
+impl SimSet {
+    /// Every set, in run order.
+    pub const ALL: [Self; 5] = [
+        Self::Commands,
+        Self::Steering,
+        Self::Movement,
+        Self::PostMovement,
+        Self::Resolve,
+    ];
+
+    pub(crate) const fn index(self) -> usize {
+        self as usize
+    }
+}
 
 /// Number of ticks the simulation has advanced; incremented once per [`Api::step`](crate::Api::step).
 #[derive(Resource, Debug, Default, Clone, Copy, PartialEq, Eq)]

@@ -2,12 +2,13 @@
 
 #![deny(clippy::float_arithmetic)]
 
-use bevy_ecs::prelude::{Schedule, World};
+use bevy_ecs::prelude::{Schedule, SystemSet, World};
 use bevy_ecs::schedule::{IntoScheduleConfigs, ScheduleLabel};
 #[cfg(debug_assertions)]
 use bevy_ecs::schedule::{LogLevel, ScheduleBuildSettings};
+use bevy_ecs::system::ScheduleSystem;
 
-use crate::simulation::{ArrivedThisTick, SimTick};
+use crate::simulation::{ArrivedThisTick, SimSet, SimTick};
 use crate::systems::{
     boarding_approach_system, mission_completion_system, mission_steering_system, movement_system,
     passenger_sync_system, replanner_system, seek_system,
@@ -16,10 +17,20 @@ use crate::systems::{
 #[derive(ScheduleLabel, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct SimulationSchedule;
 
+/// The built-in systems of one [`SimSet`].
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct Builtins(SimSet);
+
+/// The systems of one `extend::add_systems` call: the `n`th batch added to a set.
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct UserBatch(SimSet, u32);
+
 /// Owns the ECS [`World`] and gameplay [`Schedule`] for a simulation instance.
 pub struct Core {
     world: World,
     schedule: Schedule,
+    /// Batches added to each [`SimSet`] so far, by [`SimSet::index`].
+    user_batches: [u32; SimSet::ALL.len()],
 }
 
 impl Core {
@@ -44,18 +55,38 @@ impl Core {
             ..Default::default()
         });
         // Order matters: automation proposes, steering resolves, movement integrates, and
-        // arrival is judged on where everyone ended up this tick.
+        // arrival is judged on where everyone ended up this tick. The sets run in a chain, and
+        // within each set the built-ins run first and chained, so the order of the built-ins is
+        // one line: mission steering, boarding approach, seek, movement, passenger sync, mission
+        // completion, replanner.
+        schedule.configure_sets(
+            (
+                SimSet::Commands,
+                SimSet::Steering,
+                SimSet::Movement,
+                SimSet::PostMovement,
+                SimSet::Resolve,
+            )
+                .chain(),
+        );
+        for set in SimSet::ALL {
+            schedule.configure_sets(Builtins(set).in_set(set));
+        }
         schedule.add_systems(
             (
                 mission_steering_system,
                 boarding_approach_system,
                 seek_system,
-                movement_system,
-                passenger_sync_system,
-                mission_completion_system,
-                replanner_system,
             )
-                .chain(),
+                .chain()
+                .in_set(Builtins(SimSet::Steering)),
+        );
+        schedule.add_systems(movement_system.in_set(Builtins(SimSet::Movement)));
+        schedule.add_systems(passenger_sync_system.in_set(Builtins(SimSet::PostMovement)));
+        schedule.add_systems(
+            (mission_completion_system, replanner_system)
+                .chain()
+                .in_set(Builtins(SimSet::Resolve)),
         );
 
         // Build now, not on the first step. Building creates resources, and resources are
@@ -65,7 +96,40 @@ impl Core {
             .initialize(&mut world)
             .expect("the simulation schedule builds");
 
-        Self { world, schedule }
+        Self {
+            world,
+            schedule,
+            user_batches: [0; SimSet::ALL.len()],
+        }
+    }
+
+    /// Adds a game's systems to `set`: chained, after the set's built-ins and after every batch
+    /// added to the set before. Rebuilds the schedule at once, for the same reason [`Core::new`]
+    /// builds it eagerly.
+    ///
+    /// # Errors
+    ///
+    /// The build error, rendered, when the schedule does not build.
+    pub(crate) fn add_user_systems<M>(
+        &mut self,
+        set: SimSet,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
+    ) -> Result<(), String> {
+        let count = &mut self.user_batches[set.index()];
+        let batch = UserBatch(set, *count);
+        if *count == 0 {
+            self.schedule
+                .configure_sets(batch.in_set(set).after(Builtins(set)));
+        } else {
+            self.schedule
+                .configure_sets(batch.in_set(set).after(UserBatch(set, *count - 1)));
+        }
+        *count += 1;
+        self.schedule.add_systems(systems.chain().in_set(batch));
+        match self.schedule.initialize(&mut self.world) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(err.to_string(self.schedule.graph(), &self.world)),
+        }
     }
 
     /// Immutable access to the underlying ECS world.

@@ -1,6 +1,7 @@
 //! The [`Api`] facade: the single entry point a host integrates against.
 
 use crate::commands::{CommandOutcome, CommandQueue, StepReport};
+use crate::component_registry::ComponentRegistry;
 use crate::core::Core;
 use crate::export::MetaTracker;
 use crate::import::EntityTemplates;
@@ -10,7 +11,11 @@ use crate::simulation::{ArrivedThisTick, SimTick};
 
 /// Public facade over [`Core`] for simulation operations, export, and import.
 pub struct Api {
-    core: Core,
+    pub(crate) core: Core,
+    /// Built-ins plus whatever the game registered. Kept outside the ECS world on purpose: a
+    /// resource is an entity in `bevy_ecs` 0.19, and one more would shift every entity index and
+    /// with it the state hash of every recorded match.
+    pub(crate) registry: ComponentRegistry,
     pub(crate) templates: Option<EntityTemplates>,
     pub(crate) map_bounds: Option<MapBounds>,
     pub(crate) commands: CommandQueue,
@@ -19,11 +24,12 @@ pub struct Api {
 }
 
 impl Api {
-    /// Creates an API backed by a new empty [`Core`].
+    /// Creates an API backed by a new empty [`Core`], with the built-in components registered.
     #[must_use]
     pub fn new() -> Self {
         Self {
             core: Core::new(),
+            registry: ComponentRegistry::with_builtins(),
             templates: None,
             map_bounds: None,
             commands: CommandQueue::default(),

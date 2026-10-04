@@ -1,6 +1,7 @@
 #!/usr/bin/env sh
 # Fails if `f32` or `f64` appears in a simulation module. Simulation state is integer milli-units;
-# only boundary modules (import/, export/, units.rs, map.rs, entity_components.rs) may use floats.
+# only boundary modules (import/, export/, units.rs, map.rs, entity_components.rs) may use floats,
+# and extend/, whose serde state hasher names f32/f64 only to refuse them.
 # See docs/design/lockstep-roadmap.md, "Definitions".
 set -eu
 cd "$(dirname "$0")/../open-entities-lib/src"

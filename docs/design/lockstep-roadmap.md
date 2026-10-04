@@ -7,8 +7,8 @@ Goal: a deterministic simulation of 100 000 units, suitable for lockstep multipl
 | 1 | Fixed timestep | done, PR #22 |
 | 2 | Integer simulation space | done, PR #23 |
 | 3 | Commands, replay, state hash | done, PR #24 |
-| 4 | Scale: benchmark and binary render boundary | in progress, PR #25 |
-| 5 | Extension API | |
+| 4 | Scale: benchmark and binary render boundary | done, PR #25 |
+| 5 | Extension API | in progress, PR #26 |
 
 ## How to work through this file
 
@@ -160,7 +160,7 @@ orders as data, applied at a known tick, and a way to prove two runs are identic
 
 ---
 
-## Step 4 — Scale: benchmark and binary render boundary
+## Step 4 — Scale: benchmark and binary render boundary (done, PR #25)
 
 **Why.** The world crosses to the renderer as JSON, and the worker re-reads it every frame, even
 without a step. At 100 000 units that is megabytes of serialisation, parsing and structured clone

@@ -8,9 +8,9 @@
 //!    `0` byte closing the entity.
 //!
 //! Every integer is little-endian, so the bytes — and the hash — are the same on every platform.
-//! Components are visited in a fixed order: the registered ones in registry order, then the
-//! template name and the internal ones (relations, markers, order claims) in a fixed order of
-//! their own. Per-tick scratch such as
+//! Components are visited in a fixed order: the registered ones in registry order (the built-ins,
+//! then a game's own in the order it registered them), then the template name and the internal
+//! ones (relations, markers, order claims) in a fixed order of their own. Per-tick scratch such as
 //! [`ArrivedThisTick`](crate::simulation::ArrivedThisTick) is not state and is left out, as are
 //! resources in general.
 //!
@@ -18,12 +18,11 @@
 
 #![deny(clippy::float_arithmetic)]
 
-use bevy_ecs::prelude::{Component, Entity, World};
+use bevy_ecs::prelude::{Component, Entity, EntityRef};
 use bevy_ecs::query::Without;
 use bevy_ecs::resource::IsResource;
 
 use crate::api::Api;
-use crate::component_registry::hash_registered_components;
 use crate::components::{
     AssignedTo, BaseMoveSpeed, Boardable, BoardingTarget, EntityType, Faction, Group, Health,
     ManualActive, MemberOf, Mission, MissionCompleted, MoveTarget, NeedsMission, OrderSource,
@@ -108,8 +107,12 @@ impl Default for StateHasher {
 }
 
 /// A component that is part of the simulation state, and how it goes into the hash.
+///
+/// A game's component can implement it by hand or with
+/// [`impl_state_hash_via_serde!`](crate::impl_state_hash_via_serde).
 pub trait StateHash {
     /// Byte that marks this component in the stream. Unique per component type, never `0`.
+    /// Tags below [`FIRST_GAME_TAG`](crate::extend::FIRST_GAME_TAG) belong to the engine.
     const TAG: u8;
 
     /// Writes every field, in declaration order. A field left out is a desync nobody sees.
@@ -118,11 +121,10 @@ pub trait StateHash {
 
 /// Writes `T`'s tag and fields when `entity` carries a `T`.
 pub(crate) fn hash_component<T: Component + StateHash>(
-    world: &World,
-    entity: Entity,
+    entity: &EntityRef<'_>,
     hasher: &mut StateHasher,
 ) {
-    if let Some(component) = world.get::<T>(entity) {
+    if let Some(component) = entity.get::<T>() {
         hasher.write_u8(T::TAG);
         component.hash_fields(hasher);
     }
@@ -130,18 +132,18 @@ pub(crate) fn hash_component<T: Component + StateHash>(
 
 /// The components outside the registry: the template name, and the relations, markers and order
 /// claims the simulation keeps for itself.
-fn hash_internal_components(world: &World, entity: Entity, hasher: &mut StateHasher) {
-    hash_component::<EntityType>(world, entity, hasher);
-    hash_component::<PassengerOf>(world, entity, hasher);
-    hash_component::<BoardingTarget>(world, entity, hasher);
-    hash_component::<MemberOf>(world, entity, hasher);
-    hash_component::<Group>(world, entity, hasher);
-    hash_component::<ManualActive>(world, entity, hasher);
-    hash_component::<AssignedTo>(world, entity, hasher);
-    hash_component::<Mission>(world, entity, hasher);
-    hash_component::<MissionCompleted>(world, entity, hasher);
-    hash_component::<NeedsMission>(world, entity, hasher);
-    hash_component::<OrderSource>(world, entity, hasher);
+fn hash_internal_components(entity: &EntityRef<'_>, hasher: &mut StateHasher) {
+    hash_component::<EntityType>(entity, hasher);
+    hash_component::<PassengerOf>(entity, hasher);
+    hash_component::<BoardingTarget>(entity, hasher);
+    hash_component::<MemberOf>(entity, hasher);
+    hash_component::<Group>(entity, hasher);
+    hash_component::<ManualActive>(entity, hasher);
+    hash_component::<AssignedTo>(entity, hasher);
+    hash_component::<Mission>(entity, hasher);
+    hash_component::<MissionCompleted>(entity, hasher);
+    hash_component::<NeedsMission>(entity, hasher);
+    hash_component::<OrderSource>(entity, hasher);
 }
 
 impl Api {
@@ -168,8 +170,9 @@ impl Api {
 
         for entity in entities {
             hasher.write_entity(entity);
-            hash_registered_components(world, entity, &mut hasher);
-            hash_internal_components(world, entity, &mut hasher);
+            let entity = world.entity(entity);
+            self.registry.hash(&entity, &mut hasher);
+            hash_internal_components(&entity, &mut hasher);
             hasher.write_u8(END_OF_ENTITY);
         }
         hasher.finish()

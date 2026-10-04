@@ -10,7 +10,8 @@ The library uses [Bevy ECS](https://crates.io/crates/bevy_ecs) (`bevy_ecs` only,
 - [`EntityId`](open-entities-lib/src/orders.rs) — how every call names an entity: an `{index, generation}` pair
 - [`Core`](open-entities-lib/src/core.rs) — owns the ECS [`World`](https://docs.rs/bevy_ecs/latest/bevy_ecs/world/struct.World.html); reachable through `Api::core()` / `core_mut()`
 - [`export`](open-entities-lib/src/export/mod.rs) — `Api::world_snapshot()` captures **every entity** in the world as a `WorldSnapshot` (**schema version 5**); it serializes flat, and registered gameplay fields are omitted when absent (not `null`). The WASM bindings turn it into JSON
-- [`EntityComponents`](open-entities-lib/src/entity_components.rs) — shared struct for YAML templates, `spawn_entity` overrides, and flattened export rows
+- [`EntityComponents`](open-entities-lib/src/entity_components.rs) — shared struct for YAML templates, `spawn_entity` overrides, and flattened export rows; a game's registered components travel in its `extra` map
+- [`extend`](open-entities-lib/src/extend/mod.rs) — `Api::register_component`, `extend::add_systems` and `SimSet`: a game's own components and systems, see [Extending the engine](#extending-the-engine)
 
 ## Where bevy stops
 
@@ -20,8 +21,9 @@ nothing from `bevy_ecs`, so the ECS version is not part of this library's public
 consumer on a different `bevy_ecs` can still depend on it.
 
 `Api::core()` and `Api::core_mut()` are the deliberate exception: they hand out the `World` for
-anyone who wants to write systems or queries directly. That is a door, not an oversight — but step
-through it and your code is tied to the `bevy_ecs` version this crate builds against.
+anyone who wants to write systems or queries directly. The [`extend`](#extending-the-engine)
+module is the second one: a game's own components and systems. Those are doors, not oversights —
+but step through one and your code is tied to the `bevy_ecs` version this crate builds against.
 
 Domain components live under `open_entities::components`: `Position`, `Velocity`, `Faction`, `MoveTarget`, `BaseMoveSpeed`, and `Health`.
 
@@ -172,12 +174,14 @@ FNV-1a 64 over `current_tick`, then every entity in ascending `(index, generatio
 each simulation component it carries as a tag byte plus its fields in little-endian, then a closing
 `0` byte. All integers, so the value is the same on every platform, native and wasm32.
 
-Every component that is simulation state is in it: the registered ones (`Position`, `Velocity`,
-`Faction`, `MoveTarget`, `BaseMoveSpeed`, `Health`, `Boardable`), the template name, and the
-internal relations and markers — passenger, boarding target, group membership, the group itself,
-manual control, mission assignment, the mission, completion, the replanner's marker and the
-order-source claim. Per-tick scratch such as `ArrivedThisTick` is not. Each component implements
-the `StateHash` trait; the registry macro emits the calls for registered components.
+Every component that is simulation state is in it: the registered ones in registry order — the
+built-ins (`Position`, `Velocity`, `Faction`, `MoveTarget`, `BaseMoveSpeed`, `Health`,
+`Boardable`), then a game's own in the order it [registered](#extending-the-engine) them — the
+template name, and the internal relations and markers — passenger, boarding target, group
+membership, the group itself, manual control, mission assignment, the mission, completion, the
+replanner's marker and the order-source claim. Per-tick scratch such as `ArrivedThisTick` is not.
+Each component implements the `StateHash` trait; the registry holds the call for each registered
+component.
 
 Lockstep peers compare it to detect a desync. In JavaScript, `stateHash()` returns it as 16 hex
 digits.
@@ -354,26 +358,93 @@ Load named entity templates from YAML, then spawn by template name with optional
 
 1. **`Api::load_templates_yaml(yaml)`** — root must be `entities: { <name>: <components>, ... }`. Replaces any previously loaded templates on success. Template inheritance (`template`, `template: [a, b]`) is resolved at load time.
 2. **`Api::spawn_entity(template_name, overrides)`** — requires a prior successful load. [`EntityComponents::default()`](open-entities-lib/src/entity_components.rs) spawns the template as resolved.
-3. **Overrides** — each `Some` field in `overrides` replaces the template value; `None` leaves the template unchanged.
+3. **Overrides** — each `Some` field in `overrides` replaces the template value; `None` leaves the template unchanged. Keys in `overrides.extra` (a game's [registered components](#extending-the-engine)) replace the template's value for that key.
+
+Component keys are checked against the component registry: a key that is not a registered component is an error that lists the known fields.
 
 See [`open-entities-lib/examples/spawn_entity.rs`](open-entities-lib/examples/spawn_entity.rs) for inheritance and override examples.
 
-## Component registry
+## Extending the engine
 
-Gameplay components are registered in one list:
-
-[`open-entities-lib/src/component_registry/registered.rs`](open-entities-lib/src/component_registry/registered.rs)
+A Rust game adds its own components and systems without forking the crate. The whole path is in
+[`open-entities-lib/examples/fuel.rs`](open-entities-lib/examples/fuel.rs): a `fuel: 100` field in
+YAML and a system that burns it while a unit moves.
 
 ```rust
-define_registered_components! {
-    register_component!(position, Position);
-    // ...
-}
+use bevy_ecs::prelude::Component;
+use open_entities::extend::{self, SimSet};
+use open_entities::{Api, impl_state_hash_via_serde};
+use serde::{Deserialize, Serialize};
+
+#[derive(Component, Serialize, Deserialize)]
+#[serde(transparent)]
+struct Fuel(u32);
+impl_state_hash_via_serde!(Fuel, 64);
+
+let mut api = Api::new();
+api.register_component::<Fuel>("fuel")?;                        // before load_templates_yaml
+extend::add_systems(&mut api, SimSet::PostMovement, burn_fuel)?; // before the first step
+api.load_templates_yaml("entities:\n  tanker:\n    fuel: 100\n")?;
 ```
 
-To add a component: implement the type under `components/`, add one `register_component!(field, Type);` line, and run tests — merge, spawn, and export wiring are generated.
+**Components.** `Api::register_component::<T>(field)` takes any
+`T: Component + Serialize + DeserializeOwned + StateHash`. From then on `field` is a component key
+in templates, spawn overrides, map entries and `Command::Spawn`; the component appears under
+`field` in `world_snapshot()` / `getWorldAsJson()`, and `state_hash()` covers it. In Rust it
+travels in `EntityComponents::extra`, a map from field name to YAML value next to the typed
+built-in fields; it inherits and overrides like any other field.
 
-`register_component!` must only appear inside `define_registered_components!`; standalone use is a compile error (see `open-entities-lib/tests/ui/`).
+- Call it before `load_templates_yaml`, and never after the first `step()`; both are errors
+  (`RegisterError::TemplatesLoaded`, `RegisterError::AfterFirstStep`), as are a field that is
+  taken (`DuplicateField`) or means something else (`template`, `id`, `entity_type`).
+- Every key in a template, override or map entry is checked against the registry when it is
+  loaded. An unknown key is an error that lists the known fields
+  (`ImportError::Component`, `MapError::Component`, `CommandError::Component`); so is a value of
+  the wrong shape for a registered field.
+- `impl_state_hash_via_serde!(Type, tag)` derives `StateHash` from the type's `Serialize` impl:
+  fields in declaration order, integers little-endian at their own width, lengths, option markers
+  and variant indices included. Tags 1–63 belong to the engine; a game uses 64 and up, each tag
+  once (`ReservedTag`, `DuplicateTag`).
+- A float anywhere in the component — a field, an option, a list element, any enum variant — fails
+  at registration with `RegisterError::NotHashable`, naming the field. `register_component` builds
+  sample values through the type's `Deserialize` impl and hashes them, so the check needs no value
+  of the type. A type whose shape depends on the data (untagged enums, flattened fields, dynamic
+  values) cannot be checked and is refused too; give it a hand-written `StateHash` and keep it
+  integer.
+
+The built-ins go through the same registry: `Api::new()` registers `position`, `velocity`,
+`faction`, `move_target`, `base_move_speed`, `health` and `boardable`, in that order, from the
+list in [`registered.rs`](open-entities-lib/src/component_registry/registered.rs)
+(`define_registered_components!` is sugar over the registry). Registry order is the order of the
+state hash: built-ins, then the game's components in registration order, then the internal
+relation components. `Api::component_fields()` lists it. The registry is kept by the `Api`, not as
+an ECS resource: a resource is an entity in `bevy_ecs` 0.19, and one more would shift every entity
+id and with it every recorded state hash.
+
+**Systems.** A tick runs five system sets, chained:
+
+| `SimSet` | Built-ins |
+|---|---|
+| `Commands` | the commands due at this tick (applied by `step()` just before the schedule starts) |
+| `Steering` | mission steering, boarding approach, seek |
+| `Movement` | movement |
+| `PostMovement` | passenger sync |
+| `Resolve` | mission completion, replanner |
+
+`extend::add_systems(&mut api, set, systems)` runs `systems` in `set`, after the set's built-ins
+and after whatever was added to the set before, chained in the order given. Every system then has
+a fixed place, so ambiguity detection (an error in debug builds, so in every test) passes. Add
+systems before the first `step()`. A game's systems are bound by the same rules as the
+built-ins: integers only, ties broken by `EntityId`, no iteration over `std` `HashMap`/`HashSet`.
+
+Every peer of a lockstep match, and every replay, must register the same components and systems
+in the same order. `Replay::run` builds a plain `Api`, so a replay that uses a game's components
+needs the game to set up its own `Api` and feed it the replay's commands.
+
+**The bevy_ecs door.** A game's components and systems are `bevy_ecs` types, so like
+`Api::core_mut()`, the `extend` module ties the game to the `bevy_ecs` version this crate builds
+against (0.19). JavaScript cannot register Rust components; a game that registers some still sees
+them in `getWorldAsJson()`.
 
 ## Render boundary
 
@@ -631,6 +702,17 @@ Or:
 cargo run -p open_entities --example spawn_entity
 ```
 
+### Fuel: extending the engine
+
+A game-side `fuel` component and `burn_fuel` system, through `register_component` and
+`extend::add_systems` only (see [Extending the engine](#extending-the-engine)). A tanker with
+100 fuel drives at 2 units/s toward x = 1000, runs dry after 100 ticks at x = 10 and stops; the
+export shows `"fuel": 0`:
+
+```bash
+cargo run -p open_entities --example fuel
+```
+
 ### Hello world
 
 Prints a greeting to stdout:
@@ -673,7 +755,7 @@ let json = serde_json::to_string(&snapshot).expect("export world");
 
 ### Exported JSON (schema version 5)
 
-`tick` is the simulation tick the snapshot was taken at. Every entity in the world appears in `entities`. Component keys are omitted when the entity does not have that component (not `null`).
+`tick` is the simulation tick the snapshot was taken at. Every entity in the world appears in `entities`. Component keys are omitted when the entity does not have that component (not `null`). Components a Rust game [registered](#extending-the-engine) appear the same way, under their field name after the built-ins (`"fuel": 99`); the built-in keys keep their shape, so the schema version stays 5.
 
 ```json
 {

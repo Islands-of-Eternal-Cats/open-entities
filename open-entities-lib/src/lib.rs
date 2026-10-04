@@ -17,6 +17,7 @@
 //! | Lifecycle | [`Api::is_alive`], [`Api::despawn`] |
 //! | State out | [`Api::world_snapshot`] (debugging, saves) |
 //! | Render | [`Api::write_frame`] (positions, every tick), [`Api::meta_delta`] (the rest, on change) |
+//! | Extension | [`Api::register_component`], [`extend::add_systems`], [`impl_state_hash_via_serde!`] |
 //!
 //! Every entity is named by an [`EntityId`] — an `{index, generation}` pair. It is the same pair
 //! [`Api::world_snapshot`] reports as each entity's `id`, so ids from a snapshot can be fed straight
@@ -32,9 +33,10 @@
 //! so the host picks the wire format (the WASM bindings send JSON). No `bevy_ecs` type appears on
 //! this path, so the ECS version is not part of the contract.
 //!
-//! [`Api::core`] / [`Api::core_mut`] are the deliberate exception: they expose the ECS
-//! [`World`](bevy_ecs::world::World) for custom systems and queries. Code that goes through them,
-//! or uses [`components`] and [`systems`] directly, is tied to this crate's `bevy_ecs` version.
+//! [`Api::core`] / [`Api::core_mut`] and the [`extend`] module are the deliberate exceptions: they
+//! expose the ECS [`World`](bevy_ecs::world::World) and the schedule for a game's own components,
+//! systems and queries. Code that goes through them, or uses [`components`] and [`systems`]
+//! directly, is tied to this crate's `bevy_ecs` version.
 //!
 //! # Quick start
 //!
@@ -74,7 +76,7 @@
 //!
 //! Each operation family has its own error enum ([`ImportError`], [`MapError`],
 //! [`GroupError`], [`MissionError`], [`BoardError`], [`CommandError`], [`ScheduleError`],
-//! [`ReplayError`]); all implement
+//! [`ReplayError`], [`RegisterError`], [`ComponentError`]); all implement
 //! [`std::error::Error`] and [`Display`](std::fmt::Display). Orders that take many ids do not fail:
 //! they skip what they cannot apply and say so in an [`OrderReport`].
 //!
@@ -89,6 +91,7 @@ pub mod commands;
 pub mod components;
 pub mod core;
 pub mod export;
+pub mod extend;
 pub mod groups;
 pub mod import;
 pub mod map;
@@ -108,11 +111,13 @@ pub use boarding::{BOARDING_RANGE, BoardError};
 pub use commands::{
     Command, CommandError, CommandOutcome, CommandResult, CommandSeq, ScheduleError, StepReport,
 };
+pub use component_registry::ComponentError;
 pub use core::Core;
 pub use entity_components::EntityComponents;
 pub use export::{
     EntityMeta, EntitySnapshot, FRAME_HEADER_LEN, FRAME_STRIDE, MetaDelta, WorldSnapshot,
 };
+pub use extend::RegisterError;
 pub use groups::GroupError;
 pub use import::ImportError;
 pub use map::{MapBounds, MapError};

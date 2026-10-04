@@ -7,7 +7,7 @@ use bevy_ecs::prelude::{Entity, World};
 use serde::Deserialize;
 
 use crate::api::Api;
-use crate::component_registry::spawn_registered_components;
+use crate::component_registry::{ComponentError, ComponentRegistry, merge_owned};
 use crate::components::EntityType;
 #[cfg(test)]
 use crate::components::{Faction, MoveTarget, Position, Velocity};
@@ -35,6 +35,14 @@ pub enum ImportError {
         /// Template names along the cycle.
         chain: Vec<String>,
     },
+    /// A template or a spawn override names a component field the registry does not know, or
+    /// gives a registered one a value of the wrong shape.
+    Component {
+        /// The template being loaded or spawned.
+        template: String,
+        /// What was wrong.
+        error: ComponentError,
+    },
 }
 
 impl std::fmt::Display for ImportError {
@@ -56,6 +64,7 @@ impl std::fmt::Display for ImportError {
             Self::TemplateCycle { chain } => {
                 write!(f, "template inheritance cycle: {}", chain.join(" -> "))
             }
+            Self::Component { template, error } => write!(f, "template \"{template}\": {error}"),
         }
     }
 }
@@ -64,6 +73,7 @@ impl std::error::Error for ImportError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Yaml(err) => Some(err),
+            Self::Component { error, .. } => Some(error),
             Self::TemplatesNotLoaded
             | Self::UnknownTemplate(_)
             | Self::UnknownTemplateParent { .. }
@@ -99,8 +109,10 @@ impl TemplateParents {
 }
 
 /// Parsed template entry (load only); `template` is stripped after resolve.
+///
+/// No `deny_unknown_fields`: unknown keys land in `EntityComponents::extra` and are checked
+/// against the registry, which can name the fields it does know.
 #[derive(Deserialize, Clone)]
-#[serde(deny_unknown_fields)]
 struct EntityTemplateRaw {
     #[serde(default)]
     template: TemplateParents,
@@ -122,7 +134,7 @@ fn resolve_template(
     memo: &mut BTreeMap<String, EntityComponents>,
 ) -> Result<EntityComponents, ImportError> {
     if let Some(resolved) = memo.get(name) {
-        return Ok(*resolved);
+        return Ok(resolved.clone());
     }
     if stack.iter().any(|s| s == name) {
         let mut chain = stack.clone();
@@ -147,7 +159,7 @@ fn resolve_template(
     }
 
     let merged = merge_components(&base, &entry.components);
-    memo.insert(name.to_owned(), merged);
+    memo.insert(name.to_owned(), merged.clone());
     stack.pop();
 
     Ok(merged)
@@ -163,9 +175,14 @@ fn resolve_all_templates(
     Ok(memo)
 }
 
-fn spawn_from_doc(world: &mut World, template_name: &str, doc: &EntityComponents) -> Entity {
+fn spawn_from_doc(
+    world: &mut World,
+    registry: &ComponentRegistry,
+    template_name: &str,
+    doc: &EntityComponents,
+) -> Entity {
     let mut entity = world.spawn_empty();
-    spawn_registered_components(&mut entity, doc);
+    registry.spawn(&mut entity, doc);
     entity.insert(EntityType(template_name.to_owned()));
     entity.id()
 }
@@ -177,11 +194,19 @@ impl Api {
     /// Replaces any previously loaded templates on success.
     /// On error, leaves any previously loaded templates unchanged.
     ///
+    /// Component fields are checked against the registry: the built-ins plus whatever was
+    /// registered with [`Api::register_component`], which must come first.
+    ///
     /// # Errors
     ///
-    /// Returns [`ImportError::Yaml`] for invalid YAML or unknown fields.
+    /// Returns [`ImportError::Yaml`] for invalid YAML, [`ImportError::Component`] for a component
+    /// field that is not registered (the error lists those that are) or has a value of the wrong
+    /// shape.
     pub fn load_templates_yaml(&mut self, yaml: &str) -> Result<(), ImportError> {
         let parsed: TemplatesFileRoot = yaml_serde::from_str(yaml).map_err(ImportError::Yaml)?;
+        for (name, entry) in &parsed.entities {
+            self.resolve_components(name, &entry.components)?;
+        }
         let flattened = resolve_all_templates(&parsed.entities)?;
         self.templates = Some(flattened);
         Ok(())
@@ -196,6 +221,8 @@ impl Api {
     ///
     /// Returns [`ImportError::TemplatesNotLoaded`] if no successful load yet.
     /// Returns [`ImportError::UnknownTemplate`] if `template_name` is missing.
+    /// Returns [`ImportError::Component`] if an override in `extra` is not a registered component
+    /// or does not deserialize into it; nothing is spawned then.
     pub fn spawn_entity(
         &mut self,
         template_name: &str,
@@ -205,15 +232,31 @@ impl Api {
             .templates
             .as_ref()
             .ok_or(ImportError::TemplatesNotLoaded)?;
-        let base = *templates
+        let base = templates
             .get(template_name)
             .ok_or_else(|| ImportError::UnknownTemplate(template_name.to_owned()))?;
-        let doc = merge_components(&base, &overrides);
+        self.resolve_components(template_name, &overrides)?;
+        let doc = merge_owned(base.clone(), overrides);
         Ok(EntityId::of(spawn_from_doc(
-            self.core_mut().world_mut(),
+            self.core.world_mut(),
+            &self.registry,
             template_name,
             &doc,
         )))
+    }
+
+    /// Checks `doc`'s non-built-in fields against the registry.
+    pub(crate) fn resolve_components(
+        &self,
+        template: &str,
+        doc: &EntityComponents,
+    ) -> Result<(), ImportError> {
+        self.registry
+            .resolve(doc)
+            .map_err(|error| ImportError::Component {
+                template: template.to_owned(),
+                error,
+            })
     }
 }
 
@@ -635,7 +678,14 @@ entities:
     entity_type: scout
 ";
         let err = api.load_templates_yaml(yaml).unwrap_err();
-        assert!(matches!(err, ImportError::Yaml(_)));
+        assert!(matches!(
+            err,
+            ImportError::Component {
+                error: ComponentError::Unknown { ref field, .. },
+                ..
+            } if field == "entity_type"
+        ));
+        assert!(api.templates.is_none());
     }
 
     #[test]
