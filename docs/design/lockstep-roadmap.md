@@ -6,7 +6,7 @@ Goal: a deterministic simulation of 100 000 units, suitable for lockstep multipl
 | ---- | ----- | ------ |
 | 1 | Fixed timestep | done, PR #22 |
 | 2 | Integer simulation space | done, PR #23 |
-| 3 | Commands, replay, state hash | in progress |
+| 3 | Commands, replay, state hash | in progress, PR #24 |
 | 4 | Scale: benchmark and binary render boundary | |
 | 5 | Extension API | |
 
