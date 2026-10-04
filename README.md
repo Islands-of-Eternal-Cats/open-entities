@@ -442,11 +442,11 @@ Measured on an Apple M5 Pro (64 GB), Rust 1.99.0, Node v26.4.0:
 | `step_1k_groups_of_100` native: 1000 groups of 100, each assigned to its own mission | 217 ms |
 | `step_100k_moving` wasm32 in Node | 2.42 ms (median) |
 | `writeFrame()` at 100 000 units, wasm32 in Node, including the copy into JS | 2.21 ms (median) |
-| Browser demo at 100 000 units (Stress), canvas 3160 × 1786 at DPR 2, 120 Hz display | 120 fps (budget 60) |
+| Browser demo at 100 000 units (Stress), full-window canvas at DPR 2, 120 Hz display | Chrome 120 fps, Firefox 108 fps (budget 60) |
 
-Both 100k step budgets hold, and so does the demo's. Its main thread spends about 2.3 ms per
-animation frame drawing 100 000 units and 2.3 ms in PixiJS; the demo runs at the display's
-120 Hz in a small window and at 1920 × 1080 alike (Chromium, the same machine). The first version
+Both 100k step budgets hold, and so does the demo's. Per animation frame the main thread spends about 2.2 ms drawing
+100 000 units and 2.3 ms in PixiJS in Chrome, about 4 and 5 ms in Firefox; Chrome runs at the
+display's 120 Hz, Firefox at 108 fps (same machine, full window). The first version
 reached 30 fps: a `Map` lookup per unit per frame, and drawing only when the worker's reply
 arrived, which queued behind step frames. The groups bench has no budget yet and is far from cheap: mission steering
 and mission completion each scan every group member once per group or mission, so the cost grows
