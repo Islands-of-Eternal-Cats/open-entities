@@ -442,9 +442,9 @@ Measured on an Apple M5 Pro (64 GB), Rust 1.99.0, Node v26.4.0:
 | `step_1k_groups_of_100` native: 1000 groups of 100, each assigned to its own mission | 217 ms |
 | `step_100k_moving` wasm32 in Node | 2.42 ms (median) |
 | `writeFrame()` at 100 000 units, wasm32 in Node, including the copy into JS | 2.21 ms (median) |
-| Browser demo at 100 000 units (Stress) | _not measured yet_ fps |
+| Browser demo at 100 000 units (Stress), measured by the author | 30 fps (budget 60) |
 
-Both 100k budgets hold. The groups bench has no budget yet and is far from cheap: mission steering
+Both 100k step budgets hold. The demo does not: 30 fps at 100 000 units against a 60 fps budget, not yet profiled. The groups bench has no budget yet and is far from cheap: mission steering
 and mission completion each scan every group member once per group or mission, so the cost grows
 with groups × units. A profile puts almost all of the step there; movement and seek are a rounding
 error beside it.
