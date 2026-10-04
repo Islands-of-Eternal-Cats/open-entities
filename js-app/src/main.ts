@@ -106,6 +106,12 @@ let groupOrdersOn = false;
  */
 let transportNotice: string | null = null;
 let lastFrameTime: number | null = null;
+/** True while a `frame` request is with the worker; the loop sends at most one at a time. */
+let frameInFlight = false;
+/** Real time not yet reported to the worker, because a request was still out. */
+let unsentElapsedMs = 0;
+/** When the last `frame` reply landed: the base `world.extrapolate` counts from. */
+let lastReplyAt: number | null = null;
 /** Seed of the next stress crowd; each press spawns a different, reproducible one. */
 let stressSeed = 1;
 /** Frame-rate readout: frames counted since `perfSince`. */
@@ -506,15 +512,35 @@ async function createEntity(typeName?: string): Promise<void> {
   }
 }
 
+/**
+ * One animation frame: report elapsed time to the worker, and draw.
+ *
+ * Drawing does not wait for the worker. At most one `frame` request is in flight; time that
+ * passes while it is out is carried into the next one, so the worker's clock loses nothing. In
+ * between, the blend factor is moved on locally (`world.extrapolate`), so units keep moving
+ * smoothly while the reply is on its way.
+ */
 function gameLoop(timestamp: number): void {
   // Real elapsed time goes to the worker's fixed-step clock; it decides how many ticks that is.
-  const elapsedMs = lastFrameTime !== null ? timestamp - lastFrameTime : 0;
+  unsentElapsedMs += lastFrameTime !== null ? timestamp - lastFrameTime : 0;
   lastFrameTime = timestamp;
 
   if (isWasmReady()) {
-    frame(elapsedMs)
-      .then(() => render())
-      .catch((e) => console.error("frame error:", e));
+    if (!frameInFlight) {
+      frameInFlight = true;
+      const elapsedMs = unsentElapsedMs;
+      unsentElapsedMs = 0;
+      frame(elapsedMs)
+        .then(() => {
+          lastReplyAt = performance.now();
+        })
+        .catch((e) => console.error("frame error:", e))
+        .finally(() => {
+          frameInFlight = false;
+        });
+    }
+    if (lastReplyAt !== null) world.extrapolate(performance.now() - lastReplyAt);
+    render();
   }
   updatePerf(timestamp);
   requestAnimationFrame(gameLoop);

@@ -31,6 +31,10 @@ to a click on the canvas.
   the selection only, at most 200 rows. `entityIdsInScreenMarquee` and `entityIdAtScreenPoint`
   accept any iterable of `{ id, pos }`.
 - `Api::step()` clears the world's change trackers at the end of every step (`World::clear_trackers`).
+- The demo draws on every animation frame instead of when the worker's `frame` reply arrives. At
+  most one `frame` request is in flight; time that passes meanwhile goes into the next one, and
+  `WorldView.extrapolate` moves the blend factor on until the reply lands. `WorldReader`'s
+  per-unit callback gets an `aboard` flag instead of the metadata object.
 - **Breaking. Commands.** `Api::step()` returns a `StepReport { tick, outcomes }` instead of `()`:
   it first applies the commands due at the tick it produces, then runs the systems. In JavaScript,
   `step()` returns `{ tick, outcomes }`. The demo worker sends every order as a command through

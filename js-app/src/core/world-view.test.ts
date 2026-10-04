@@ -186,6 +186,41 @@ describe("WorldView", () => {
     expect(view.walkersTo("2:0")).toEqual([]);
   });
 
+  it("moves the blend on between replies, but never past the current tick", () => {
+    const view = started();
+    view.applyFrame({
+      type: "frame",
+      tick: 1,
+      alpha: 0.2,
+      current: frame(1, [[1, 0, 10_000, 0], [2, 0, 0, 0]]),
+      outcomes: [],
+    });
+    view.extrapolate(10); // 0.2 + 10 / 50
+    expect(drawn(view)[0][1]).toBeCloseTo(4);
+    view.extrapolate(500);
+    expect(drawn(view)[0][1]).toBeLessThan(10);
+    expect(drawn(view)[0][1]).toBeGreaterThan(9.9);
+
+    // A reply resets it to the worker's value.
+    view.applyFrame({ type: "frame", tick: 1, alpha: 0.5 });
+    expect(drawn(view)[0][1]).toBeCloseTo(5);
+  });
+
+  it("reports whether a drawn unit is riding", () => {
+    const view = started();
+    view.applyFrame({
+      type: "frame",
+      tick: 1,
+      alpha: 0,
+      current: frame(1, [[1, 0, 0, 0], [2, 0, 0, 0]]),
+      meta: delta([meta(1, { aboard: { index: 2, generation: 0 } })]),
+      outcomes: [],
+    });
+    const riding: boolean[] = [];
+    view.forEachDrawn((_i, _g, _x, _y, aboard) => riding.push(aboard));
+    expect(riding).toEqual([true, false]);
+  });
+
   it("finds the first entity matching a predicate", () => {
     const view = started();
     expect(view.find((e) => e.entityType === "truck")?.id).toBe("2:0");

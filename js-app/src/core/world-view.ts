@@ -6,13 +6,13 @@
  * delta, only when something changed, and is kept per entity index. Snapshot rows
  * (`EntitySnapshot`) are built on demand, for the few entities the HUD shows.
  */
+import { TICK_MS } from "./fixed-step";
 import {
   FRAME_HEADER_LEN,
   FRAME_STRIDE,
   MILLI_PER_UNIT,
   findRow,
   frameCount,
-  interpolateFrames,
 } from "./frame-buffer";
 import type { EntityId, EntitySnapshot, Pos } from "./types";
 import { entityIdToKey, keyToEntityId } from "./types";
@@ -45,8 +45,16 @@ export type DrawnVisitor = (
   generation: number,
   x: number,
   y: number,
-  meta: EntityMeta
+  /** Riding a vehicle: drawn faded, on top of it. */
+  aboard: boolean
 ) => void;
+
+/** Highest blend factor `extrapolate` reaches: the renderer never draws past the current tick. */
+const MAX_ALPHA = 0.999;
+
+/** `slotFlags` bits, per entity index. */
+const DRAWN = 1;
+const ABOARD = 2;
 
 /** What the UI reads; `WorldView` is the implementation, tests substitute their own. */
 export interface WorldReader {
@@ -88,7 +96,10 @@ function dropLink(links: Map<string, Set<string>>, to: EntityId | undefined, key
 
 export class WorldView implements WorldReader {
   tick = 0;
+  /** Blend factor the worker reported with the last frame. */
   alpha = 0;
+  /** Blend factor drawn with: `alpha`, advanced by `extrapolate` until the next reply. */
+  private displayAlpha = 0;
   private previous: Int32Array | null = null;
   private current: Int32Array | null = null;
   /** By entity index; a stale generation means the slot was reused and the entry is outdated. */
@@ -96,6 +107,12 @@ export class WorldView implements WorldReader {
   private readonly riders = new Map<string, Set<string>>();
   private readonly walkers = new Map<string, Set<string>>();
   private drawn = 0;
+  /**
+   * Per entity index, what the per-frame loop needs: the generation the metadata is for and the
+   * `DRAWN` / `ABOARD` bits. Typed arrays, so the loop over 100 000 rows does no map lookups.
+   */
+  private slotGeneration = new Uint32Array(0);
+  private slotFlags = new Uint8Array(0);
 
   get size(): number {
     return this.drawn;
@@ -105,6 +122,7 @@ export class WorldView implements WorldReader {
   applySnapshot(message: SnapshotMessage): void {
     this.tick = message.tick;
     this.alpha = 0;
+    this.displayAlpha = 0;
     this.current = new Int32Array(message.current);
     this.previous = this.current;
     if (message.meta !== undefined) this.applyMeta(JSON.parse(message.meta) as MetaDelta);
@@ -118,6 +136,7 @@ export class WorldView implements WorldReader {
   applyFrame(message: FrameMessage): void {
     this.tick = message.tick;
     this.alpha = message.alpha;
+    this.displayAlpha = message.alpha;
     if (message.current) {
       this.previous = message.previous
         ? new Int32Array(message.previous)
@@ -125,6 +144,30 @@ export class WorldView implements WorldReader {
       this.current = new Int32Array(message.current);
     }
     if (message.meta !== undefined) this.applyMeta(JSON.parse(message.meta) as MetaDelta);
+  }
+
+  /**
+   * Moves the blend factor on by `ms` of real time since the last reply, up to just below 1.
+   *
+   * The renderer draws every animation frame, and the worker's reply for this frame may still be
+   * on its way; without this the units would stand still until it lands, then jump.
+   */
+  extrapolate(ms: number): void {
+    this.displayAlpha = Math.min(this.alpha + Math.max(0, ms) / TICK_MS, MAX_ALPHA);
+  }
+
+  private setSlot(index: number, generation: number, flags: number): void {
+    if (index >= this.slotFlags.length) {
+      const size = Math.max(index + 1, this.slotFlags.length * 2, 1024);
+      const generations = new Uint32Array(size);
+      generations.set(this.slotGeneration);
+      const bits = new Uint8Array(size);
+      bits.set(this.slotFlags);
+      this.slotGeneration = generations;
+      this.slotFlags = bits;
+    }
+    this.slotGeneration[index] = generation;
+    this.slotFlags[index] = flags;
   }
 
   private applyMeta(delta: MetaDelta): void {
@@ -140,6 +183,12 @@ export class WorldView implements WorldReader {
       addLink(this.riders, entity.aboard, key);
       addLink(this.walkers, entity.boarding, key);
       if (entity.entity_type !== undefined) this.drawn++;
+      this.setSlot(
+        entity.id.index,
+        entity.id.generation,
+        (entity.entity_type !== undefined ? DRAWN : 0) |
+          (entity.aboard !== undefined ? ABOARD : 0)
+      );
     }
   }
 
@@ -149,14 +198,42 @@ export class WorldView implements WorldReader {
     dropLink(this.walkers, old.boarding, key);
     if (old.entity_type !== undefined) this.drawn--;
     this.meta.delete(index);
+    this.setSlot(index, 0, 0);
   }
 
+  /**
+   * Merge-join of the two frames on `index`, as `interpolateFrames` does, written out so the
+   * 100 000-row loop reads typed arrays only: no map lookup and no inner callback per row.
+   */
   forEachDrawn(visit: DrawnVisitor): void {
-    if (!this.current) return;
-    interpolateFrames(this.previous, this.current, this.alpha, (index, generation, x, y) => {
-      const meta = this.meta.get(index);
-      if (drawable(meta, generation)) visit(index, generation, x, y, meta);
-    });
+    const cur = this.current;
+    if (!cur) return;
+    const prev = this.previous;
+    const alpha = this.displayAlpha;
+    const generations = this.slotGeneration;
+    const flags = this.slotFlags;
+    const slots = flags.length;
+    const count = frameCount(cur);
+    const prevEnd = prev ? FRAME_HEADER_LEN + frameCount(prev) * FRAME_STRIDE : 0;
+    let p = FRAME_HEADER_LEN;
+    for (let row = 0; row < count; row++) {
+      const at = FRAME_HEADER_LEN + row * FRAME_STRIDE;
+      const index = cur[at] >>> 0;
+      const generation = cur[at + 1] >>> 0;
+      if (index >= slots) continue;
+      const bits = flags[index];
+      if ((bits & DRAWN) === 0 || generations[index] !== generation) continue;
+      let x = cur[at + 2];
+      let y = cur[at + 3];
+      if (prev) {
+        while (p < prevEnd && prev[p] >>> 0 < index) p += FRAME_STRIDE;
+        if (p < prevEnd && prev[p] >>> 0 === index && prev[p + 1] >>> 0 === generation) {
+          x = prev[p + 2] + (x - prev[p + 2]) * alpha;
+          y = prev[p + 3] + (y - prev[p + 3]) * alpha;
+        }
+      }
+      visit(index, generation, x / MILLI_PER_UNIT, y / MILLI_PER_UNIT, (bits & ABOARD) !== 0);
+    }
   }
 
   has(key: string): boolean {
@@ -186,8 +263,8 @@ export class WorldView implements WorldReader {
       // Displacement over the last tick: what the Velocity component moved it by.
       vx = x - px;
       vy = y - py;
-      x = px + vx * this.alpha;
-      y = py + vy * this.alpha;
+      x = px + vx * this.displayAlpha;
+      y = py + vy * this.displayAlpha;
     }
     const link = (id: EntityId | undefined) => (id ? entityIdToKey(id) : null);
     return {

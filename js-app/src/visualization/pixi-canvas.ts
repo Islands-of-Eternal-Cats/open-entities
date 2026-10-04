@@ -616,7 +616,7 @@ export async function initPixiCanvas(
     let membershipChanged = false;
     let count = 0;
     const { scale, tx, ty } = worldToScreenTransform();
-    world.forEachDrawn((index, generation, x, y, meta) => {
+    world.forEachDrawn((index, generation, x, y, aboard) => {
       let particle = particles[index];
       let unit = units[index];
       if (particle === undefined || unit === undefined || generations[index] !== generation) {
@@ -641,7 +641,7 @@ export async function initPixiCanvas(
       particle.y = y * scale + ty;
       // A passenger sits exactly where its vehicle is; faded, it reads as cargo rather than as
       // two units standing in the same spot.
-      particle.alpha = meta.aboard === undefined ? 1 : PASSENGER_ALPHA;
+      particle.alpha = aboard ? PASSENGER_ALPHA : 1;
     });
 
     if (membershipChanged || count !== drawnUnits.length) {
