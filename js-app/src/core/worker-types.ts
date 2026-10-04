@@ -1,7 +1,7 @@
 /**
  * Message types for main thread ↔ ECS web worker.
  */
-import type { EntityId, EntitySnapshot, Pos } from "./types";
+import type { Command, CommandOutcome, EntitySnapshot, Pos } from "./types";
 
 /**
  * Raw snapshot row as it crosses the worker boundary.
@@ -33,26 +33,12 @@ export type WorkerInMessage =
    * many fixed ticks as fit; the reply is a `frame` message.
    */
   | { type: "frame"; elapsedMs: number }
-  | {
-      type: "spawn_at";
-      typeName: string;
-      x: number;
-      y: number;
-      /** When set, the ECS `Faction` component is attached with this id. */
-      faction?: number;
-    }
-  | { type: "move_to"; entityIds: string[]; point: { x: number; y: number } }
-  | { type: "create_group"; faction: number }
-  | { type: "add_to_group"; group: EntityId; entityIds: string[] }
-  | { type: "group_move_to"; group: EntityId; point: { x: number; y: number } }
   /**
-   * Units are sent to walk to one vehicle and get in. This is an order, not an instant board: the
-   * reply is the snapshot with `boarding` set on whoever took it.
+   * Orders, as commands. The worker hands each to `Simulation.submit`, so it applies at the start
+   * of the next tick, and replies `submitted` with the sequence numbers; the outcomes arrive in a
+   * later `frame`.
    */
-  | { type: "board"; units: string[]; vehicle: string }
-  | { type: "unboard"; units: string[] }
-  /** Zero velocity and drop any move target — works on anything that carries a velocity. */
-  | { type: "stop"; entityIds: string[] };
+  | { type: "submit"; commands: Command[] };
 
 export type WorkerOutMessage =
   | { type: "ready" }
@@ -67,6 +53,8 @@ export type WorkerOutMessage =
       /** How far the frame is between `previous` and `entities`, in [0, 1). */
       alpha: number;
       tick: number;
+      /** What the commands applied during this frame's steps did, in `seq` order. */
+      outcomes: CommandOutcome[];
     }
-  | { type: "spawned"; entity: RawEntitySnapshot }
-  | { type: "id"; id: EntityId };
+  /** Sequence numbers of the commands in a `submit`, in the same order. */
+  | { type: "submitted"; seqs: number[] };

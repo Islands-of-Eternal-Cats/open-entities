@@ -1,0 +1,3 @@
+# The golden replay and its hash are compared byte for byte by tests on every platform; keep
+# Windows checkouts from rewriting their line endings.
+fixtures/replays/* text eol=lf

@@ -2,7 +2,7 @@
 
 #![deny(clippy::float_arithmetic)]
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use bevy_ecs::prelude::{Entity, Resource};
 
@@ -16,8 +16,10 @@ pub const TICK_MS: u32 = 50;
 pub struct SimTick(pub u64);
 
 /// Entities that arrived this tick; `movement_system` skips them.
+///
+/// Per-tick scratch: cleared at the start of every step, and not part of the state hash.
 #[derive(Resource, Debug, Default)]
-pub struct ArrivedThisTick(pub HashSet<Entity>);
+pub struct ArrivedThisTick(pub BTreeSet<Entity>);
 
 #[cfg(test)]
 mod tests {

@@ -79,7 +79,7 @@ mod tests {
         let snapshot = api.world_snapshot();
         assert_eq!(snapshot.version, 5);
         assert_eq!(snapshot.tick, 0);
-        assert!(snapshot.entities.is_empty());
+        assert_eq!(snapshot.entities, []);
     }
 
     #[test]

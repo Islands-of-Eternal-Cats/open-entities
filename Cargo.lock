@@ -644,6 +644,7 @@ name = "open_entities_wasm"
 version = "0.1.0"
 dependencies = [
  "open_entities",
+ "serde",
  "serde-wasm-bindgen",
  "serde_json",
  "wasm-bindgen",

@@ -1,5 +1,6 @@
 //! The [`Api`] facade: the single entry point a host integrates against.
 
+use crate::commands::{CommandOutcome, CommandQueue, StepReport};
 use crate::core::Core;
 use crate::import::EntityTemplates;
 use crate::map::MapBounds;
@@ -11,6 +12,7 @@ pub struct Api {
     core: Core,
     pub(crate) templates: Option<EntityTemplates>,
     pub(crate) map_bounds: Option<MapBounds>,
+    pub(crate) commands: CommandQueue,
 }
 
 impl Api {
@@ -21,6 +23,7 @@ impl Api {
             core: Core::new(),
             templates: None,
             map_bounds: None,
+            commands: CommandQueue::default(),
         }
     }
 
@@ -68,12 +71,25 @@ impl Api {
     ///
     /// The host never passes a delta: it accumulates its own frame time and calls `step` once per
     /// whole tick, so the resulting state does not depend on frame rate.
-    pub fn step(&mut self) {
+    ///
+    /// The step first applies the commands due at the tick it produces, in
+    /// [`CommandSeq`](crate::CommandSeq) order, then runs the systems. The report says what each
+    /// command did.
+    pub fn step(&mut self) -> StepReport {
+        let tick = self.current_tick() + 1;
+        let mut outcomes = Vec::new();
+        for (seq, command) in self.commands.take(tick) {
+            let result = self.apply_command(command);
+            outcomes.push(CommandOutcome { seq, result });
+        }
+
         let core = self.core_mut();
         let world = core.world_mut();
         world.resource_mut::<ArrivedThisTick>().0.clear();
         core.run_schedule();
         core.world_mut().resource_mut::<SimTick>().0 += 1;
+
+        StepReport { tick, outcomes }
     }
 
     /// Number of ticks advanced since the `Api` was created.

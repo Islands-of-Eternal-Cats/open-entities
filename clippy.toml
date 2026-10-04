@@ -1,0 +1,6 @@
+# Determinism: std's hash collections iterate in a random order, different on every run, so a
+# simulation that walks one can diverge between two peers. See docs/design/lockstep-roadmap.md.
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "iteration order is random; use BTreeMap or IndexMap" },
+    { path = "std::collections::HashSet", reason = "iteration order is random; use BTreeMap or IndexMap" },
+]

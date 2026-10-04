@@ -14,6 +14,29 @@ to a click on the canvas.
 
 ### Changed
 
+- **Breaking. Commands.** `Api::step()` returns a `StepReport { tick, outcomes }` instead of `()`:
+  it first applies the commands due at the tick it produces, then runs the systems. In JavaScript,
+  `step()` returns `{ tick, outcomes }`. The demo worker sends every order as a command through
+  `submit`: the `spawn_at`, `move_to`, `stop`, `create_group`, `add_to_group`, `group_move_to`,
+  `board` and `unboard` worker messages are replaced by one `submit` message, and the `spawned` and
+  `id` replies by `submitted`. Order replies no longer carry a snapshot; their promises
+  (`moveSelectedTo`, `boardUnits`, `spawnAt`, `createGroupWith`, …) settle from the outcome in the
+  frame that applied them — `spawnAt` with the new entity from that frame, the orders with the
+  command's outcome, and a refusal as a rejection with the core's reason. Positions no longer jump
+  for a frame when an order reply lands between frames.
+- **Breaking. Ties break by `EntityId`.** Grid slots for group and mission orders, the last seat
+  when several units reach a vehicle on the same tick, and the order missions are closed in follow
+  `EntityId` (index, then generation) instead of query order; the replanner's tie-break compares
+  the generation too. `group_members`, `passengers`, `approaching` and `mission_assignees` return
+  ids in that order. `EntityId` implements `Ord`.
+- **Breaking.** `ArrivedThisTick` holds a `BTreeSet<Entity>` instead of a `HashSet<Entity>`.
+- **Breaking.** `Core::new()` builds the schedule at once instead of on the first step. Building
+  creates a resource, and in `bevy_ecs` 0.19 resources are entities, so the lazy build took an
+  entity index in the middle of a match; every entity spawned after `Api::new()` now gets an index
+  one lower than before, and ids no longer depend on whether the first step has run.
+- Rust is pinned to **1.99.0** in `rust-toolchain.toml`, with `rustfmt`, `clippy` and the wasm
+  target; CI installs exactly that toolchain. Tests that checked a collection with
+  `assert!(….is_empty())` use `assert_eq!(…, [])`, as clippy 1.99 asks.
 - **Breaking. Integer simulation space.** Simulation state is integer milli-units
   (`MILLI_PER_UNIT` = 1000): `Position`, `MoveTarget` and `Mission::radius` are `i32` milli-units,
   `Velocity` and `BaseMoveSpeed` are `i32` milli-units per tick, and `BOARDING_RANGE` is `i32`.
@@ -56,6 +79,31 @@ to a click on the canvas.
 - `clippy::nursery` dropped from the crate lints; `pedantic` stays and CI denies warnings.
 
 ### Added
+
+- **Commands.** `Command` is every order as data — `Spawn`, `Despawn`, `MoveTo`, `Stop`,
+  `CreateGroup`, `AddToGroup`, `RemoveFromGroup`, `GroupMoveTo`, `ClearGroupManual`,
+  `CreateMission`, `AssignGroup`, `UnassignGroup`, `Board`, `Unboard` — serialized as JSON tagged
+  by `type` in `snake_case`, with points and radii in map units. `Api::submit(command)` queues it
+  for the next tick and `Api::schedule(tick, command)` for any later one (`ScheduleError` for a
+  tick that is not in the future); both return a `CommandSeq`, and commands of one tick apply in
+  that order. Each applied command reports a `CommandOutcome`: the new id (`Spawned`,
+  `GroupCreated`, `MissionCreated`), `Applied { applied, skipped }`, or a `CommandError`. The
+  immediate `Api` methods stay for tools and tests. JavaScript: `submit`, `schedule`.
+- **Replays.** `Replay { version: 1, templates_yaml, map_yaml, seed, commands }`, stored as JSON
+  (`from_json`, `to_json`); `Replay::run(until_tick)` rebuilds the match in a fresh `Api`. `seed`
+  is reserved for the RNG resource that arrives with the first system needing randomness.
+- **State hash.** `Api::state_hash()`: FNV-1a 64 over the tick and every entity in id order, each
+  simulation component as a tag byte plus little-endian fields, internal relations and markers
+  included, per-tick scratch excluded. Components implement the new `StateHash` trait; the
+  registry macro emits the calls for registered ones. JavaScript: `stateHash()`, 16 hex digits.
+- **Golden replay.** `fixtures/replays/basic.json` — 600 ticks of moves, stops, groups, missions
+  with the replanner, boarding and a despawn — with its hash in `fixtures/replays/basic.hash`.
+  CI runs it on `ubuntu-24.04`, `windows-2025` and `macos-15`, and under wasm32 in Node as part of
+  `make wasm-check`. `UPDATE_GOLDEN=1` rewrites the hash.
+- **Determinism gates.** `clippy.toml` disallows `std::collections::HashMap` and `HashSet`; debug
+  builds — every test — build the simulation schedule with ambiguity detection set to error.
+  `commands.rs`, `replay.rs` and `state_hash.rs` join the float check.
+- `units::distance`, the serde form of a bare distance: map units outside, milli-units inside.
 
 - **`units` module.** `to_milli`, `from_milli`, `speed_to_per_tick`, `speed_from_per_tick` and
   the constructors `Position::from_units` / `MoveTarget::from_units` for host code.

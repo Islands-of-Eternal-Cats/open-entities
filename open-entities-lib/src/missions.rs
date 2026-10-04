@@ -110,18 +110,20 @@ impl Api {
         Some(EntityId::of(assigned.0))
     }
 
-    /// Every group currently working this mission.
+    /// Every group currently working this mission, in [`EntityId`] order.
     pub fn mission_assignees(&mut self, mission: EntityId) -> Vec<EntityId> {
         let Some(mission_entity) = mission.to_entity() else {
             return Vec::new();
         };
         let world = self.core_mut().world_mut();
         let mut query = world.query::<(Entity, &AssignedTo)>();
-        query
+        let mut groups: Vec<EntityId> = query
             .iter(world)
             .filter(|(_, assigned)| assigned.0 == mission_entity)
             .map(|(group, _)| EntityId::of(group))
-            .collect()
+            .collect();
+        groups.sort_unstable();
+        groups
     }
 
     /// `true` once somebody reached the mission.
@@ -199,7 +201,7 @@ mod tests {
 
         assert!(api.is_mission_completed(mission));
         assert_eq!(api.mission_of(group), None, "assignees are released");
-        assert!(api.mission_assignees(mission).is_empty());
+        assert_eq!(api.mission_assignees(mission), []);
 
         let entity = unit.to_entity().expect("live entity");
         let world = api.core().world();
@@ -337,7 +339,7 @@ mod tests {
         api.assign_group(second, group).expect("assign second");
 
         assert_eq!(api.mission_of(group), Some(second));
-        assert!(api.mission_assignees(first).is_empty());
+        assert_eq!(api.mission_assignees(first), []);
     }
 
     #[test]
@@ -371,7 +373,7 @@ mod tests {
         api.step();
 
         assert_eq!(api.mission_of(group), Some(near));
-        assert!(api.mission_assignees(far).is_empty());
+        assert_eq!(api.mission_assignees(far), []);
     }
 
     #[test]
@@ -428,7 +430,7 @@ mod tests {
 
         api.step();
 
-        assert!(api.mission_assignees(open).is_empty());
+        assert_eq!(api.mission_assignees(open), []);
         assert_eq!(api.mission_of(group), None);
     }
 

@@ -6,7 +6,7 @@ use crate::components::{
     AssignedTo, BaseMoveSpeed, Group, ManualActive, MemberOf, Mission, MissionCompleted,
     MoveTarget, NeedsMission, OrderSource, PassengerOf, Position, Velocity,
 };
-use crate::orders::group_slot;
+use crate::orders::{EntityId, group_slot, sort_by_id};
 
 use super::{squared_length, within};
 
@@ -17,7 +17,8 @@ use super::{squared_length, within};
 /// unassigned here so it stops holding a mission nobody is walking to.
 ///
 /// Within a group, a member already following a stronger order keeps it. The ladder lives in
-/// [`OrderSource`], and mission steering sits at the bottom of it.
+/// [`OrderSource`], and mission steering sits at the bottom of it. Members take grid slots in
+/// [`EntityId`] order.
 // The "complex types" are query declarations: data tuple plus filter tuple, which is how this ECS
 // spells a system's inputs. Factoring them into aliases would move the same words somewhere else
 // and cost the reader the signature.
@@ -39,11 +40,12 @@ pub fn mission_steering_system(
             continue;
         };
 
-        let roster: Vec<Entity> = members
+        let mut roster: Vec<Entity> = members
             .iter()
             .filter(|(_, member_of)| member_of.0 == group)
             .map(|(entity, _)| entity)
             .collect();
+        sort_by_id(&mut roster);
 
         if roster.is_empty() {
             // An empty group must not keep a mission reserved for itself.
@@ -83,6 +85,8 @@ pub fn mission_steering_system(
 /// still walking. Every assignee is released and the mission's steering claims are dropped, so
 /// those units stop where they are. Orders the player gave by hand are left alone — they never
 /// belonged to the mission.
+///
+/// Missions, their assignees and their rosters are walked in [`EntityId`] order.
 pub fn mission_completion_system(
     mut commands: Commands,
     missions: Query<(Entity, &Mission), Without<MissionCompleted>>,
@@ -91,8 +95,11 @@ pub fn mission_completion_system(
     positions: Query<&Position>,
     sources: Query<&OrderSource>,
 ) {
-    for (mission_entity, mission) in &missions {
-        let assignees: Vec<Entity> = groups
+    let mut open: Vec<(Entity, &Mission)> = missions.iter().collect();
+    open.sort_unstable_by_key(|(entity, _)| EntityId::of(*entity));
+
+    for (mission_entity, mission) in open {
+        let mut assignees: Vec<Entity> = groups
             .iter()
             .filter(|(_, assigned)| assigned.0 == mission_entity)
             .map(|(group, _)| group)
@@ -100,12 +107,14 @@ pub fn mission_completion_system(
         if assignees.is_empty() {
             continue;
         }
+        sort_by_id(&mut assignees);
 
-        let roster: Vec<Entity> = members
+        let mut roster: Vec<Entity> = members
             .iter()
             .filter(|(_, member_of)| assignees.contains(&member_of.0))
             .map(|(entity, _)| entity)
             .collect();
+        sort_by_id(&mut roster);
 
         let arrived = roster.iter().any(|entity| {
             positions.get(*entity).is_ok_and(|position| {
@@ -149,7 +158,7 @@ pub fn mission_completion_system(
 /// so nothing keeps asking.
 ///
 /// Choice among open missions is the nearest to the group's centre of mass, compared by exact
-/// squared distance in milli-units, ties broken by entity index so the same world always plans the
+/// squared distance in milli-units, ties broken by [`EntityId`] so the same world always plans the
 /// same way.
 #[allow(clippy::type_complexity)] // a query declaration, see `mission_steering_system`
 pub fn replanner_system(
@@ -181,10 +190,7 @@ pub fn replanner_system(
                 let dy = i64::from(mission.target.y) - i64::from(centre.y);
                 (entity, squared_length(dx, dy))
             })
-            .min_by(|(left_entity, left), (right_entity, right)| {
-                left.cmp(right)
-                    .then_with(|| left_entity.index_u32().cmp(&right_entity.index_u32()))
-            });
+            .min_by_key(|(entity, squared)| (*squared, EntityId::of(*entity)));
 
         if let Some((mission, _)) = pick {
             commands.entity(group).insert(AssignedTo(mission));

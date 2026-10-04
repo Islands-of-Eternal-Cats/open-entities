@@ -7,6 +7,7 @@ use crate::boarding::{BOARDING_RANGE, board_now};
 use crate::components::{
     Boardable, BoardingTarget, MoveTarget, OrderSource, PassengerOf, Position, Velocity,
 };
+use crate::orders::EntityId;
 
 /// Walks every unit with a [`BoardingTarget`] toward its vehicle and boards it on arrival.
 ///
@@ -22,15 +23,19 @@ use crate::components::{
 /// The target is stamped [`OrderSource::PlayerUnit`]: boarding is the unit's own order, and
 /// group or mission steering must not pull it away halfway.
 ///
+/// Units are handled in [`EntityId`] order, so when several reach a vehicle on the same tick the
+/// last seats go to the lowest ids.
+///
 /// Exclusive access is deliberate: boarding is a multi-component transaction on two entities
 /// (`board_now`), and a system that both reads the world and boards is simpler than one that
 /// queues commands and reasons about what it already decided this tick.
 pub fn boarding_approach_system(world: &mut World) {
     let mut query = world.query::<(Entity, &BoardingTarget)>();
-    let orders: Vec<(Entity, Entity)> = query
+    let mut orders: Vec<(Entity, Entity)> = query
         .iter(world)
         .map(|(unit, target)| (unit, target.0))
         .collect();
+    orders.sort_unstable_by_key(|(unit, _)| EntityId::of(*unit));
 
     for (unit, vehicle) in orders {
         let (Some(unit_position), Some(vehicle_position)) = (

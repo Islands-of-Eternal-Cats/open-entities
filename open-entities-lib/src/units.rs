@@ -197,6 +197,34 @@ impl<'de> Deserialize<'de> for BaseMoveSpeed {
     }
 }
 
+/// Serde form of a bare distance — a mission radius, say: map units outside, milli-units inside.
+///
+/// For `#[serde(with = "crate::units::distance")]` on an `i32` milli-unit field.
+pub mod distance {
+    use serde::de::Error as _;
+
+    use super::{Deserialize, Deserializer, Serialize, Serializer, from_milli, to_milli};
+
+    /// Writes milli-units as map units.
+    ///
+    /// # Errors
+    ///
+    /// Whatever the serializer reports.
+    #[allow(clippy::trivially_copy_pass_by_ref)] // the signature serde's `with` expects
+    pub fn serialize<S: Serializer>(milli: &i32, serializer: S) -> Result<S::Ok, S::Error> {
+        from_milli(*milli).serialize(serializer)
+    }
+
+    /// Reads map units as milli-units.
+    ///
+    /// # Errors
+    ///
+    /// When the value is not a number or out of `i32` milli-unit range.
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i32, D::Error> {
+        to_milli(f64::deserialize(deserializer)?).map_err(D::Error::custom)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

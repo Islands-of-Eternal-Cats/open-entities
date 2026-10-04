@@ -23,6 +23,55 @@ declare module "open_entities_wasm" {
     generation: number;
   }
 
+  /** A point in map units. */
+  export interface Point {
+    x: number;
+    y: number;
+  }
+
+  /**
+   * One order, as data — `Command` in the Rust core. Points and radii are in map units;
+   * `overrides` takes the same fields as `spawnEntity`.
+   */
+  export type Command =
+    | { type: "spawn"; template: string; overrides?: Record<string, unknown> }
+    | { type: "despawn"; ids: EntityId[] }
+    | { type: "move_to"; ids: EntityId[]; target: Point }
+    | { type: "stop"; ids: EntityId[] }
+    | { type: "create_group"; faction: number }
+    | { type: "add_to_group"; group: EntityId; unit: EntityId }
+    | { type: "remove_from_group"; unit: EntityId }
+    | { type: "group_move_to"; group: EntityId; target: Point }
+    | { type: "clear_group_manual"; group: EntityId }
+    | { type: "create_mission"; target: Point; radius: number }
+    | { type: "assign_group"; mission: EntityId; group: EntityId }
+    | { type: "unassign_group"; group: EntityId }
+    | { type: "board"; units: EntityId[]; vehicle: EntityId }
+    | { type: "unboard"; units: EntityId[] };
+
+  /**
+   * What one command did. `seq` is the number `submit`/`schedule` returned for it. A creation
+   * carries the new id (`spawned`, `group` or `mission`); any other command carries how many of
+   * the entities it named it `applied` to and how many it `skipped`.
+   */
+  export type CommandOutcome =
+    | {
+        seq: number;
+        ok: true;
+        spawned?: EntityId;
+        group?: EntityId;
+        mission?: EntityId;
+        applied?: number;
+        skipped?: number;
+      }
+    | { seq: number; ok: false; error: string };
+
+  /** What one `step()` did: the tick it produced and the commands applied at its start. */
+  export interface StepReport {
+    tick: number;
+    outcomes: CommandOutcome[];
+  }
+
   /** World bounds from the last loaded map. */
   export interface MapBounds {
     width: number;
@@ -123,8 +172,24 @@ declare module "open_entities_wasm" {
     /** Seats still empty, or null when the entity has no seats at all. */
     freeSeats(vehicle: EntityId): number | null;
 
-    /** Advance the simulation by exactly one tick of `tickMs()` milliseconds. */
-    step(): void;
+    /**
+     * Queue a command for the next tick; returns its sequence number. Nothing changes until the
+     * `step()` that produces that tick, whose report carries the outcome. This is how a host gives
+     * orders; the immediate methods above are for tools and tests.
+     */
+    submit(command: Command): number;
+
+    /** Queue a command for a later tick; throws when `tick` is not after `currentTick()`. */
+    schedule(tick: number, command: Command): number;
+
+    /**
+     * Advance the simulation by exactly one tick of `tickMs()` milliseconds, applying the commands
+     * due first.
+     */
+    step(): StepReport;
+
+    /** State hash as 16 hex digits; equal on every platform for the same state. */
+    stateHash(): string;
 
     /** Ticks advanced since the simulation was created. */
     currentTick(): number;

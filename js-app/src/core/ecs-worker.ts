@@ -1,19 +1,30 @@
 /**
  * ECS web worker: loads WASM and runs the simulation.
- * Listens for init/snapshot/frame/spawn_at/move_to/group and boarding messages; posts back
- * ready/entities/spawned/id/error.
+ * Listens for init/snapshot/frame/submit messages; posts back ready/entities/frame/submitted/error.
+ *
+ * Orders reach the core only as commands (`Simulation.submit`): each applies at the start of the
+ * next tick, and its outcome rides back on the `frame` that ran that tick. Nothing here changes
+ * the world between steps.
  *
  * The world crosses the boundary as JSON (`getWorldAsJson`), which this module adapts into the
  * flat `EntitySnapshot` rows the visualization layer expects.
  */
 import initWasmModule, { Simulation, tickMs } from "open_entities_wasm";
 import { FrameClock, TICK_MS } from "./fixed-step";
-import type { EntitySnapshot, Pos, WorldExport, WorldExportRow } from "./types";
+import type {
+  CommandOutcome,
+  EntitySnapshot,
+  Pos,
+  WorldExport,
+  WorldExportRow,
+} from "./types";
 import { entityIdToKey, keyToEntityId } from "./types";
 import type { WorkerInMessage, WorkerOutMessage } from "./worker-types";
 
 let sim: Simulation | null = null;
 let clock: FrameClock | null = null;
+/** Outcomes of the steps run since the last `frame` reply. */
+let outcomes: CommandOutcome[] = [];
 
 function post(msg: WorkerOutMessage): void {
   self.postMessage(msg);
@@ -105,7 +116,9 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
         simulation.loadMapYaml(msg.mapYaml);
         sim = simulation;
         clock = new FrameClock({
-          step: () => simulation.step(),
+          step: () => {
+            outcomes.push(...simulation.step().outcomes);
+          },
           positions: () => positionsOf(simulation),
         });
       } catch (e) {
@@ -126,12 +139,15 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
 
     if (msg.type === "frame") {
       const { previous, alpha } = clock.frame(msg.elapsedMs);
+      const applied = outcomes;
+      outcomes = [];
       post({
         type: "frame",
         entities: readWorld(sim),
         previous,
         alpha,
         tick: sim.currentTick(),
+        outcomes: applied,
       });
       return;
     }
@@ -141,119 +157,12 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
       return;
     }
 
-    if (msg.type === "spawn_at") {
-      try {
-        const overrides: Record<string, unknown> = {
-          position: { x: msg.x, y: msg.y },
-        };
-        if (msg.faction !== undefined) overrides.faction = msg.faction;
-        const id = sim.spawnEntity(msg.typeName, overrides);
-        const key = entityIdToKey(id);
-        const spawned = readWorld(sim).find((entity) => entity.id === key);
-        if (!spawned) {
-          throw new Error(
-            `spawned ${msg.typeName} but it is missing from the world export`
-          );
-        }
-        post({ type: "spawned", entity: spawned });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        post({ type: "error", message });
-      }
-      return;
-    }
-
-    if (msg.type === "create_group") {
-      try {
-        post({ type: "id", id: sim.createGroup(msg.faction) });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        post({ type: "error", message });
-      }
-      return;
-    }
-
-    if (msg.type === "add_to_group") {
-      try {
-        for (const key of msg.entityIds) {
-          sim.addToGroup(msg.group, keyToEntityId(key));
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        post({ type: "error", message });
-        return;
-      }
-      post(entitiesMessage(sim));
-      return;
-    }
-
-    if (msg.type === "group_move_to") {
-      try {
-        sim.orderGroupMoveTo(msg.group, msg.point.x, msg.point.y);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        post({ type: "error", message });
-        return;
-      }
-      post(entitiesMessage(sim));
-      return;
-    }
-
-    if (msg.type === "board") {
-      try {
-        sim.orderBoard(msg.units.map(keyToEntityId), keyToEntityId(msg.vehicle));
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        post({ type: "error", message });
-        return;
-      }
-      post(entitiesMessage(sim));
-      return;
-    }
-
-    if (msg.type === "unboard") {
-      const refused: string[] = [];
-      for (const key of msg.units) {
-        try {
-          sim.unboard(keyToEntityId(key));
-        } catch (err) {
-          refused.push(err instanceof Error ? err.message : String(err));
-        }
-      }
-      // Whoever could step off did; the refusals say why the rest did not.
-      if (refused.length > 0) {
-        post({ type: "error", message: refused.join("; ") });
-        return;
-      }
-      post(entitiesMessage(sim));
-      return;
-    }
-
-    if (msg.type === "stop") {
-      try {
-        sim.orderStop(msg.entityIds.map(keyToEntityId));
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        post({ type: "error", message });
-        return;
-      }
-      post(entitiesMessage(sim));
-      return;
-    }
-
-    if (msg.type === "move_to") {
-      try {
-        sim.orderMoveTo(
-          msg.entityIds.map(keyToEntityId),
-          msg.point.x,
-          msg.point.y
-        );
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        post({ type: "error", message });
-        return;
-      }
-      post(entitiesMessage(sim));
+    if (msg.type === "submit") {
+      const simulation = sim;
+      post({
+        type: "submitted",
+        seqs: msg.commands.map((command) => simulation.submit(command)),
+      });
       return;
     }
   } catch (err) {
