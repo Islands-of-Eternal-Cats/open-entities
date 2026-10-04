@@ -13,6 +13,7 @@
                 <p class="tagline">ECS in Rust / WASM — map, selection, move orders</p>
             </div>
             <div id="status" class="rts-status rts-status--loading" role="status" aria-live="polite">Loading WASM…</div>
+            <div id="perf" class="rts-status" aria-live="off"></div>
         </header>
 
         <main class="rts-main">
@@ -61,6 +62,7 @@
                 <strong>board</strong> (they walk over and climb in), <kbd>U</kbd> to let them off (stop the truck first, or it
                 drives away from whoever steps out).
                 <strong>Minimap</strong> (corner): click with selection — move order; without selection — center view on that point (white frame = visible area).
+                <strong>Stress</strong>: spawns N seeded movers walking to random points; fps is in the top bar.
             </p>
             <div class="train-bar" role="group" aria-label="Hire units">
                 <span class="train-bar-label">Hire</span>
@@ -88,6 +90,16 @@
                     aria-label="Spawn Base with faction one">
                     <span class="train-title">Base</span>
                     <span class="train-sub">faction 1</span>
+                </button>
+            </div>
+            <div class="train-bar" role="group" aria-label="Stress test">
+                <span class="train-bar-label">Stress</span>
+                <input id="stress-count" class="stress-count" type="number" min="1" step="1000"
+                    value="100000" aria-label="How many movers to spawn">
+                <button type="button" id="stress-spawn" class="rts-btn train-btn"
+                    aria-label="Spawn that many seeded movers with random targets">
+                    <span class="train-title">Spawn</span>
+                    <span class="train-sub">seeded movers</span>
                 </button>
             </div>
         </footer>

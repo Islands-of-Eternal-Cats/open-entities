@@ -1,7 +1,18 @@
-//! World snapshot: [`Api::world_snapshot`](crate::Api::world_snapshot).
+//! State out of the simulation.
 //!
-//! The snapshot is plain data with a stable `Serialize` shape; picking the wire format (JSON for
-//! the WASM host) is left to the caller.
+//! - [`Api::world_snapshot`](crate::Api::world_snapshot): every entity with every registered
+//!   component, plain data with a stable `Serialize` shape; picking the wire format (JSON for the
+//!   WASM host) is left to the caller. For debugging and saves, not for every frame.
+//! - [`Api::write_frame`](crate::Api::write_frame): positions only, as flat `i32`s — the per-tick
+//!   render path.
+//! - [`Api::meta_delta`](crate::Api::meta_delta): the rarely changing rest, only what changed.
+
+mod frame;
+mod meta;
+
+pub use frame::{FRAME_HEADER_LEN, FRAME_STRIDE, write_frame_header};
+pub(crate) use meta::MetaTracker;
+pub use meta::{EntityMeta, MetaDelta};
 
 use bevy_ecs::prelude::World;
 use serde::Serialize;

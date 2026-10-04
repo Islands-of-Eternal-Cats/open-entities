@@ -19,6 +19,9 @@ Target: 100 000 units, lockstep multiplayer, replays.
   `UPDATE_GOLDEN=1` only for an intended behaviour change, with the reason in the PR
 - `cargo fmt --all` and `cargo clippy --workspace --all-targets -- -D warnings`
 - `make wasm-check`
+- `make bench` (criterion, native) and `make wasm-bench` (wasm in Node): `step()` at 100k units.
+  Timings are local only; CI just builds the benches (`cargo bench --no-run`). Budgets and the
+  last measured numbers are in README, "Performance".
 - js-app: typecheck and vitest, as run in CI (`.github/workflows/`)
 
 ## Simulation invariants
@@ -39,7 +42,9 @@ depends on the old behaviour they replace.
 3. Host input enters the simulation only as `Command` values applied at the start of a tick
    (`Api::submit` / `Api::schedule`). The immediate `Api` order methods are what commands call;
    hosts, the wasm worker included, do not call them between steps.
-4. Host and renderer code read simulation state and never write to it.
+4. Host and renderer code read simulation state and never write to it. Per frame a renderer reads
+   the position frame (`Api::write_frame`) and the metadata delta (`Api::meta_delta`); the
+   per-frame path creates no JSON. `world_snapshot` / `getWorldAsJson` are for debugging and saves.
 5. Public API: no `bevy_ecs` types in the normal path; entities are named by
    `EntityId { index, generation }`. `Api::core()` / `core_mut()` stay the one documented escape hatch.
 

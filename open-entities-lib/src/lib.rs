@@ -15,7 +15,8 @@
 //! | Missions | [`Api::create_mission`], [`Api::assign_group`], [`Api::is_mission_completed`], … |
 //! | Boarding | [`Api::board`], [`Api::order_board`], [`Api::unboard`], [`Api::passengers`], … |
 //! | Lifecycle | [`Api::is_alive`], [`Api::despawn`] |
-//! | State out | [`Api::world_snapshot`] |
+//! | State out | [`Api::world_snapshot`] (debugging, saves) |
+//! | Render | [`Api::write_frame`] (positions, every tick), [`Api::meta_delta`] (the rest, on change) |
 //!
 //! Every entity is named by an [`EntityId`] — an `{index, generation}` pair. It is the same pair
 //! [`Api::world_snapshot`] reports as each entity's `id`, so ids from a snapshot can be fed straight
@@ -109,7 +110,9 @@ pub use commands::{
 };
 pub use core::Core;
 pub use entity_components::EntityComponents;
-pub use export::{EntitySnapshot, WorldSnapshot};
+pub use export::{
+    EntityMeta, EntitySnapshot, FRAME_HEADER_LEN, FRAME_STRIDE, MetaDelta, WorldSnapshot,
+};
 pub use groups::GroupError;
 pub use import::ImportError;
 pub use map::{MapBounds, MapError};

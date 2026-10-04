@@ -108,6 +108,8 @@ fn seq_to_js(seq: open_entities::CommandSeq) -> f64 {
 #[wasm_bindgen]
 pub struct Simulation {
     api: Api,
+    /// Length of the last frame, so the next one allocates once.
+    frame_len: usize,
 }
 
 impl Default for Simulation {
@@ -120,7 +122,10 @@ impl Default for Simulation {
 impl Simulation {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
-        Self { api: Api::new() }
+        Self {
+            api: Api::new(),
+            frame_len: 0,
+        }
     }
 
     /// Returns the canonical greeting from `open_entities::hello()`.
@@ -156,7 +161,9 @@ impl Simulation {
             .map_err(|e| JsValue::from_str(&format!("failed to serialize id: {e}")))
     }
 
-    /// JS: `getWorldAsJson()`
+    /// JS: `getWorldAsJson()` — every entity with every component, for debugging and saves.
+    ///
+    /// Not for every frame: a renderer reads `writeFrame()` and `metaDelta()`.
     #[wasm_bindgen(js_name = getWorldAsJson)]
     pub fn world_json(&mut self) -> Result<String, JsValue> {
         serde_json::to_string(&self.api.world_snapshot())
@@ -548,6 +555,38 @@ impl Simulation {
     #[must_use]
     pub fn state_hash(&self) -> String {
         format!("{:016x}", self.api.state_hash())
+    }
+
+    /// JS: `writeFrame()` — positions of the current tick as an `Int32Array`.
+    ///
+    /// Header `[tick_lo, tick_hi, count]`, then per entity `[index, generation, x, y]` in
+    /// milli-units, sorted by `index`; every entity with a position has a row. The array is the
+    /// caller's own copy, so a worker can post its buffer as a transferable. This is the per-frame
+    /// path: no JSON, nothing to parse.
+    #[wasm_bindgen(js_name = writeFrame)]
+    pub fn write_frame(&mut self) -> Vec<i32> {
+        let mut out = Vec::with_capacity(self.frame_len);
+        self.api.write_frame(&mut out);
+        self.frame_len = out.len();
+        out
+    }
+
+    /// JS: `metaDelta()` — JSON of the metadata that changed since the previous call, or
+    /// `undefined` when nothing did.
+    ///
+    /// `{ changed: [{ id, entity_type?, faction?, seats?, mobile, aboard?, boarding?, group?,
+    /// move_target? }], removed: [id] }`, rows sorted by id, points in map units. The first call
+    /// reports every positioned entity. Nothing is serialised when nothing changed, so calling it
+    /// every frame costs no JSON.
+    #[wasm_bindgen(js_name = metaDelta)]
+    ///
+    /// # Panics
+    ///
+    /// Never in practice: the delta holds ids, strings and numbers.
+    pub fn meta_delta(&mut self) -> Option<String> {
+        let delta = self.api.meta_delta();
+        (!delta.is_empty())
+            .then(|| serde_json::to_string(&delta).expect("a metadata delta serializes"))
     }
 
     /// JS: `currentTick()` — ticks advanced since the simulation was created.
@@ -1087,6 +1126,72 @@ mod wasm_tests {
         let hash = sim.state_hash();
         assert_eq!(hash.len(), 16);
         assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[wasm_bindgen_test]
+    fn write_frame_is_a_header_and_rows_sorted_by_index() {
+        let mut sim = Simulation::new();
+        sim.load_templates_yaml(FIXTURE_YAML).expect("load fixture");
+        sim.spawn_entity("scout", scout_overrides())
+            .expect("spawn scout");
+        sim.spawn_entity("heavy_tank", empty_overrides())
+            .expect("spawn tank");
+        sim.step();
+
+        let frame = sim.write_frame();
+        assert_eq!(&frame[..3], &[1, 0, 2]);
+        assert_eq!(frame.len(), 3 + 2 * 4);
+        let export: serde_json::Value =
+            serde_json::from_str(&sim.world_json().expect("export")).expect("JSON");
+        let rows: Vec<&[i32]> = frame[3..].chunks(4).collect();
+        assert!(rows[0][0] < rows[1][0], "rows sorted by index");
+        for row in rows {
+            let entity = export["entities"]
+                .as_array()
+                .expect("entities")
+                .iter()
+                .find(|e| e["id"]["index"] == row[0] && e["id"]["generation"] == row[1])
+                .expect("every row is an exported entity");
+            let milli = |v: &serde_json::Value| {
+                let units = v.as_f64().expect("a number");
+                #[allow(clippy::cast_possible_truncation)]
+                let milli = (units * 1000.0).round() as i32;
+                milli
+            };
+            assert_eq!(row[2], milli(&entity["position"]["x"]));
+            assert_eq!(row[3], milli(&entity["position"]["y"]));
+        }
+    }
+
+    #[wasm_bindgen_test]
+    fn meta_delta_is_json_once_and_then_nothing_until_a_change() {
+        let mut sim = Simulation::new();
+        sim.load_templates_yaml(FIXTURE_YAML).expect("load fixture");
+        let tank = sim
+            .spawn_entity("heavy_tank", empty_overrides())
+            .expect("spawn tank");
+
+        let first: serde_json::Value =
+            serde_json::from_str(&sim.meta_delta().expect("first delta")).expect("JSON");
+        assert_eq!(first["changed"][0]["entity_type"], "heavy_tank");
+        assert_eq!(first["changed"][0]["faction"], 3);
+        assert_eq!(first["removed"], serde_json::json!([]));
+
+        sim.step();
+        assert_eq!(sim.meta_delta(), None, "no change, no JSON");
+
+        sim.despawn(serde_wasm_bindgen::to_value(&[tank_id(&tank)]).expect("ids"))
+            .expect("despawn");
+        let gone: serde_json::Value =
+            serde_json::from_str(&sim.meta_delta().expect("removal delta")).expect("JSON");
+        assert_eq!(
+            gone["removed"][0],
+            serde_json::to_value(tank_id(&tank)).expect("id")
+        );
+    }
+
+    fn tank_id(value: &JsValue) -> EntityId {
+        serde_wasm_bindgen::from_value(value.clone()).expect("an id")
     }
 
     #[wasm_bindgen_test]

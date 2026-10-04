@@ -15,10 +15,12 @@ import {
   frame,
   spawnRandomAt,
   spawnAt,
+  stress,
   unboardUnits,
+  world,
 } from "./core/wasm";
 import type { EntityId, EntitySnapshot, Pos } from "./core/types";
-import { interpolate } from "./core/fixed-step";
+import type { WorldReader } from "./core/world-view";
 import { renderEntities } from "./visualization/render";
 import { setHtml, setText } from "./visualization/dom";
 import { initPixiCanvas } from "./visualization/pixi-canvas";
@@ -48,6 +50,13 @@ const transportStateEl = document.getElementById("transport-state");
 const stopOrderBtn = document.getElementById(
   "stop-order"
 ) as HTMLButtonElement | null;
+const stressBtn = document.getElementById(
+  "stress-spawn"
+) as HTMLButtonElement | null;
+const stressCountEl = document.getElementById(
+  "stress-count"
+) as HTMLInputElement | null;
+const perfEl = document.getElementById("perf");
 const trainButtons = Array.from(
   document.querySelectorAll<HTMLButtonElement>("[data-train-type]")
 );
@@ -59,8 +68,17 @@ const ENTITY_TYPES = [
   "static_obstacle",
 ] as const;
 
+/** Most rows the Forces list shows; it lists the selection, not the army. */
+const MAX_LISTED_ROWS = 200;
+/**
+ * Largest selection the transport buttons consider. Boarding is a squad-sized order, and reading
+ * every unit of a 100 000-unit selection each frame to decide whether to offer it would cost more
+ * than the frame.
+ */
+const TRANSPORT_SELECTION_LIMIT = 200;
+
 type PixiApi = {
-  updateEntities: (entities: EntitySnapshot[]) => void;
+  drawWorld: (world: WorldReader) => void;
   getSelectedIds: () => ReadonlySet<string>;
   clearSelection: () => void;
   setSelectedIds: (ids: readonly string[]) => void;
@@ -87,37 +105,23 @@ let groupOrdersOn = false;
  * is gone before it can be read.
  */
 let transportNotice: string | null = null;
-let lastEntities: EntitySnapshot[] = [];
-let updatePixiEntities: ((entities: EntitySnapshot[]) => void) | null = null;
 let lastFrameTime: number | null = null;
+/** Seed of the next stress crowd; each press spawns a different, reproducible one. */
+let stressSeed = 1;
+/** Frame-rate readout: frames counted since `perfSince`. */
+let perfFrames = 0;
+let perfSince: number | null = null;
 
-function upsertSpawnedEntity(spawned: EntitySnapshot): void {
-  const existingIndex = lastEntities.findIndex((entity) => entity.id === spawned.id);
-  if (existingIndex === -1) {
-    render([...lastEntities, spawned]);
-    return;
-  }
-  const next = [...lastEntities];
-  next[existingIndex] = spawned;
-  render(next);
-}
-
-function getSelectedBaseFaction(
-  selected: ReadonlySet<string>,
-  entities: EntitySnapshot[]
-): number | null {
+function getSelectedBaseFaction(selected: ReadonlySet<string>): number | null {
   if (selected.size !== 1) return null;
   const selectedId = [...selected][0];
-  const selectedEntity = entities.find((entity) => entity.id === selectedId);
+  const selectedEntity = world.get(selectedId);
   if (!selectedEntity || selectedEntity.entityType !== "base") return null;
   return selectedEntity.faction;
 }
 
-function syncTrainButtonsVisibility(
-  selected: ReadonlySet<string>,
-  entities: EntitySnapshot[]
-): void {
-  const baseFaction = getSelectedBaseFaction(selected, entities);
+function syncTrainButtonsVisibility(selected: ReadonlySet<string>): void {
+  const baseFaction = getSelectedBaseFaction(selected);
   for (const btn of trainButtons) {
     const trainType = btn.dataset.trainType;
     if (!trainType || trainType === "base") continue;
@@ -150,10 +154,7 @@ function setStatusError(el: HTMLElement, message: string): void {
   el.classList.add("rts-status--error");
 }
 
-function updateSelectionPanel(
-  selected: ReadonlySet<string>,
-  entities: EntitySnapshot[]
-): void {
+function updateSelectionPanel(selected: ReadonlySet<string>): void {
   if (!selectionDetailEl) return;
   if (selected.size === 0) {
     setHtml(selectionDetailEl, `<p class="selection-empty">Nothing selected</p>`);
@@ -161,7 +162,7 @@ function updateSelectionPanel(
   }
   if (selected.size === 1) {
     const id = [...selected][0];
-    const e = entities.find((x) => x.id === id);
+    const e = world.get(id);
     if (!e) {
       setHtml(selectionDetailEl, `<p class="selection-empty">Nothing selected</p>`);
       return;
@@ -247,7 +248,14 @@ interface TransportSelection {
 function readTransportSelection(
   selected: ReadonlySet<string>
 ): TransportSelection {
-  const chosen = lastEntities.filter((entity) => selected.has(entity.id));
+  if (selected.size > TRANSPORT_SELECTION_LIMIT) {
+    return { vehicle: null, boarders: [], riders: [] };
+  }
+  const chosen: EntitySnapshot[] = [];
+  for (const id of selected) {
+    const entity = world.get(id);
+    if (entity) chosen.push(entity);
+  }
   const vehicles = chosen.filter((entity) => entity.seats !== null);
   const vehicle = vehicles.length === 1 ? vehicles[0] : null;
   // A velocity is what makes a thing mobile in this engine, so it is also what makes it something
@@ -260,19 +268,18 @@ function readTransportSelection(
   );
   // Picking the truck is enough to unload it; picking the riders themselves works too.
   const riders = vehicle
-    ? lastEntities.filter((entity) => entity.aboard === vehicle.id)
+    ? world
+        .ridersOf(vehicle.id)
+        .map((key) => world.get(key))
+        .filter((entity): entity is EntitySnapshot => entity !== null)
     : chosen.filter((entity) => entity.aboard !== null);
   return { vehicle, boarders, riders };
 }
 
 function describeTransport(vehicle: EntitySnapshot | null): string {
   if (vehicle === null || vehicle.seats === null) return "No vehicle selected";
-  const taken = lastEntities.filter(
-    (entity) => entity.aboard === vehicle.id
-  ).length;
-  const walking = lastEntities.filter(
-    (entity) => entity.boarding === vehicle.id
-  ).length;
+  const taken = world.ridersOf(vehicle.id).length;
+  const walking = world.walkersTo(vehicle.id).length;
   const onTheWay = walking > 0 ? `, ${walking} on the way` : "";
   return `${vehicle.entityType} ${vehicle.id}: ${taken}/${vehicle.seats} seats taken${onTheWay}`;
 }
@@ -289,15 +296,22 @@ function syncTransportUi(selected: ReadonlySet<string>): void {
     unboardBtn.disabled = riders.length === 0;
   }
   if (transportStateEl) {
-    setText(transportStateEl, transportNotice ?? describeTransport(vehicle));
+    const tooMany =
+      selected.size > TRANSPORT_SELECTION_LIMIT
+        ? `Select at most ${TRANSPORT_SELECTION_LIMIT} units to board or unboard`
+        : null;
+    setText(
+      transportStateEl,
+      transportNotice ?? tooMany ?? describeTransport(vehicle)
+    );
   }
 }
 
 function syncSelectionUi(): void {
   if (!pixiApi) return;
   const ids = pixiApi.getSelectedIds();
-  updateSelectionPanel(ids, lastEntities);
-  syncTrainButtonsVisibility(ids, lastEntities);
+  updateSelectionPanel(ids);
+  syncTrainButtonsVisibility(ids);
   if (clearSelectionBtn) {
     clearSelectionBtn.hidden = ids.size === 0;
     clearSelectionBtn.disabled = ids.size === 0;
@@ -392,7 +406,7 @@ async function formGroupFromSelection(): Promise<void> {
     reportGroupProblem("Select some units first");
     return;
   }
-  const first = lastEntities.find((entity) => entity.id === ids[0]);
+  const first = world.get(ids[0]);
   if (!first) {
     reportGroupProblem("The selected unit is gone");
     return;
@@ -415,21 +429,49 @@ async function formGroupFromSelection(): Promise<void> {
   }
 }
 
-function render(entities: EntitySnapshot[]): void {
-  lastEntities = entities;
+/** The Forces list: the total, and a row per selected unit up to `MAX_LISTED_ROWS`. */
+function renderForces(): void {
   if (!entityListEl) return;
-  renderEntities(entities, entityListEl, pixiApi?.getSelectedIds());
-  if (updatePixiEntities) updatePixiEntities(entities);
+  const selected = pixiApi?.getSelectedIds();
+  const rows: EntitySnapshot[] = [];
+  for (const id of selected ?? []) {
+    if (rows.length >= MAX_LISTED_ROWS) break;
+    const entity = world.get(id);
+    if (entity) rows.push(entity);
+  }
+  renderEntities(rows, entityListEl, selected, world.size);
+}
+
+/** Draws `world` as it stands: canvas, Forces list, HUD. Runs once per animation frame. */
+function render(): void {
+  pixiApi?.drawWorld(world);
+  renderForces();
   syncSelectionUi();
 }
 
-function getInitialLookAtEntityId(entities: EntitySnapshot[]): string | null {
-  const playerBase = entities.find(
+/** Frames per second, units and tick, refreshed twice a second: what a stress run is judged by. */
+function updatePerf(timestamp: number): void {
+  if (!perfEl) return;
+  perfFrames++;
+  if (perfSince === null) {
+    perfSince = timestamp;
+    return;
+  }
+  const elapsed = timestamp - perfSince;
+  if (elapsed < 500) return;
+  const fps = (perfFrames * 1000) / elapsed;
+  setText(perfEl, `${fps.toFixed(0)} fps · ${world.size} units · tick ${world.tick}`);
+  perfFrames = 0;
+  perfSince = timestamp;
+}
+
+function getInitialLookAtEntityId(): string | null {
+  const playerBase = world.find(
     (entity) => entity.entityType === "base" && entity.faction === 1
   );
   if (playerBase) return playerBase.id;
 
-  const playerUnit = entities.find((entity) => entity.faction === 1);
+  const playerUnit = world.find((entity) => entity.faction === 1);
   return playerUnit?.id ?? null;
 }
 
@@ -439,7 +481,7 @@ async function createEntity(typeName?: string): Promise<void> {
   const selectedIds = pixiApi.getSelectedIds();
   if (selectedIds.size !== 1) return;
   const selectedBaseId = [...selectedIds][0];
-  const selectedBase = lastEntities.find((entity) => entity.id === selectedBaseId);
+  const selectedBase = world.get(selectedBaseId);
   if (!selectedBase || selectedBase.entityType !== "base") return;
   if (selectedBase.faction === null) return;
   const type =
@@ -457,8 +499,8 @@ async function createEntity(typeName?: string): Promise<void> {
       0,
       Math.min(WORLD_SIZE, selectedBase.pos.y + Math.sin(angle) * distance)
     );
-    const spawned = await spawnAt(type, x, y, selectedBase.faction);
-    upsertSpawnedEntity(spawned);
+    // Resolves once the frame that spawned it is in `world`; the next animation frame draws it.
+    await spawnAt(type, x, y, selectedBase.faction);
   } catch (e) {
     console.error("spawnAt error:", e);
   }
@@ -471,9 +513,10 @@ function gameLoop(timestamp: number): void {
 
   if (isWasmReady()) {
     frame(elapsedMs)
-      .then((f) => render(interpolate(f.previous, f.entities, f.alpha)))
+      .then(() => render())
       .catch((e) => console.error("frame error:", e));
   }
+  updatePerf(timestamp);
   requestAnimationFrame(gameLoop);
 }
 
@@ -511,7 +554,6 @@ async function run(): Promise<void> {
         },
       });
       pixiApi = pixi;
-      updatePixiEntities = pixi.updateEntities;
       // The canvas can report a selection while initPixiCanvas is still being awaited — at that
       // point pixiApi is null and syncSelectionUi bails out, leaving the HUD hidden and its
       // clear button disabled. Sync once now that the api is in hand.
@@ -557,9 +599,9 @@ async function run(): Promise<void> {
       const trainType = btn.dataset.trainType;
       btn.addEventListener("click", () => {
         if (trainType === "base") {
-          void spawnRandomAt("base", 1)
-            .then((spawned) => upsertSpawnedEntity(spawned))
-            .catch((e) => console.error("spawnRandomAt(base) error:", e));
+          void spawnRandomAt("base", 1).catch((e) =>
+            console.error("spawnRandomAt(base) error:", e)
+          );
           return;
         }
         if (
@@ -571,10 +613,17 @@ async function run(): Promise<void> {
       });
     }
 
+    stressBtn?.addEventListener("click", () => {
+      const count = Math.max(0, Math.floor(Number(stressCountEl?.value ?? 0)));
+      if (count === 0) return;
+      const seed = stressSeed++;
+      void stress(count, seed).catch((e) => console.error("stress error:", e));
+    });
+
     // Initial state read without advancing simulation time.
-    const entities = await snapshot();
-    render(entities);
-    const initialLookAtEntityId = getInitialLookAtEntityId(entities);
+    await snapshot();
+    render();
+    const initialLookAtEntityId = getInitialLookAtEntityId();
     if (initialLookAtEntityId && pixiApi) {
       pixiApi.LookAt(initialLookAtEntityId);
     }

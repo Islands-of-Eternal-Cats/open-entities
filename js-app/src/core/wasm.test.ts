@@ -33,7 +33,11 @@ const workerScript = {
   nextSeq: 0,
   posted: [] as Array<{ type: string; [key: string]: unknown }>,
   queued: [] as Array<{ seq: number; command: Record<string, unknown> }>,
-  frameEntities: [] as unknown[],
+  /** Rows `[index, generation, x, y]` (milli-units) of the next frame's buffer. */
+  frameRows: [] as number[][],
+  /** Metadata delta JSON the next frame carries, if any. */
+  frameMeta: undefined as string | undefined,
+  tick: 0,
   outcomeFor: (seq: number, _command: Record<string, unknown>): unknown => ({
     seq,
     ok: true,
@@ -46,7 +50,9 @@ function resetWorkerScript(): void {
   workerScript.nextSeq = 0;
   workerScript.posted = [];
   workerScript.queued = [];
-  workerScript.frameEntities = [];
+  workerScript.frameRows = [];
+  workerScript.frameMeta = undefined;
+  workerScript.tick = 0;
   workerScript.outcomeFor = (seq) => ({ seq, ok: true, applied: 1, skipped: 0 });
 }
 
@@ -80,14 +86,20 @@ function installMockWorker(): void {
           workerScript.outcomeFor(seq, command)
         );
         workerScript.queued = [];
+        workerScript.tick += 1;
+        const rows = workerScript.frameRows;
+        const current = new Int32Array(3 + rows.length * 4);
+        current.set([workerScript.tick, 0, rows.length]);
+        rows.forEach((row, i) => current.set(row, 3 + i * 4));
         this.reply({
           type: "frame",
-          entities: workerScript.frameEntities,
-          previous: {},
+          tick: workerScript.tick,
           alpha: 0,
-          tick: 1,
+          current: current.buffer,
           outcomes,
+          ...(workerScript.frameMeta !== undefined ? { meta: workerScript.frameMeta } : {}),
         });
+        workerScript.frameMeta = undefined;
       }
     }
 
@@ -111,6 +123,26 @@ function submitted(): Array<Record<string, unknown>> {
 }
 
 describe("wasm module", () => {
+  it("frame() loads the posted buffer and metadata into the shared world", async () => {
+    vi.resetModules();
+    resetWorkerScript();
+    installMockFetch();
+    installMockWorker();
+    const { initWasm, frame, world } = await import("./wasm");
+    await initWasm();
+    workerScript.frameRows = [[4, 0, 1500, 2500]];
+    workerScript.frameMeta = JSON.stringify({
+      changed: [{ id: { index: 4, generation: 0 }, entity_type: "truck", seats: 4, mobile: true }],
+      removed: [],
+    });
+
+    const result = await frame(50);
+
+    expect(result).toEqual({ tick: 1, alpha: 0, stepped: true });
+    expect(world.size).toBe(1);
+    expect(world.get("4:0")).toMatchObject({ entityType: "truck", seats: 4, pos: { x: 1.5, y: 2.5 } });
+  });
+
   beforeEach(() => {
     vi.resetModules();
     resetWorkerScript();
@@ -155,15 +187,11 @@ describe("wasm module", () => {
       ok: true,
       spawned: { index: 9, generation: 2 },
     });
-    workerScript.frameEntities = [
-      {
-        id: "9:2",
-        entityType: "mover",
-        pos: { x: 0.5 * WORLD_SIZE, y: 0.25 * WORLD_SIZE },
-        velocity: null,
-        faction: null,
-      },
-    ];
+    workerScript.frameRows = [[9, 2, 500 * WORLD_SIZE, 250 * WORLD_SIZE]];
+    workerScript.frameMeta = JSON.stringify({
+      changed: [{ id: { index: 9, generation: 2 }, entity_type: "mover", mobile: true }],
+      removed: [],
+    });
 
     let spawned: { id: string; pos: { x: number; y: number } } | null = null;
     void spawnRandomAt("mover").then((entity) => (spawned = entity));

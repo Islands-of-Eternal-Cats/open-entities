@@ -2,6 +2,7 @@
 
 use crate::commands::{CommandOutcome, CommandQueue, StepReport};
 use crate::core::Core;
+use crate::export::MetaTracker;
 use crate::import::EntityTemplates;
 use crate::map::MapBounds;
 use crate::orders::EntityId;
@@ -13,6 +14,8 @@ pub struct Api {
     pub(crate) templates: Option<EntityTemplates>,
     pub(crate) map_bounds: Option<MapBounds>,
     pub(crate) commands: CommandQueue,
+    /// Started by the first [`Api::meta_delta`]; until then nothing is tracked.
+    pub(crate) meta: Option<MetaTracker>,
 }
 
 impl Api {
@@ -24,6 +27,7 @@ impl Api {
             templates: None,
             map_bounds: None,
             commands: CommandQueue::default(),
+            meta: None,
         }
     }
 
@@ -88,6 +92,15 @@ impl Api {
         world.resource_mut::<ArrivedThisTick>().0.clear();
         core.run_schedule();
         core.world_mut().resource_mut::<SimTick>().0 += 1;
+
+        let world = self.core.world_mut();
+        if let Some(meta) = &mut self.meta {
+            meta.collect(world);
+        }
+        // Removal records are kept until cleared, and nothing else clears them: without this they
+        // would grow by one entry per removed component for the whole match. The meta tracker
+        // has read this tick's just above.
+        world.clear_trackers();
 
         StepReport { tick, outcomes }
     }
@@ -156,6 +169,19 @@ mod tests {
             !api.is_alive(old),
             "an id must not resolve again once its entity is gone"
         );
+    }
+
+    #[test]
+    fn removal_records_do_not_pile_up_across_steps() {
+        let mut api = Api::new();
+        for x in 0..10 {
+            let id = spawn_marker(&mut api, x);
+            api.despawn(&[id]);
+            api.step();
+        }
+        // Records live for two clears at most; without clearing, all ten would still be here.
+        let kept = api.core().world().removed::<Position>().count();
+        assert!(kept <= 2, "{kept} removal records kept");
     }
 
     #[test]

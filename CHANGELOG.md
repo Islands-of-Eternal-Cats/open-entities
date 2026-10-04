@@ -14,6 +14,23 @@ to a click on the canvas.
 
 ### Changed
 
+- **Breaking. Binary render boundary in the demo.** The worker no longer sends the world as
+  snapshot rows built from `getWorldAsJson()`. A `frame` reply without a step carries only `tick`
+  and `alpha`; with steps it carries `current`, the `writeFrame()` buffer of the last tick, as a
+  transferable, `previous` (the buffer of tick t−1) after two or more steps, `meta` (the
+  `metaDelta()` JSON) only when something changed, and the steps' `outcomes`. The `snapshot`
+  request replies `snapshot { tick, current, meta }` instead of `entities`. The main thread keeps
+  both buffers in a `WorldView` (`world` in `core/wasm.ts`) and interpolates by merge-joining them
+  on `index`; `frame()` resolves `{ tick, alpha, stepped }` and `snapshot()` resolves nothing.
+  `FrameClock` and `interpolate` are gone from `core/fixed-step.ts`; `RawEntitySnapshot`,
+  `WorldExportRow` and `WorldExport` from the types. `EntitySnapshot` gains `group`, and its
+  `velocity` is the displacement over the last tick, in map units per tick.
+- **Breaking.** The demo canvas takes `drawWorld(world)` instead of `updateEntities(entities)` and
+  draws units as particles in one `ParticleContainer`; selection rings and minimap dots are capped.
+  `renderEntities` takes the total count as an optional fourth argument, and the Forces list shows
+  the selection only, at most 200 rows. `entityIdsInScreenMarquee` and `entityIdAtScreenPoint`
+  accept any iterable of `{ id, pos }`.
+- `Api::step()` clears the world's change trackers at the end of every step (`World::clear_trackers`).
 - **Breaking. Commands.** `Api::step()` returns a `StepReport { tick, outcomes }` instead of `()`:
   it first applies the commands due at the tick it produces, then runs the systems. In JavaScript,
   `step()` returns `{ tick, outcomes }`. The demo worker sends every order as a command through
@@ -80,6 +97,22 @@ to a click on the canvas.
 
 ### Added
 
+- **Render boundary.** `Api::write_frame(&mut Vec<i32>)` writes the current tick as
+  `[tick_lo, tick_hi, count]` plus one `[index, generation, x, y]` row per positioned entity,
+  sorted by index (`FRAME_HEADER_LEN`, `FRAME_STRIDE`, `export::write_frame_header`).
+  `Api::meta_delta()` returns a `MetaDelta { changed: Vec<EntityMeta>, removed: Vec<EntityId> }`
+  with the type, faction, seats, mobility, ride, boarding target, group and move target of the
+  entities that changed since the previous call, found by `bevy_ecs` change detection and
+  compared with what was last reported. JavaScript: `Simulation.writeFrame()` → `Int32Array`,
+  `Simulation.metaDelta()` → JSON or `undefined` when nothing changed.
+- **Benchmarks.** criterion benches `step_100k_moving`, `step_100k_idle` and
+  `step_1k_groups_of_100` in `open-entities-lib/benches/step.rs` (`make bench`), and
+  `wasm-bindings/demo/bench.mjs` for `step()` and `writeFrame()` under wasm in Node
+  (`make wasm-bench`). CI builds the benches (`cargo bench --no-run`); README records the
+  measured times.
+- **Stress control in the demo.** Spawns N seeded `stress_mover`s with random targets as spawn
+  commands generated in the worker (`stress()` in `core/wasm.ts`, `stress` worker message). The top
+  bar shows fps, unit count and tick.
 - **Commands.** `Command` is every order as data — `Spawn`, `Despawn`, `MoveTo`, `Stop`,
   `CreateGroup`, `AddToGroup`, `RemoveFromGroup`, `GroupMoveTo`, `ClearGroupManual`,
   `CreateMission`, `AssignGroup`, `UnassignGroup`, `Board`, `Unboard` — serialized as JSON tagged
@@ -169,6 +202,10 @@ to a click on the canvas.
 
 ### Fixed
 
+- **Removal records grew for the whole match.** `bevy_ecs` keeps a record of every removed
+  component until the world's trackers are cleared, and nothing cleared them: every arrival (which
+  removes a `MoveTarget`) and every despawn added an entry for good. `Api::step()` now clears them
+  once per step.
 - **A move order stuck to a passenger.** Ordering a unit that was riding a vehicle stored a target
   the movement systems could not see; stepping off handed it back to `seek_system`, and the unit
   walked off to a destination given while it was cargo. Selecting a truck with its passengers and

@@ -18,6 +18,8 @@ jobs:
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --all-targets
+      # Benches only have to build here; their timings are measured locally (README, Performance).
+      - run: cargo bench --workspace --no-run
 
   # The golden replay must hash the same everywhere. Runners are pinned so that a failure means
   # the simulation diverged, not that the image changed; wasm32 runs it in the wasm job.

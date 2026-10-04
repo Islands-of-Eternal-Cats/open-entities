@@ -375,6 +375,91 @@ To add a component: implement the type under `components/`, add one `register_co
 
 `register_component!` must only appear inside `define_registered_components!`; standalone use is a compile error (see `open-entities-lib/tests/ui/`).
 
+## Render boundary
+
+A renderer needs positions every tick and everything else rarely. The two travel separately, and
+neither is the JSON export.
+
+**Position frame.** `Api::write_frame(&mut Vec<i32>)` (JS: `Simulation.writeFrame()` →
+`Int32Array`) writes the current tick as flat integers:
+
+| Words | Content |
+|---|---|
+| `0..3` | header `[tick_lo, tick_hi, count]`: the tick split into its low and high 32 bits, then the row count |
+| `3 + 4·i ..` | row `i`: `[index, generation, x, y]`, position in milli-units |
+
+Every entity with a `Position` has a row; rows are sorted by `index`, so two frames merge in one
+pass. Ids are the `EntityId` parts bit-cast to `i32` (read them back unsigned). Constants:
+`FRAME_HEADER_LEN = 3`, `FRAME_STRIDE = 4`. Pass the same `Vec` every tick and its allocation is
+reused; the wasm binding returns a fresh array, so a worker can transfer its buffer.
+
+**Metadata delta.** `Api::meta_delta()` (JS: `Simulation.metaDelta()`) returns the entities whose
+metadata changed, and those that went away, since the previous call:
+
+```json
+{
+  "changed": [
+    {
+      "id": { "index": 4, "generation": 0 },
+      "entity_type": "truck", "faction": 1, "seats": 4, "mobile": true,
+      "aboard": { "index": 2, "generation": 0 },
+      "boarding": { "index": 3, "generation": 0 },
+      "group": { "index": 9, "generation": 0 },
+      "move_target": { "x": 12.5, "y": 0.0 }
+    }
+  ],
+  "removed": [{ "index": 7, "generation": 0 }]
+}
+```
+
+Metadata is the template name, faction, seats, `mobile` (carries a `Velocity`), the vehicle it
+rides or walks to, its group and its move target; absent fields are omitted, points are in map
+units, rows and removals are sorted by id. The first call reports every positioned entity. After
+that each `step()` notes what changed through `bevy_ecs` change detection and removal tracking — no
+scan of the world — and each candidate is compared with what was last reported, so a system that
+writes the same value again (mission steering re-inserts its target every tick) is not a change.
+Until the first call nothing is tracked. `metaDelta()` in JavaScript returns `undefined` when
+nothing changed, so asking every frame serialises nothing.
+
+Reading the boundary never changes the simulation: the state hash is the same with or without it.
+
+`Api::world_snapshot()` / `getWorldAsJson()` stay for debugging and saves; nothing calls them per
+frame.
+
+## Performance
+
+Budgets for `step()` with 100 000 units moving, from the
+[lockstep roadmap](docs/design/lockstep-roadmap.md): native ≤ 5 ms, wasm in Node ≤ 15 ms. The
+systems run sequentially (no `par_iter`): wasm is single-threaded here, and a fixed order keeps
+determinism simple.
+
+Measured on an Apple M5 Pro (64 GB), Rust 1.99.0, Node v26.4.0:
+
+| Measurement | Time per call |
+|---|---|
+| `step_100k_moving` native: 100 000 movers walking to seeded targets on a 2000 × 2000 map | 1.29 ms |
+| `step_100k_idle` native: the same units without targets | 0.19 ms |
+| `step_1k_groups_of_100` native: 1000 groups of 100, each assigned to its own mission | 217 ms |
+| `step_100k_moving` wasm32 in Node | 2.42 ms (median) |
+| `writeFrame()` at 100 000 units, wasm32 in Node, including the copy into JS | 2.21 ms (median) |
+| Browser demo at 100 000 units (Stress) | _not measured yet_ fps |
+
+Both 100k budgets hold. The groups bench has no budget yet and is far from cheap: mission steering
+and mission completion each scan every group member once per group or mission, so the cost grows
+with groups × units. A profile puts almost all of the step there; movement and seek are a rounding
+error beside it.
+
+Run them:
+
+```bash
+cargo bench -p open_entities --bench step
+make wasm-bench
+```
+
+The benches step a world for 200 ticks and then rebuild it, untimed, so the movers do not arrive
+and turn the moving bench into an idle one. CI only compiles them (`cargo bench --no-run`);
+shared runners are too noisy to hold a timing budget.
+
 ## Requirements
 
 - Rust **1.99.0**, pinned in [`rust-toolchain.toml`](rust-toolchain.toml) together with `rustfmt`,
@@ -454,7 +539,9 @@ make wasm-check
 |------------|------|
 | `loadTemplatesYaml(yaml)` | `load_templates_yaml` |
 | `spawnEntity(name, overrides)` | `spawn_entity` → id `{index, generation}` |
-| `getWorldAsJson()` | `world_json` |
+| `getWorldAsJson()` | `world_snapshot`, as JSON (debugging, saves) |
+| `writeFrame()` | `write_frame` → `Int32Array` ([Render boundary](#render-boundary)) |
+| `metaDelta()` | `meta_delta` → JSON, or `undefined` when nothing changed |
 | `submit(command)` | `submit` → sequence number |
 | `schedule(tick, command)` | `schedule` → sequence number |
 | `step()` | `step` → `{ tick, outcomes }` |
@@ -488,6 +575,15 @@ An interactive RTS-style demo lives in [`js-app/`](js-app/): PixiJS canvas, marq
 move orders for a group, minimap, pan and zoom. The simulation runs in a web worker; the main
 thread only renders and handles input. Every order the demo gives goes to the core as a command
 through `submit`, applies on the next tick, and its promise settles from the frame that ran it.
+
+The world crosses from the worker as [position frames](#render-boundary), transferred rather than
+copied, plus a metadata delta when something changed; the per-frame path creates no JSON. Units
+are drawn as particles in one batched PixiJS `ParticleContainer`, interpolated between the last
+two ticks. The Forces list shows the selection (at most 200 rows) and the size of the whole army;
+the top bar shows fps, unit count and tick.
+
+**Stress** spawns N seeded movers (`stress_mover`, 3 units/s) walking to random points across the
+map — spawn commands like any other order. Each press uses the next seed.
 
 ```bash
 cd js-app
@@ -547,7 +643,8 @@ Hello, world!
 
 ### World JSON export
 
-Minimal spawn + compact JSON export:
+The full export, for debugging and saves (a renderer reads the [render boundary](#render-boundary)
+instead). Minimal spawn + compact JSON export:
 
 ```bash
 make example EXAMPLE=world_json

@@ -16,7 +16,8 @@ const state = vi.hoisted(() => {
       faction: 1,
       seats: null,
       aboard: null,
-    boarding: null,
+      boarding: null,
+      group: null,
       moveTarget: null,
     },
     {
@@ -27,7 +28,8 @@ const state = vi.hoisted(() => {
       faction: 1,
       seats: null,
       aboard: null,
-    boarding: null,
+      boarding: null,
+      group: null,
       moveTarget: null,
     },
     {
@@ -38,7 +40,8 @@ const state = vi.hoisted(() => {
       faction: 1,
       seats: 4,
       aboard: null,
-    boarding: null,
+      boarding: null,
+      group: null,
       moveTarget: null,
     },
   ];
@@ -61,7 +64,9 @@ const state = vi.hoisted(() => {
   };
 });
 
-vi.mock("./core/wasm", () => ({
+vi.mock("./core/wasm", async () => ({
+  // The world the HUD reads: the same three rows, through the interface main.ts uses.
+  world: (await import("./test-support/fake-world")).fakeWorld(state.world),
   initWasm: vi.fn(async () => {}),
   isWasmReady: vi.fn(() => true),
   coreBuildInfo: vi.fn(() => ({ id: "deadbeef", bytes: 1024 })),
@@ -71,17 +76,13 @@ vi.mock("./core/wasm", () => ({
   boardUnits: state.boardUnits,
   stopSelected: state.stopSelected,
   unboardUnits: state.unboardUnits,
-  frame: vi.fn(async () => ({
-    entities: [] as EntitySnapshot[],
-    previous: {},
-    alpha: 0,
-    tick: 0,
-  })),
+  frame: vi.fn(async () => ({ tick: 0, alpha: 0, stepped: false })),
   // main.ts imports these two as well; leaving them out made run() throw on the first
   // `await snapshot()` and swallow the rest of the wiring.
-  snapshot: vi.fn(async () => state.world),
-  spawnRandomAt: vi.fn(async () => [] as EntitySnapshot[]),
-  spawnAt: vi.fn(async () => [] as EntitySnapshot[]),
+  snapshot: vi.fn(async () => {}),
+  spawnRandomAt: vi.fn(async () => state.world[0]),
+  spawnAt: vi.fn(async () => state.world[0]),
+  stress: vi.fn(async () => 0),
 }));
 
 vi.mock("./visualization/render", () => ({
@@ -100,7 +101,7 @@ vi.mock("./visualization/pixi-canvas", () => ({
       state.onMoveOrder = options?.onMoveOrder ?? null;
       options?.onSelectionChange?.(state.selectedIds);
       return {
-        updateEntities: vi.fn(),
+        drawWorld: vi.fn(),
         getSelectedIds: () => state.selectedIds,
         clearSelection: state.clearSelection,
         setSelectedIds: vi.fn((ids: readonly string[]) => {
@@ -286,6 +287,22 @@ describe("main input wiring", () => {
     expect(state.moveSelectedTo).toHaveBeenCalled();
     expect(state.stopSelected).toHaveBeenCalled();
     expect(state.renderEntities.mock.calls.length).toBe(drawsBefore);
+  });
+
+  it("lists only the selection in Forces, with the whole army's count", async () => {
+    await import("./main");
+    await flush();
+
+    const calls = state.renderEntities.mock.calls;
+    const [rows, , selected, total] = calls[calls.length - 1] as unknown as [
+      EntitySnapshot[],
+      HTMLElement,
+      ReadonlySet<string>,
+      number,
+    ];
+    expect(rows.map((row) => row.id)).toEqual(["u1"]);
+    expect([...selected]).toEqual(["u1"]);
+    expect(total).toBe(3);
   });
 
   it("keeps move-order flow active via onMoveOrder callback", async () => {

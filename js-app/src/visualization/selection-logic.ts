@@ -1,40 +1,55 @@
 /**
  * Pure helpers for temporary selection groups (marquee + point hit).
  */
-import type { EntitySnapshot } from "../core/types";
+import type { Pos } from "../core/types";
 import {
   ENTITY_RADIUS_PX,
   screenRectToWorldAabb,
+  screenToWorld,
   worldPosInAabb,
-  worldToScreen,
+  worldToScreenTransform,
 } from "./coords";
+
+/** An entity as hit testing sees it: a key and a world position. */
+export interface PlacedEntity {
+  readonly id: string;
+  readonly pos: Pos;
+}
 
 /** Entity centers whose world position lies inside the world AABB from a screen marquee. */
 export function entityIdsInScreenMarquee(
-  entities: EntitySnapshot[],
+  entities: Iterable<PlacedEntity>,
   sx0: number,
   sy0: number,
   sx1: number,
   sy1: number
 ): string[] {
   const aabb = screenRectToWorldAabb(sx0, sy0, sx1, sy1);
-  return entities
-    .filter((e) => worldPosInAabb(e.pos.x, e.pos.y, aabb))
-    .map((e) => e.id);
+  const ids: string[] = [];
+  for (const e of entities) {
+    if (worldPosInAabb(e.pos.x, e.pos.y, aabb)) ids.push(e.id);
+  }
+  return ids;
 }
 
-/** Last entity in array under point (later entries win if circles overlap). */
+/**
+ * Last entity under the point (later entries win if circles overlap).
+ *
+ * Compared in world space — the point is converted once — so a hover over 100 000 units does not
+ * convert 100 000 positions.
+ */
 export function entityIdAtScreenPoint(
-  entities: EntitySnapshot[],
+  entities: Iterable<PlacedEntity>,
   sx: number,
   sy: number
 ): string | null {
   let hit: string | null = null;
-  const r2 = ENTITY_RADIUS_PX * ENTITY_RADIUS_PX;
+  const point = screenToWorld(sx, sy);
+  const radius = ENTITY_RADIUS_PX / worldToScreenTransform().scale;
+  const r2 = radius * radius;
   for (const e of entities) {
-    const p = worldToScreen(e.pos.x, e.pos.y);
-    const dx = sx - p.x;
-    const dy = sy - p.y;
+    const dx = point.x - e.pos.x;
+    const dy = point.y - e.pos.y;
     if (dx * dx + dy * dy <= r2) hit = e.id;
   }
   return hit;

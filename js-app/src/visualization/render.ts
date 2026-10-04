@@ -59,7 +59,11 @@ function syncRow(
 }
 
 /**
- * Renders the entity count and list into the given container element.
+ * Renders the force count and a list of entities into the given container element.
+ *
+ * `entities` are the rows to list — the demo passes the selection, at most a couple of hundred,
+ * since a DOM row per unit does not survive 100 000 units. `total` is the count shown in the
+ * heading; it defaults to the number of rows.
  *
  * Rows are kept between calls and keyed by entity id: a row is created when its entity first
  * appears, removed when it is gone, and otherwise only its text is touched — and only when the
@@ -69,7 +73,8 @@ function syncRow(
 export function renderEntities(
   entities: EntitySnapshot[],
   container: HTMLElement,
-  selectedIds?: ReadonlySet<string>
+  selectedIds?: ReadonlySet<string>,
+  total: number = entities.length
 ): void {
   let count = container.querySelector<HTMLElement>(".entity-count");
   if (!count) {
@@ -79,7 +84,7 @@ export function renderEntities(
     container.prepend(count);
   }
   const countValue = count.querySelector("strong");
-  if (countValue) setText(countValue, String(entities.length));
+  if (countValue) setText(countValue, String(total));
 
   const rows = new Map<string, HTMLButtonElement>();
   for (const row of container.querySelectorAll<HTMLButtonElement>(".entity-row")) {

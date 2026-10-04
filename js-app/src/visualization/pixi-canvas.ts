@@ -1,11 +1,24 @@
 /**
  * PixiJS canvas visualization: renders entities as circles on a 2D canvas.
  * World coordinates (from WASM) are scaled to canvas size.
+ *
+ * Units are particles in one `ParticleContainer`, one batched draw for the whole army; positions
+ * come straight from the position frames (`WorldReader.forEachDrawn`), with nothing allocated per
+ * unit per frame. Overlays — selection rings, minimap dots — are capped, so a selection of 100 000
+ * does not draw 100 000 rings.
  * Drag a rectangle to select multiple units; Shift adds to selection.
  * Tap empty ground with selection issues a move order; Esc / clear button / right-click clears selection.
  */
-import { Application, Container, Graphics } from "pixi.js";
-import type { EntitySnapshot, Pos } from "../core/types";
+import {
+  Application,
+  Container,
+  Graphics,
+  Particle,
+  ParticleContainer,
+  type Texture,
+} from "pixi.js";
+import type { Pos } from "../core/types";
+import type { WorldReader } from "../core/world-view";
 import {
   ENTITY_RADIUS_PX,
   WORLD_SIZE,
@@ -15,11 +28,13 @@ import {
   screenToWorld,
   setLogicalCanvasSize,
   worldToScreen,
+  worldToScreenTransform,
 } from "./coords";
 import {
   entityIdAtScreenPoint,
   entityIdsInScreenMarquee,
   shouldIssueMoveOrder,
+  type PlacedEntity,
 } from "./selection-logic";
 
 const COLORS = [0x3498db, 0xe74c3c, 0x2ecc71, 0xf39c12, 0x9b59b6, 0x1abc9c];
@@ -33,6 +48,19 @@ const MINIMAP_H = 82;
 const MINIMAP_PAD = 7;
 const MINIMAP_MARGIN = 10;
 
+/** Most selection rings drawn; past this a selection is a crowd and rings would hide the map. */
+const MAX_SELECTION_RINGS = 500;
+/** Most unit dots on the minimap; a larger army is sampled evenly. */
+const MAX_MINIMAP_DOTS = 2000;
+/** Alpha of a passenger, which sits exactly on its vehicle. */
+const PASSENGER_ALPHA = 0.35;
+
+/** A drawn unit's key and current world position, kept for hit testing and the minimap. */
+interface DrawnUnit extends PlacedEntity {
+  readonly id: string;
+  readonly pos: { x: number; y: number };
+}
+
 /** Stable color index from entity id string (for consistent color per entity). */
 function colorIndex(id: string): number {
   let h = 0;
@@ -40,10 +68,6 @@ function colorIndex(id: string): number {
   return Math.abs(h) % COLORS.length;
 }
 
-function makeCircle(g: Graphics, color: number): void {
-  g.clear();
-  g.circle(0, 0, ENTITY_RADIUS_PX).fill(color);
-}
 
 export type PixiCanvasOptions = {
   /** Called when the temporary selection set changes (marquee or click). */
@@ -62,7 +86,7 @@ export async function initPixiCanvas(
   container: HTMLElement,
   options?: PixiCanvasOptions
 ): Promise<{
-  updateEntities: (entities: EntitySnapshot[]) => void;
+  drawWorld: (world: WorldReader) => void;
   getSelectedIds: () => ReadonlySet<string>;
   clearSelection: () => void;
   setSelectedIds: (ids: readonly string[]) => void;
@@ -87,7 +111,12 @@ export async function initPixiCanvas(
   const canvas = application.canvas as HTMLCanvasElement;
   canvas.style.touchAction = "none";
 
-  const entityLayer = new Container();
+  // Position and colour (tint, alpha) change while a unit lives; the rest is fixed per particle.
+  const entityLayer = new ParticleContainer({
+    dynamicProperties: { position: true, color: true },
+  });
+  const unitDot = new Graphics().circle(0, 0, ENTITY_RADIUS_PX).fill(0xffffff);
+  const unitTexture: Texture = application.renderer.generateTexture(unitDot);
   const hoverGraphics = new Graphics();
   const selectionRings = new Graphics();
   const moveTargetGraphics = new Graphics();
@@ -108,9 +137,17 @@ export async function initPixiCanvas(
   application.stage.addChild(minimapRoot);
   application.stage.addChild(marqueeGraphics);
 
-  const entityGraphics = new Map<string, Graphics>();
-
-  let lastEntities: EntitySnapshot[] = [];
+  // Per entity index: its particle, the generation it was made for, and its hit-test record.
+  const particles: (Particle | undefined)[] = [];
+  const generations: number[] = [];
+  const units: (DrawnUnit | undefined)[] = [];
+  /** Draw pass that last saw each index; a live particle not seen this pass is gone. */
+  const seenInPass: number[] = [];
+  let pass = 0;
+  /** Units drawn in the last pass, in index order. */
+  let drawnUnits: DrawnUnit[] = [];
+  let lastWorld: WorldReader | null = null;
+  let lastTick = -1;
   const selectedIds = new Set<string>();
   let hoveredId: string | null = null;
   let moveTargetFlash: { x: number; y: number; until: number } | null = null;
@@ -224,13 +261,16 @@ export async function initPixiCanvas(
 
   function redrawMinimap(): void {
     minimapDots.clear();
-    for (const e of lastEntities) {
+    const stride = Math.max(1, Math.ceil(drawnUnits.length / MAX_MINIMAP_DOTS));
+    for (let i = 0; i < drawnUnits.length; i += stride) {
+      const e = drawnUnits[i];
       const { x, y } = worldToMinimap(e.pos.x, e.pos.y);
-      const sel = selectedIds.has(e.id);
-      const r = sel ? 3.5 : 2.5;
-      const c = sel ? 0xf1c40f : COLORS[colorIndex(e.id)];
-      minimapDots.circle(x, y, r).fill({ color: c, alpha: sel ? 1 : 0.88 });
+      minimapDots.circle(x, y, 2.5).fill({ color: COLORS[colorIndex(e.id)], alpha: 0.88 });
     }
+    forEachSelectedPosition((pos) => {
+      const { x, y } = worldToMinimap(pos.x, pos.y);
+      minimapDots.circle(x, y, 3.5).fill({ color: 0xf1c40f, alpha: 1 });
+    });
     if (moveTargetFlash !== null && performance.now() < moveTargetFlash.until) {
       const { x, y } = worldToMinimap(moveTargetFlash.x, moveTargetFlash.y);
       minimapDots
@@ -245,10 +285,31 @@ export async function initPixiCanvas(
     redrawMinimap();
   }
 
-  function pruneSelection(validIds: Set<string>): void {
+  /** World position of each selected unit still drawn, up to `MAX_SELECTION_RINGS` of them. */
+  function forEachSelectedPosition(visit: (pos: Pos) => void): void {
+    let shown = 0;
+    for (const id of selectedIds) {
+      if (shown >= MAX_SELECTION_RINGS) return;
+      const unit = unitByKey(id);
+      if (!unit) continue;
+      visit(unit.pos);
+      shown++;
+    }
+  }
+
+  /** The drawn record for a key, if that exact entity is on screen. */
+  function unitByKey(key: string): DrawnUnit | undefined {
+    const [index, generation] = key.split(":").map(Number);
+    const unit = units[index];
+    return unit !== undefined && generations[index] === generation && seenInPass[index] === pass
+      ? unit
+      : undefined;
+  }
+
+  function pruneSelection(world: WorldReader): void {
     let changed = false;
     for (const id of selectedIds) {
-      if (!validIds.has(id)) {
+      if (!world.has(id)) {
         selectedIds.delete(id);
         changed = true;
       }
@@ -258,25 +319,23 @@ export async function initPixiCanvas(
 
   function redrawSelectionRings(): void {
     selectionRings.clear();
-    for (const id of selectedIds) {
-      const entity = lastEntities.find((e) => e.id === id);
-      if (!entity) continue;
-      const { x, y } = worldToScreen(entity.pos.x, entity.pos.y);
+    forEachSelectedPosition((pos) => {
+      const { x, y } = worldToScreen(pos.x, pos.y);
       selectionRings
         .circle(x, y, ENTITY_RADIUS_PX + 5)
         .stroke({ width: 2, color: 0xf1c40f, alpha: 0.45 });
       selectionRings
         .circle(x, y, ENTITY_RADIUS_PX + 2)
         .stroke({ width: 2, color: 0xf39c12, alpha: 0.98 });
-    }
+    });
   }
 
   function redrawHoverRing(): void {
     hoverGraphics.clear();
     if (hoveredId === null) return;
-    const entity = lastEntities.find((e) => e.id === hoveredId);
-    if (!entity) return;
-    const { x, y } = worldToScreen(entity.pos.x, entity.pos.y);
+    const unit = unitByKey(hoveredId);
+    if (!unit) return;
+    const { x, y } = worldToScreen(unit.pos.x, unit.pos.y);
     hoverGraphics
       .circle(x, y, ENTITY_RADIUS_PX + 3)
       .stroke({ width: 1.5, color: 0xffffff, alpha: 0.8 });
@@ -304,12 +363,13 @@ export async function initPixiCanvas(
   }
 
   function repositionAllGraphics(): void {
-    for (const entity of lastEntities) {
-      const g = entityGraphics.get(entity.id);
-      if (!g) continue;
-      const { x, y } = worldToScreen(entity.pos.x, entity.pos.y);
-      g.x = x;
-      g.y = y;
+    const { scale, tx, ty } = worldToScreenTransform();
+    for (const unit of drawnUnits) {
+      const [index] = unit.id.split(":").map(Number);
+      const particle = particles[index];
+      if (!particle) continue;
+      particle.x = unit.pos.x * scale + tx;
+      particle.y = unit.pos.y * scale + ty;
     }
     redrawSelectionRings();
     redrawHoverRing();
@@ -366,7 +426,7 @@ export async function initPixiCanvas(
     y1: number,
     shiftKey: boolean
   ): void {
-    const picked = entityIdsInScreenMarquee(lastEntities, x0, y0, x1, y1);
+    const picked = entityIdsInScreenMarquee(drawnUnits, x0, y0, x1, y1);
     if (shiftKey) {
       for (const id of picked) selectedIds.add(id);
     } else {
@@ -377,7 +437,7 @@ export async function initPixiCanvas(
   }
 
   function applyClickSelection(sx: number, sy: number, modifiers: InputModifiers): void {
-    const hit = entityIdAtScreenPoint(lastEntities, sx, sy);
+    const hit = entityIdAtScreenPoint(drawnUnits, sx, sy);
     if (
       shouldIssueMoveOrder({
         hitEntityId: hit,
@@ -405,7 +465,7 @@ export async function initPixiCanvas(
     if (isDragging) return;
     const p = clientToCanvas(canvas, clientX, clientY);
     canvas.style.cursor = canvasPointInMinimap(p.x, p.y) ? "pointer" : "";
-    const hit = entityIdAtScreenPoint(lastEntities, p.x, p.y);
+    const hit = entityIdAtScreenPoint(drawnUnits, p.x, p.y);
     if (hit !== hoveredId) {
       hoveredId = hit;
       redrawHoverRing();
@@ -543,37 +603,70 @@ export async function initPixiCanvas(
   redrawMinimapFrame();
   redrawMinimap();
 
-  function updateEntities(entities: EntitySnapshot[]): void {
-    lastEntities = entities;
-    const ids = new Set(entities.map((e) => e.id));
-    pruneSelection(ids);
-
-    for (const [id, g] of entityGraphics.entries()) {
-      if (!ids.has(id)) {
-        entityLayer.removeChild(g);
-        g.destroy();
-        entityGraphics.delete(id);
+  /**
+   * Draws the world as it stands this animation frame.
+   *
+   * One pass over the drawn units: each index keeps its particle while the same entity (same
+   * generation) holds it, and only positions and alpha are written. The particle list is rebuilt
+   * only when a unit appeared or went away.
+   */
+  function drawWorld(world: WorldReader): void {
+    lastWorld = world;
+    pass++;
+    let membershipChanged = false;
+    let count = 0;
+    const { scale, tx, ty } = worldToScreenTransform();
+    world.forEachDrawn((index, generation, x, y, meta) => {
+      let particle = particles[index];
+      let unit = units[index];
+      if (particle === undefined || unit === undefined || generations[index] !== generation) {
+        const id = `${index}:${generation}`;
+        particle = new Particle({
+          texture: unitTexture,
+          anchorX: 0.5,
+          anchorY: 0.5,
+          tint: COLORS[colorIndex(id)],
+        });
+        unit = { id, pos: { x, y } };
+        particles[index] = particle;
+        units[index] = unit;
+        generations[index] = generation;
+        membershipChanged = true;
       }
-    }
-
-    entities.forEach((entity) => {
-      let g = entityGraphics.get(entity.id);
-      if (!g) {
-        g = new Graphics();
-        const color = COLORS[colorIndex(entity.id)];
-        makeCircle(g, color);
-        entityGraphics.set(entity.id, g);
-        entityLayer.addChild(g);
-      }
-
-      const { x, y } = worldToScreen(entity.pos.x, entity.pos.y);
-      g.x = x;
-      g.y = y;
+      seenInPass[index] = pass;
+      count++;
+      unit.pos.x = x;
+      unit.pos.y = y;
+      particle.x = x * scale + tx;
+      particle.y = y * scale + ty;
       // A passenger sits exactly where its vehicle is; faded, it reads as cargo rather than as
       // two units standing in the same spot.
-      g.alpha = entity.aboard === null ? 1 : 0.35;
+      particle.alpha = meta.aboard === undefined ? 1 : PASSENGER_ALPHA;
     });
 
+    if (membershipChanged || count !== drawnUnits.length) {
+      const children: Particle[] = [];
+      const live: DrawnUnit[] = [];
+      for (let index = 0; index < particles.length; index++) {
+        const particle = particles[index];
+        if (particle === undefined) continue;
+        if (seenInPass[index] === pass) {
+          children.push(particle);
+          live.push(units[index]!);
+        } else {
+          particles[index] = undefined;
+          units[index] = undefined;
+        }
+      }
+      entityLayer.particleChildren = children;
+      entityLayer.update();
+      drawnUnits = live;
+    }
+
+    if (world.tick !== lastTick) {
+      lastTick = world.tick;
+      pruneSelection(world);
+    }
     redrawSelectionRings();
     redrawHoverRing();
     drawMoveTarget();
@@ -590,10 +683,9 @@ export async function initPixiCanvas(
   }
 
   function setSelectedIds(ids: readonly string[]): void {
-    const valid = new Set(lastEntities.map((e) => e.id));
     selectedIds.clear();
     for (const id of ids) {
-      if (valid.has(id)) selectedIds.add(id);
+      if (lastWorld?.has(id)) selectedIds.add(id);
     }
     notifySelection();
     redrawSelectionRings();
@@ -609,7 +701,7 @@ export async function initPixiCanvas(
   }
 
   function LookAt(entityId: string): boolean {
-    const entity = lastEntities.find((e) => e.id === entityId);
+    const entity = lastWorld?.get(entityId);
     if (!entity) return false;
     centerViewOnWorld(entity.pos.x, entity.pos.y);
     repositionAllGraphics();
@@ -617,7 +709,7 @@ export async function initPixiCanvas(
   }
 
   return {
-    updateEntities,
+    drawWorld,
     getSelectedIds,
     clearSelection,
     setSelectedIds,

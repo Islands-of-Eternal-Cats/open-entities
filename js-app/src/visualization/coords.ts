@@ -64,6 +64,16 @@ export function worldToScreen(
   };
 }
 
+/**
+ * `worldToScreen` as numbers: screen = world × `scale` + (`tx`, `ty`).
+ *
+ * For loops over every unit, which should not allocate a point per unit per frame.
+ */
+export function worldToScreenTransform(): { scale: number; tx: number; ty: number } {
+  const { scale, offsetX, offsetY } = getScaleAndOffset();
+  return { scale, tx: offsetX + viewPanX, ty: offsetY + viewPanY };
+}
+
 export function screenToWorld(
   sx: number,
   sy: number
