@@ -13,6 +13,7 @@ Target: 100 000 units, lockstep multiplayer, replays.
 ## Commands
 
 - `make test` (or `cargo test`)
+- `make float-check` (no `f32`/`f64` in simulation modules)
 - `cargo fmt --all` and `cargo clippy --workspace --all-targets -- -D warnings`
 - `make wasm-check`
 - js-app: typecheck and vitest, as run in CI (`.github/workflows/`)
@@ -26,7 +27,7 @@ depends on the old behaviour they replace.
    No system reads wall-clock time or a host-supplied delta.
 2. Determinism: the same initial state and the same command log produce bit-identical state
    on every platform, native and wasm32.
-   - (target) Simulation state uses integers, never `f32`/`f64`.
+   - Simulation state uses integers, never `f32`/`f64`.
    - No iteration over `std` `HashMap`/`HashSet` in simulation code; use `BTreeMap`,
      `IndexMap` or a sorted `Vec`.
    - Randomness comes only from the match-seeded RNG resource.

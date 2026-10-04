@@ -194,13 +194,13 @@ spawns:
         let world = api.core_mut().world();
         let marker = spawned[0].to_entity().expect("live entity");
         let position = world.get::<Position>(marker).expect("position override");
-        assert_eq!(position.x, 20.0);
-        assert_eq!(position.y, 20.0);
+        assert_eq!(position.x, 20_000);
+        assert_eq!(position.y, 20_000);
         assert_eq!(world.get::<Faction>(marker), Some(&Faction(1)));
 
         let scout = spawned[1].to_entity().expect("live entity");
         let position = world.get::<Position>(scout).expect("position override");
-        assert_eq!(position.x, 30.0);
+        assert_eq!(position.x, 30_000);
         // Not overridden, so the template's own faction survives.
         assert_eq!(world.get::<Faction>(scout), Some(&Faction(1)));
     }

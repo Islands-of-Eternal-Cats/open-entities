@@ -2,6 +2,8 @@
 //! [`EntityComponents`](crate::EntityComponents); querying them directly goes through
 //! [`Api::core`](crate::Api::core).
 
+#![deny(clippy::float_arithmetic)]
+
 mod assigned_to;
 mod base_move_speed;
 mod boardable;

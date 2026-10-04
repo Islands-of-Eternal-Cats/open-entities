@@ -42,12 +42,12 @@
 //! let scout = api.spawn_entity(
 //!     "scout",
 //!     EntityComponents {
-//!         position: Some(Position { x: 0.0, y: 0.0 }),
+//!         position: Some(Position::from_units(0.0, 0.0)),
 //!         ..Default::default()
 //!     },
 //! )?;
 //!
-//! let report = api.order_move_to(&[scout], MoveTarget { x: 10.0, y: 0.0 });
+//! let report = api.order_move_to(&[scout], MoveTarget::from_units(10.0, 0.0));
 //! assert_eq!(report.ordered, 1);
 //!
 //! for _ in 0..20 {
@@ -57,7 +57,8 @@
 //!
 //! let snapshot = api.world_snapshot();
 //! assert_eq!(snapshot.entities.len(), 1);
-//! assert_ne!(snapshot.entities[0].components.position, Some(Position { x: 0.0, y: 0.0 }));
+//! // Simulation state is integer milli-units: 5 units/s is 250 per tick, 20 ticks reach 5.0.
+//! assert_eq!(snapshot.entities[0].components.position, Some(Position { x: 5000, y: 0 }));
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
@@ -72,9 +73,6 @@
 
 #![warn(missing_docs)]
 #![warn(clippy::pedantic)]
-// Exact float comparison is the point in tests: the systems snap a value to its target, and a snap
-// either happened or it did not. Epsilon comparisons there would stop testing what is being tested.
-#![cfg_attr(test, allow(clippy::float_cmp))]
 
 pub mod api;
 pub mod boarding;
@@ -88,6 +86,7 @@ pub mod missions;
 pub mod orders;
 pub mod simulation;
 pub mod systems;
+pub mod units;
 
 mod component_registry;
 mod entity_components;
@@ -103,6 +102,7 @@ pub use map::{MapBounds, MapError};
 pub use missions::MissionError;
 pub use orders::{EntityId, OrderReport};
 pub use simulation::TICK_MS;
+pub use units::MILLI_PER_UNIT;
 
 /// Returns the canonical hello-world greeting.
 #[must_use]

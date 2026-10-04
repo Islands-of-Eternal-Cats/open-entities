@@ -10,7 +10,7 @@ mod tests {
     fn merge_child_wins_over_parent() {
         let parent = EntityComponents {
             faction: Some(Faction(1)),
-            velocity: Some(Velocity { vx: 1.0, vy: 0.0 }),
+            velocity: Some(Velocity { vx: 50, vy: 0 }),
             ..Default::default()
         };
         let child = EntityComponents {
@@ -19,7 +19,7 @@ mod tests {
         };
         let merged = merge_components(&parent, &child);
         assert_eq!(merged.faction, Some(Faction(2)));
-        assert_eq!(merged.velocity, Some(Velocity { vx: 1.0, vy: 0.0 }));
+        assert_eq!(merged.velocity, Some(Velocity { vx: 50, vy: 0 }));
     }
 
     #[test]
@@ -29,12 +29,12 @@ mod tests {
             ..Default::default()
         };
         let child = EntityComponents {
-            velocity: Some(Velocity { vx: 2.0, vy: 0.0 }),
+            velocity: Some(Velocity { vx: 100, vy: 0 }),
             ..Default::default()
         };
         let merged = merge_components(&parent, &child);
         assert_eq!(merged.faction, Some(Faction(1)));
-        assert_eq!(merged.velocity, Some(Velocity { vx: 2.0, vy: 0.0 }));
+        assert_eq!(merged.velocity, Some(Velocity { vx: 100, vy: 0 }));
     }
 
     #[test]

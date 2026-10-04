@@ -30,6 +30,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      # simulation state is integers; the clippy float_arithmetic lint catches arithmetic, this
+      # catches the types themselves (fields, signatures, casts)
+      - run: ./scripts/check-no-floats.sh
 
   wasm:
     name: wasm-check

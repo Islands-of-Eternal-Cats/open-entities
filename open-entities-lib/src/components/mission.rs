@@ -6,12 +6,12 @@ use super::MoveTarget;
 ///
 /// A mission is an entity, like a group: it can be assigned to several groups at once, and it
 /// outlives the units that walk to it.
-#[derive(Component, Debug, Clone, Copy, PartialEq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Mission {
     /// Point to reach.
     pub target: MoveTarget,
-    /// Arrival radius — the `Rg` of the contract.
-    pub radius: f32,
+    /// Arrival radius in milli-units — the `Rg` of the contract.
+    pub radius: i32,
 }
 
 /// Marks a mission nobody needs to walk to any more.

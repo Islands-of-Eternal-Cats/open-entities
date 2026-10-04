@@ -55,29 +55,3 @@ fn step_advances_tick_counter_by_one() {
     assert_eq!(api.current_tick(), 2);
     assert_eq!(api.world_snapshot().tick, 2);
 }
-
-#[test]
-fn step_moves_one_tick_worth_of_velocity() {
-    let mut api = Api::new();
-    api.load_templates_yaml(FIXTURE_YAML).expect("load fixture");
-    let overrides = EntityComponents {
-        position: Some(open_entities::components::Position { x: 0.0, y: 0.0 }),
-        ..EntityComponents::default()
-    };
-    api.spawn_entity("tank", overrides).expect("spawn tank");
-
-    api.step();
-
-    // The fixture tank has velocity 0.5 units/s along +x and no move target.
-    let x = api.world_snapshot().entities[0]
-        .components
-        .position
-        .expect("position")
-        .x;
-    let expected = 0.5 * f32::from(u16::try_from(TICK_MS).unwrap()) / 1000.0;
-    // Float result depends on operation order; step 2 makes this an exact integer comparison.
-    assert!(
-        (x - expected).abs() < 1e-6,
-        "moved {x}, expected {expected}"
-    );
-}

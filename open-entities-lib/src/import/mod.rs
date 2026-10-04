@@ -253,7 +253,7 @@ mod resolve_tests {
                 entry(
                     TemplateParents::One("unit".to_owned()),
                     EntityComponents {
-                        velocity: Some(Velocity { vx: 2.0, vy: 0.0 }),
+                        velocity: Some(Velocity { vx: 100, vy: 0 }),
                         ..Default::default()
                     },
                 ),
@@ -262,7 +262,7 @@ mod resolve_tests {
         let resolved = resolve_all_templates(&raw).expect("resolve");
         let scout = resolved.get("scout").expect("scout");
         assert_eq!(scout.faction, Some(Faction(1)));
-        assert_eq!(scout.velocity, Some(Velocity { vx: 2.0, vy: 0.0 }));
+        assert_eq!(scout.velocity, Some(Velocity { vx: 100, vy: 0 }));
     }
 
     #[test]
@@ -349,8 +349,8 @@ entities:
         let faction = world.get::<Faction>(entity).expect("faction");
         assert_eq!(faction.0, 99);
         let velocity = world.get::<Velocity>(entity).expect("velocity");
-        assert_eq!(velocity.vx, 2.0);
-        assert_eq!(velocity.vy, 0.0);
+        assert_eq!(velocity.vx, 100);
+        assert_eq!(velocity.vy, 0);
     }
 
     #[test]
@@ -427,7 +427,10 @@ entities:
             .spawn_entity(
                 "scout",
                 EntityComponents {
-                    position: Some(Position { x: 100.0, y: 200.0 }),
+                    position: Some(Position {
+                        x: 100_000,
+                        y: 200_000,
+                    }),
                     ..Default::default()
                 },
             )
@@ -436,8 +439,8 @@ entities:
             .expect("live entity");
         let world = api.core_mut().world_mut();
         let position = world.get::<Position>(entity).expect("position");
-        assert_eq!(position.x, 100.0);
-        assert_eq!(position.y, 200.0);
+        assert_eq!(position.x, 100_000);
+        assert_eq!(position.y, 200_000);
         let faction = world
             .get::<Faction>(entity)
             .expect("faction still from template");
@@ -455,11 +458,11 @@ entities:
             .expect("live entity");
         let world = api.core_mut().world_mut();
         let position = world.get::<Position>(entity).expect("position");
-        assert_eq!(position.x, 0.0);
-        assert_eq!(position.y, 0.0);
+        assert_eq!(position.x, 0);
+        assert_eq!(position.y, 0);
         let velocity = world.get::<Velocity>(entity).expect("velocity");
-        assert_eq!(velocity.vx, 2.0);
-        assert_eq!(velocity.vy, 0.0);
+        assert_eq!(velocity.vx, 100);
+        assert_eq!(velocity.vy, 0);
         let faction = world.get::<Faction>(entity).expect("faction");
         assert_eq!(faction.0, 1);
     }
@@ -575,11 +578,11 @@ entities:
             .expect("live entity");
         let world = api.core_mut().world_mut();
         let position = world.get::<Position>(entity).expect("position");
-        assert_eq!(position.x, 0.0);
-        assert_eq!(position.y, 0.0);
+        assert_eq!(position.x, 0);
+        assert_eq!(position.y, 0);
         let velocity = world.get::<Velocity>(entity).expect("velocity");
-        assert_eq!(velocity.vx, 2.0);
-        assert_eq!(velocity.vy, 0.0);
+        assert_eq!(velocity.vx, 100);
+        assert_eq!(velocity.vy, 0);
         let faction = world.get::<Faction>(entity).expect("faction");
         assert_eq!(faction.0, 1);
         assert!(world.get::<MoveTarget>(entity).is_none());
@@ -704,7 +707,7 @@ entities:
                 .expect("row by entity type")
         };
         let scout = row("scout");
-        assert_eq!(scout.components.position, Some(Position { x: 0.0, y: 0.0 }));
+        assert_eq!(scout.components.position, Some(Position { x: 0, y: 0 }));
         assert_eq!(scout.components.faction, Some(Faction(1)));
 
         let marker = row("marker");
@@ -733,8 +736,8 @@ entities:
         let world = api.core_mut().world_mut();
         assert_eq!(world.get::<Faction>(entity).map(|f| f.0), Some(1));
         let velocity = world.get::<Velocity>(entity).expect("velocity");
-        assert_eq!(velocity.vx, 2.0);
-        assert_eq!(velocity.vy, 0.0);
+        assert_eq!(velocity.vx, 100);
+        assert_eq!(velocity.vy, 0);
     }
 
     #[test]
@@ -760,10 +763,10 @@ entities:
         let world = api.core_mut().world_mut();
         assert_eq!(world.get::<Faction>(entity).map(|f| f.0), Some(1));
         let velocity = world.get::<Velocity>(entity).expect("velocity");
-        assert_eq!(velocity.vx, 1.0);
+        assert_eq!(velocity.vx, 50);
         let position = world.get::<Position>(entity).expect("position");
-        assert_eq!(position.x, 0.0);
-        assert_eq!(position.y, 0.0);
+        assert_eq!(position.x, 0);
+        assert_eq!(position.y, 0);
     }
 
     #[test]
@@ -785,8 +788,8 @@ entities:
             .expect("live entity");
         let world = api.core_mut().world_mut();
         let position = world.get::<Position>(entity).expect("position");
-        assert_eq!(position.x, 9.0);
-        assert_eq!(position.y, 9.0);
+        assert_eq!(position.x, 9000);
+        assert_eq!(position.y, 9000);
     }
 
     #[test]
@@ -841,8 +844,8 @@ entities:
         let world = api.core_mut().world_mut();
         assert_eq!(world.get::<Faction>(entity).map(|f| f.0), Some(3));
         let velocity = world.get::<Velocity>(entity).expect("velocity from tank");
-        assert_eq!(velocity.vx, 0.5);
-        assert_eq!(velocity.vy, 0.0);
+        assert_eq!(velocity.vx, 25);
+        assert_eq!(velocity.vy, 0);
     }
 
     #[test]
