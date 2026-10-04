@@ -20,7 +20,7 @@ use crate::api::Api;
 use crate::components::{
     Boardable, BoardingTarget, MoveTarget, OrderSource, PassengerOf, Position, Velocity,
 };
-use crate::orders::{EntityId, OrderReport, can_take_a_move_order};
+use crate::orders::{EntityId, OrderReport, can_take_a_move_order, sort_by_id};
 
 /// How close a unit has to be for the boarding system to put it aboard, in milli-units (3 map units).
 ///
@@ -82,14 +82,16 @@ impl std::fmt::Display for BoardError {
 
 impl std::error::Error for BoardError {}
 
-/// Everyone riding `vehicle`.
+/// Everyone riding `vehicle`, in [`EntityId`] order.
 pub(crate) fn passengers_of(world: &mut World, vehicle: Entity) -> Vec<Entity> {
     let mut query = world.query::<(Entity, &PassengerOf)>();
-    query
+    let mut passengers: Vec<Entity> = query
         .iter(world)
         .filter(|(_, passenger_of)| passenger_of.0 == vehicle)
         .map(|(entity, _)| entity)
-        .collect()
+        .collect();
+    sort_by_id(&mut passengers);
+    passengers
 }
 
 /// Puts `unit` inside `vehicle` right now. Shared by [`Api::board`] and the boarding system, so
@@ -253,7 +255,7 @@ impl Api {
         Some(EntityId::of(target.0))
     }
 
-    /// Everyone currently riding this vehicle.
+    /// Everyone currently riding this vehicle, in [`EntityId`] order.
     pub fn passengers(&mut self, vehicle: EntityId) -> Vec<EntityId> {
         let Some(vehicle_entity) = vehicle.to_entity() else {
             return Vec::new();
@@ -264,18 +266,20 @@ impl Api {
             .collect()
     }
 
-    /// Everyone on their way to board this vehicle.
+    /// Everyone on their way to board this vehicle, in [`EntityId`] order.
     pub fn approaching(&mut self, vehicle: EntityId) -> Vec<EntityId> {
         let Some(vehicle_entity) = vehicle.to_entity() else {
             return Vec::new();
         };
         let world = self.core_mut().world_mut();
         let mut query = world.query::<(Entity, &BoardingTarget)>();
-        query
+        let mut units: Vec<EntityId> = query
             .iter(world)
             .filter(|(_, target)| target.0 == vehicle_entity)
             .map(|(entity, _)| EntityId::of(entity))
-            .collect()
+            .collect();
+        units.sort_unstable();
+        units
     }
 
     /// Seats left on this vehicle, or `None` when it has none to begin with.

@@ -14,6 +14,9 @@ Target: 100 000 units, lockstep multiplayer, replays.
 
 - `make test` (or `cargo test`)
 - `make float-check` (no `f32`/`f64` in simulation modules)
+- `cargo test -p open_entities --test golden_replay` — the golden replay hash; it must match on
+  every platform. Never edit `fixtures/replays/basic.hash` to make a platform pass;
+  `UPDATE_GOLDEN=1` only for an intended behaviour change, with the reason in the PR
 - `cargo fmt --all` and `cargo clippy --workspace --all-targets -- -D warnings`
 - `make wasm-check`
 - js-app: typecheck and vitest, as run in CI (`.github/workflows/`)
@@ -33,7 +36,9 @@ depends on the old behaviour they replace.
    - Randomness comes only from the match-seeded RNG resource.
    - Ties are broken by `EntityId`, never by query iteration order.
    - Systems in the simulation schedule are strictly ordered (`.chain()`).
-3. (target) Host input enters the simulation only as `Command` values applied at the start of a tick.
+3. Host input enters the simulation only as `Command` values applied at the start of a tick
+   (`Api::submit` / `Api::schedule`). The immediate `Api` order methods are what commands call;
+   hosts, the wasm worker included, do not call them between steps.
 4. Host and renderer code read simulation state and never write to it.
 5. Public API: no `bevy_ecs` types in the normal path; entities are named by
    `EntityId { index, generation }`. `Api::core()` / `core_mut()` stay the one documented escape hatch.

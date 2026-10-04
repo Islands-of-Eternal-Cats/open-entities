@@ -163,3 +163,44 @@ if (rideSim.freeSeats(truck) !== 4 || rideSim.vehicleOf(passenger) !== null) {
 }
 
 console.log("wasm transport demo ok");
+
+// --- Command demo: orders as data, applied at the start of the next tick ---
+const cmdSim = new Simulation();
+cmdSim.loadTemplatesYaml(yaml);
+
+const spawnSeq = cmdSim.submit({
+  type: "spawn",
+  template: "scout",
+  overrides: { position: { x: 1.0, y: 2.0 } },
+});
+if (JSON.parse(cmdSim.getWorldAsJson()).entities.length !== 0) {
+  throw new Error("command demo: submit must not change the world before the next step");
+}
+const first = cmdSim.step();
+if (first.tick !== 1 || first.outcomes.length !== 1) {
+  throw new Error(`command demo: unexpected report ${JSON.stringify(first)}`);
+}
+const spawnOutcome = first.outcomes[0];
+if (spawnOutcome.seq !== spawnSeq || !spawnOutcome.ok || !spawnOutcome.spawned) {
+  throw new Error(`command demo: spawn outcome ${JSON.stringify(spawnOutcome)}`);
+}
+
+const moveSeq = cmdSim.schedule(3, {
+  type: "move_to",
+  ids: [spawnOutcome.spawned],
+  target: { x: 30.0, y: 2.0 },
+});
+if (cmdSim.step().outcomes.length !== 0) {
+  throw new Error("command demo: a command scheduled for tick 3 ran at tick 2");
+}
+const third = cmdSim.step();
+if (third.outcomes[0]?.seq !== moveSeq || third.outcomes[0]?.applied !== 1) {
+  throw new Error(`command demo: move outcome ${JSON.stringify(third)}`);
+}
+
+const hash = cmdSim.stateHash();
+if (!/^[0-9a-f]{16}$/.test(hash)) {
+  throw new Error(`command demo: stateHash() should be 16 hex digits, got ${hash}`);
+}
+
+console.log(`wasm command demo ok (state hash ${hash})`);

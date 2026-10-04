@@ -317,7 +317,8 @@ async function stopSelection(): Promise<void> {
   const ids = [...pixiApi.getSelectedIds()];
   if (ids.length === 0) return;
   try {
-    render(await stopSelected(ids));
+    // Applies on the next tick; the frames show it.
+    await stopSelected(ids);
   } catch (e) {
     console.error("stop order error:", e);
   }
@@ -344,11 +345,9 @@ async function boardSelection(): Promise<void> {
     return;
   }
   try {
-    render(
-      await boardUnits(
-        boarders.map((entity) => entity.id),
-        vehicle.id
-      )
+    await boardUnits(
+      boarders.map((entity) => entity.id),
+      vehicle.id
     );
   } catch (e) {
     transportNotice = `Could not board: ${e instanceof Error ? e.message : String(e)}`;
@@ -367,7 +366,7 @@ async function unboardSelection(): Promise<void> {
     return;
   }
   try {
-    render(await unboardUnits(riders.map((entity) => entity.id)));
+    await unboardUnits(riders.map((entity) => entity.id));
   } catch (e) {
     transportNotice = `Could not unboard: ${e instanceof Error ? e.message : String(e)}`;
     syncSelectionUi();
@@ -494,9 +493,8 @@ async function run(): Promise<void> {
           try {
             if (groupOrdersOn && activeGroup !== null) {
               try {
-                const entities = await orderGroupTo(activeGroup, world);
+                await orderGroupTo(activeGroup, world);
                 pixi.showMoveTarget(world);
-                render(entities);
               } catch (e) {
                 const message = e instanceof Error ? e.message : String(e);
                 reportGroupProblem(`Group order failed: ${message}`);
@@ -505,9 +503,8 @@ async function run(): Promise<void> {
             }
             const ids = [...pixi.getSelectedIds()];
             if (ids.length === 0) return;
-            const entities = await moveSelectedTo(ids, world);
+            await moveSelectedTo(ids, world);
             pixi.showMoveTarget(world);
-            render(entities);
           } catch (e) {
             console.error("move order error:", e);
           }

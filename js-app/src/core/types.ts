@@ -2,6 +2,8 @@
  * App-level types that combine WASM types with visualization/UI state.
  */
 
+export type { Command, CommandOutcome, StepReport } from "open_entities_wasm";
+
 /** 2D position. */
 export type Pos = { x: number; y: number };
 

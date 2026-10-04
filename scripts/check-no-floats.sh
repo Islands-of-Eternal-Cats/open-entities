@@ -5,7 +5,8 @@
 set -eu
 cd "$(dirname "$0")/../open-entities-lib/src"
 if grep -rnwE 'f32|f64' \
-    components systems simulation.rs orders.rs groups.rs missions.rs boarding.rs core.rs; then
+    components systems simulation.rs orders.rs groups.rs missions.rs boarding.rs core.rs \
+    commands.rs replay.rs state_hash.rs; then
     echo "error: f32/f64 in a simulation module (listed above)" >&2
     exit 1
 fi

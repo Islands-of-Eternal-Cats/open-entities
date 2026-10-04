@@ -6,7 +6,8 @@ mod registered;
 #[allow(unused_imports)] // re-exports are the public registry API
 pub use registered::{
     EntityComponents, WorldExportQuery, WorldExportRow, collect_world_export_rows,
-    entity_components_from_query, merge_components, spawn_registered_components,
+    entity_components_from_query, hash_registered_components, merge_components,
+    spawn_registered_components,
 };
 
 #[cfg(test)]

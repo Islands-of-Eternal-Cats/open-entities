@@ -1,8 +1,19 @@
 /**
  * WASM core wrapper. Initializes ECS in a web worker and re-exports the game API.
  * Visualization layer depends only on this module and types from ./types.
+ *
+ * Orders are commands: each is submitted to the core for the next tick, and its promise settles
+ * when a later `frame` reports the command's outcome. Order replies carry no snapshot; the world
+ * is drawn from frames only.
  */
-import type { EntityId, EntitySnapshot, Pos } from "./types";
+import type {
+  Command,
+  CommandOutcome,
+  EntityId,
+  EntitySnapshot,
+  Pos,
+} from "./types";
+import { entityIdToKey, keyToEntityId } from "./types";
 import type {
   RawEntitySnapshot,
   WorkerInMessage,
@@ -80,14 +91,9 @@ type PendingRequest =
       kind: "entities";
     }
   | {
-      resolve: (value: EntitySnapshot) => void;
+      resolve: (value: number[]) => void;
       reject: (reason: unknown) => void;
-      kind: "spawned";
-    }
-  | {
-      resolve: (value: EntityId) => void;
-      reject: (reason: unknown) => void;
-      kind: "id";
+      kind: "submitted";
     }
   | {
       resolve: (value: FrameResult) => void;
@@ -96,32 +102,13 @@ type PendingRequest =
     };
 let pending: PendingRequest | null = null;
 
-type QueuedRequest =
-  | {
-      resolve: (value: EntitySnapshot[]) => void;
-      reject: (reason: unknown) => void;
-      message: WorkerInMessage;
-      kind: "entities";
-    }
-  | {
-      resolve: (value: EntitySnapshot) => void;
-      reject: (reason: unknown) => void;
-      message: WorkerInMessage;
-      kind: "spawned";
-    }
-  | {
-      resolve: (value: EntityId) => void;
-      reject: (reason: unknown) => void;
-      message: WorkerInMessage;
-      kind: "id";
-    }
-  | {
-      resolve: (value: FrameResult) => void;
-      reject: (reason: unknown) => void;
-      message: WorkerInMessage;
-      kind: "frame";
-    };
+type QueuedRequest = PendingRequest & { message: WorkerInMessage };
 const requestQueue: QueuedRequest[] = [];
+
+/** A submitted command waiting for the frame that reports what it did. */
+type OutcomeWaiter = (outcome: CommandOutcome, entities: EntitySnapshot[]) => void;
+/** Keyed by sequence number; a frame settles and removes the ones it reports. */
+const outcomeWaiters = new Map<number, OutcomeWaiter>();
 
 function rawToSnapshots(
   raw: RawEntitySnapshot[]
@@ -137,20 +124,6 @@ function rawToSnapshots(
     boarding: e.boarding ?? null,
     moveTarget: e.moveTarget ?? null,
   }));
-}
-
-function rawToSnapshot(raw: RawEntitySnapshot): EntitySnapshot {
-  return {
-    id: raw.id,
-    entityType: raw.entityType,
-    pos: raw.pos,
-    velocity: raw.velocity,
-    faction: raw.faction ?? null,
-    seats: raw.seats ?? null,
-    aboard: raw.aboard ?? null,
-    boarding: raw.boarding ?? null,
-    moveTarget: raw.moveTarget ?? null,
-  };
 }
 
 function onMessage(event: MessageEvent<WorkerOutMessage>): void {
@@ -185,8 +158,15 @@ function onMessage(event: MessageEvent<WorkerOutMessage>): void {
     return;
   }
   if (msg.type === "frame" && pending && pending.kind === "frame") {
+    const entities = rawToSnapshots(msg.entities);
+    for (const outcome of msg.outcomes) {
+      const waiter = outcomeWaiters.get(outcome.seq);
+      if (!waiter) continue;
+      outcomeWaiters.delete(outcome.seq);
+      waiter(outcome, entities);
+    }
     pending.resolve({
-      entities: rawToSnapshots(msg.entities),
+      entities,
       previous: msg.previous,
       alpha: msg.alpha,
       tick: msg.tick,
@@ -195,26 +175,17 @@ function onMessage(event: MessageEvent<WorkerOutMessage>): void {
     flushQueue();
     return;
   }
-  if (msg.type === "spawned" && pending && pending.kind === "spawned") {
-    pending.resolve(rawToSnapshot(msg.entity));
-    pending = null;
-    flushQueue();
-    return;
-  }
-  if (msg.type === "id" && pending && pending.kind === "id") {
-    pending.resolve(msg.id);
+  if (msg.type === "submitted" && pending && pending.kind === "submitted") {
+    pending.resolve(msg.seqs);
     pending = null;
     flushQueue();
   }
 }
 
 /** Sends a request now when the worker is free, or queues it behind the ones already waiting. */
-function enqueue(
-  message: WorkerInMessage,
-  request: Omit<PendingRequest, "message">
-): void {
+function enqueue(message: WorkerInMessage, request: PendingRequest): void {
   if (pending === null && requestQueue.length === 0) {
-    pending = request as PendingRequest;
+    pending = request;
     worker!.postMessage(message);
     return;
   }
@@ -242,6 +213,7 @@ export async function initWasm(): Promise<void> {
         }
         for (const q of requestQueue) q.reject(e);
         requestQueue.length = 0;
+        outcomeWaiters.clear();
       };
 
       const origin =
@@ -313,13 +285,7 @@ export function snapshot(): Promise<EntitySnapshot[]> {
   if (!worker || !initialized)
     return Promise.reject(new Error("WASM not initialized"));
   return new Promise((resolve, reject) => {
-    const message: WorkerInMessage = { type: "snapshot" };
-    if (pending === null && requestQueue.length === 0) {
-      pending = { resolve, reject, kind: "entities" };
-      worker!.postMessage(message);
-    } else {
-      requestQueue.push({ resolve, reject, message, kind: "entities" });
-    }
+    enqueue({ type: "snapshot" }, { resolve, reject, kind: "entities" });
   });
 }
 
@@ -345,66 +311,93 @@ export function frame(elapsedMs: number): Promise<FrameResult> {
   });
 }
 
+/** What a command did once it applied, with the frame state it applied in. */
+interface Applied {
+  outcome: CommandOutcome & { ok: true };
+  entities: EntitySnapshot[];
+}
+
 /**
- * Queue move-to order for the given entity ids (snapshot id strings).
- * Does not advance simulation; movement is applied as `frame` runs ticks.
+ * Submits commands for the next tick. Each promise settles from the `frame` whose step applied
+ * that command: resolved with the outcome, or rejected with the core's reason when it was refused.
+ */
+function submitAll(commands: Command[]): Promise<Applied>[] {
+  if (!worker || !initialized) {
+    const error = Promise.reject(new Error("WASM not initialized"));
+    return commands.map(() => error);
+  }
+  const seqs = new Promise<number[]>((resolve, reject) => {
+    enqueue({ type: "submit", commands }, { resolve, reject, kind: "submitted" });
+  });
+  return commands.map(
+    (_, i) =>
+      new Promise<Applied>((resolve, reject) => {
+        seqs.then((all) => {
+          outcomeWaiters.set(all[i], (outcome, entities) => {
+            if (outcome.ok) resolve({ outcome, entities });
+            else reject(new Error(outcome.error));
+          });
+        }, reject);
+      })
+  );
+}
+
+function submit(command: Command): Promise<Applied> {
+  return submitAll([command])[0];
+}
+
+/** Resolves with the outcome alone: what an order reply carries now that it has no snapshot. */
+async function order(command: Command): Promise<CommandOutcome> {
+  return (await submit(command)).outcome;
+}
+
+/**
+ * Move order for the given entity ids (snapshot id strings).
+ *
+ * Applies at the start of the next tick; resolves with the outcome (`applied`/`skipped`) once a
+ * frame has run that tick. Movement shows up in frames, as always.
  */
 export function moveSelectedTo(
   entityIds: string[],
   point: { x: number; y: number }
-): Promise<EntitySnapshot[]> {
-  if (!worker || !initialized)
-    return Promise.reject(new Error("WASM not initialized"));
+): Promise<CommandOutcome> {
   if (entityIds.length === 0) {
     return Promise.reject(new Error("moveSelectedTo: no entity ids"));
   }
-  return new Promise((resolve, reject) => {
-    const message: WorkerInMessage = {
-      type: "move_to",
-      entityIds,
-      point,
-    };
-    if (pending === null && requestQueue.length === 0) {
-      pending = { resolve, reject, kind: "entities" };
-      worker!.postMessage(message);
-    } else {
-      requestQueue.push({ resolve, reject, message, kind: "entities" });
-    }
+  return order({
+    type: "move_to",
+    ids: entityIds.map(keyToEntityId),
+    target: { x: point.x, y: point.y },
   });
 }
 
 /**
  * Forms a group for a faction and puts the given units in it.
  *
- * Resolves with the group id; keep it, every group call takes it.
+ * Two rounds through the core: the group has no id until its `create_group` applies, and only
+ * then can the units be added. Resolves with the group id; keep it, every group call takes it.
+ * Rejects if any unit is refused (another faction, say).
  */
-export function createGroupWith(
+export async function createGroupWith(
   faction: number,
   entityIds: string[]
 ): Promise<EntityId> {
-  if (!worker || !initialized)
-    return Promise.reject(new Error("WASM not initialized"));
   if (entityIds.length === 0) {
-    return Promise.reject(new Error("createGroupWith: no entity ids"));
+    throw new Error("createGroupWith: no entity ids");
   }
-  return new Promise<EntityId>((resolve, reject) => {
-    enqueue(
-      { type: "create_group", faction },
-      { resolve, reject, kind: "id" }
-    );
-  }).then(
-    (group) =>
-      new Promise<EntityId>((resolve, reject) => {
-        enqueue(
-          { type: "add_to_group", group, entityIds },
-          {
-            resolve: () => resolve(group),
-            reject,
-            kind: "entities",
-          }
-        );
-      })
+  const created = await submit({ type: "create_group", faction });
+  const group = created.outcome.group;
+  if (!group) throw new Error("create_group reported no group id");
+  await Promise.all(
+    submitAll(
+      entityIds.map((key) => ({
+        type: "add_to_group" as const,
+        group,
+        unit: keyToEntityId(key),
+      }))
+    )
   );
+  return group;
 }
 
 /**
@@ -416,15 +409,11 @@ export function createGroupWith(
 export function orderGroupTo(
   group: EntityId,
   point: { x: number; y: number }
-): Promise<EntitySnapshot[]> {
-  if (!worker || !initialized)
-    return Promise.reject(new Error("WASM not initialized"));
-  return new Promise((resolve, reject) => {
-    enqueue({ type: "group_move_to", group, point }, {
-      resolve,
-      reject,
-      kind: "entities",
-    } as PendingRequest);
+): Promise<CommandOutcome> {
+  return order({
+    type: "group_move_to",
+    group,
+    target: { x: point.x, y: point.y },
   });
 }
 
@@ -434,119 +423,82 @@ export function orderGroupTo(
  * Needed as its own order because a vehicle that keeps driving after its passengers step off
  * leaves them behind, and nothing else releases a move target early.
  */
-export function stopSelected(entityIds: string[]): Promise<EntitySnapshot[]> {
-  if (!worker || !initialized)
-    return Promise.reject(new Error("WASM not initialized"));
+export function stopSelected(entityIds: string[]): Promise<CommandOutcome> {
   if (entityIds.length === 0) {
     return Promise.reject(new Error("stopSelected: no entity ids"));
   }
-  return new Promise((resolve, reject) => {
-    enqueue({ type: "stop", entityIds }, {
-      resolve,
-      reject,
-      kind: "entities",
-    } as PendingRequest);
-  });
+  return order({ type: "stop", ids: entityIds.map(keyToEntityId) });
 }
 
 /**
  * Sends units to walk to a vehicle and get in.
  *
  * An order, not an instant board: the core walks each unit over tick by tick, following the
- * vehicle if it moves, and boards it once within range. The returned snapshot has `boarding`
- * set on the units that took the order. Rejects only when the vehicle has no seats at all.
+ * vehicle if it moves, and boards it once within range; frames show `boarding` set on the units
+ * that took it. Rejects only when the vehicle has no seats at all.
  */
 export function boardUnits(
   units: string[],
   vehicle: string
-): Promise<EntitySnapshot[]> {
-  if (!worker || !initialized)
-    return Promise.reject(new Error("WASM not initialized"));
+): Promise<CommandOutcome> {
   if (units.length === 0) {
     return Promise.reject(new Error("boardUnits: no entity ids"));
   }
-  return new Promise((resolve, reject) => {
-    enqueue({ type: "board", units, vehicle }, {
-      resolve,
-      reject,
-      kind: "entities",
-    } as PendingRequest);
-  });
-}
-
-/** Lets passengers off, beside whatever they were riding. */
-export function unboardUnits(units: string[]): Promise<EntitySnapshot[]> {
-  if (!worker || !initialized)
-    return Promise.reject(new Error("WASM not initialized"));
-  if (units.length === 0) {
-    return Promise.reject(new Error("unboardUnits: no entity ids"));
-  }
-  return new Promise((resolve, reject) => {
-    enqueue({ type: "unboard", units }, {
-      resolve,
-      reject,
-      kind: "entities",
-    } as PendingRequest);
+  return order({
+    type: "board",
+    units: units.map(keyToEntityId),
+    vehicle: keyToEntityId(vehicle),
   });
 }
 
 /**
+ * Lets passengers off, beside whatever they were riding. `skipped` counts the units that were not
+ * aboard anything.
+ */
+export function unboardUnits(units: string[]): Promise<CommandOutcome> {
+  if (units.length === 0) {
+    return Promise.reject(new Error("unboardUnits: no entity ids"));
+  }
+  return order({ type: "unboard", units: units.map(keyToEntityId) });
+}
+
+/**
  * Spawn by type at random coordinates.
- * Returns only the newly spawned entity (not a full world snapshot).
+ * Resolves with the new entity as the frame that spawned it reports it.
  * Optional `faction` sets ECS `Faction` id.
  */
 export function spawnRandomAt(
   typeName: string,
   faction?: number
 ): Promise<EntitySnapshot> {
-  if (!worker || !initialized)
-    return Promise.reject(new Error("WASM not initialized"));
-  return new Promise((resolve, reject) => {
-    // Spawn in random world coordinates across the full logical map bounds.
-    const x = Math.random() * WORLD_SIZE;
-    const y = Math.random() * WORLD_SIZE;
-    const message: WorkerInMessage = {
-      type: "spawn_at",
-      typeName,
-      x,
-      y,
-      ...(faction !== undefined ? { faction } : {}),
-    };
-    if (pending === null && requestQueue.length === 0) {
-      pending = { resolve, reject, kind: "spawned" };
-      worker!.postMessage(message);
-    } else {
-      requestQueue.push({ resolve, reject, message, kind: "spawned" });
-    }
-  });
+  // Spawn in random world coordinates across the full logical map bounds.
+  const x = Math.random() * WORLD_SIZE;
+  const y = Math.random() * WORLD_SIZE;
+  return spawnAt(typeName, x, y, faction);
 }
 
 /**
  * Spawn by type at explicit world coordinates.
- * Returns only the newly spawned entity (not a full world snapshot).
+ * Resolves with the new entity as the frame that spawned it reports it.
  * Optional `faction` sets ECS `Faction` id.
  */
-export function spawnAt(
+export async function spawnAt(
   typeName: string,
   x: number,
   y: number,
   faction?: number
 ): Promise<EntitySnapshot> {
-  if (!worker || !initialized)
-    return Promise.reject(new Error("WASM not initialized"));
-  return new Promise((resolve, reject) => {
-    const message: WorkerInMessage = {
-      type: "spawn_at",
-      typeName,
-      x,
-      y,
-      ...(faction !== undefined ? { faction } : {}),
-    };
-    if (pending === null && requestQueue.length === 0) {
-      pending = { resolve, reject, kind: "spawned" };
-      worker!.postMessage(message);
-    } else {
-      requestQueue.push({ resolve, reject, message, kind: "spawned" });
-    }
+  const overrides: Record<string, unknown> = { position: { x, y } };
+  if (faction !== undefined) overrides.faction = faction;
+  const { outcome, entities } = await submit({
+    type: "spawn",
+    template: typeName,
+    overrides,
   });
+  const key = outcome.spawned ? entityIdToKey(outcome.spawned) : null;
+  const spawned = entities.find((entity) => entity.id === key);
+  if (!spawned) {
+    throw new Error(`spawned ${typeName} but it is missing from the frame`);
+  }
+  return spawned;
 }

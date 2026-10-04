@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { EntitySnapshot, Pos } from "./core/types";
 
 const state = vi.hoisted(() => {
+  const applied = { seq: 0, ok: true as const, applied: 1, skipped: 0 };
   const selectedIds = new Set<string>(["u1"]);
   /** A unit on foot, an immobile base and a truck: what the transport buttons read. */
   const world: EntitySnapshot[] = [
@@ -50,23 +51,12 @@ const state = vi.hoisted(() => {
     }),
     showMoveTarget: vi.fn(),
     createGroupWith: vi.fn(async () => ({ index: 7, generation: 0 })),
-    orderGroupTo: vi.fn(async () => [] as EntitySnapshot[]),
-    boardUnits: vi.fn(async () => [] as EntitySnapshot[]),
-    stopSelected: vi.fn(async () => [] as EntitySnapshot[]),
-    unboardUnits: vi.fn(async () => [] as EntitySnapshot[]),
-    moveSelectedTo: vi.fn(async () => [
-      {
-        id: "u1",
-        entityType: "mover",
-        pos: { x: 12, y: 24 },
-        velocity: null,
-        faction: null,
-        seats: null,
-        aboard: null,
-    boarding: null,
-        moveTarget: null,
-      } satisfies EntitySnapshot,
-    ]),
+    orderGroupTo: vi.fn(async () => applied),
+    boardUnits: vi.fn(async () => applied),
+    stopSelected: vi.fn(async () => applied),
+    unboardUnits: vi.fn(async () => applied),
+    // Orders resolve with the command's outcome; the world comes from frames only.
+    moveSelectedTo: vi.fn(async () => applied),
     renderEntities: vi.fn(),
   };
 });
@@ -280,6 +270,22 @@ describe("main input wiring", () => {
     // business being freight. The core would allow it; the demo should not suggest it.
     const board = document.getElementById("board-units") as HTMLButtonElement;
     expect(board.hidden).toBe(true);
+  });
+
+  it("does not redraw the world from an order reply", async () => {
+    await import("./main");
+    await flush();
+    const drawsBefore = state.renderEntities.mock.calls.length;
+
+    await state.onMoveOrder?.({ x: 40, y: 50 });
+    (document.getElementById("stop-order") as HTMLButtonElement).click();
+    await flush();
+
+    // The order applies at the next tick and shows up in the frame that runs it; a reply that
+    // drew its own snapshot would make positions jump for a frame.
+    expect(state.moveSelectedTo).toHaveBeenCalled();
+    expect(state.stopSelected).toHaveBeenCalled();
+    expect(state.renderEntities.mock.calls.length).toBe(drawsBefore);
   });
 
   it("keeps move-order flow active via onMoveOrder callback", async () => {

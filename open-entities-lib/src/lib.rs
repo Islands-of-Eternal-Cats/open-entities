@@ -7,7 +7,9 @@
 //! | Concern | Calls |
 //! |---|---|
 //! | Content | [`Api::load_templates_yaml`], [`Api::spawn_entity`], [`Api::load_map_yaml`] |
-//! | Time | [`Api::tick`] |
+//! | Time | [`Api::step`], [`Api::current_tick`] |
+//! | Commands | [`Api::submit`], [`Api::schedule`] → [`StepReport`] from [`Api::step`] |
+//! | Determinism | [`Api::state_hash`], [`Replay::run`] |
 //! | Orders | [`Api::order_move_to`], [`Api::order_stop`] |
 //! | Groups | [`Api::create_group`], [`Api::add_to_group`], [`Api::order_group_move_to`], … |
 //! | Missions | [`Api::create_mission`], [`Api::assign_group`], [`Api::is_mission_completed`], … |
@@ -18,6 +20,11 @@
 //! Every entity is named by an [`EntityId`] — an `{index, generation}` pair. It is the same pair
 //! [`Api::world_snapshot`] reports as each entity's `id`, so ids from a snapshot can be fed straight
 //! back into orders. A despawned id never resolves again, even when its index is reused.
+//!
+//! Orders reach a running match as [`Command`]s: data, applied at the start of a known tick, so
+//! two peers with the same command log stay in step and a [`Replay`] reproduces a match exactly.
+//! The immediate order methods in the table are what commands call; a networked host uses
+//! [`Api::submit`] and [`Api::schedule`] only.
 //!
 //! Data goes in as YAML ([`EntityComponents`] is the shape of a template, a spawn override and a
 //! map entry) and comes out as a [`WorldSnapshot`] — plain data with a stable `Serialize` shape,
@@ -65,7 +72,8 @@
 //! # Errors
 //!
 //! Each operation family has its own error enum ([`ImportError`], [`MapError`],
-//! [`GroupError`], [`MissionError`], [`BoardError`]); all implement
+//! [`GroupError`], [`MissionError`], [`BoardError`], [`CommandError`], [`ScheduleError`],
+//! [`ReplayError`]); all implement
 //! [`std::error::Error`] and [`Display`](std::fmt::Display). Orders that take many ids do not fail:
 //! they skip what they cannot apply and say so in an [`OrderReport`].
 //!
@@ -76,6 +84,7 @@
 
 pub mod api;
 pub mod boarding;
+pub mod commands;
 pub mod components;
 pub mod core;
 pub mod export;
@@ -84,7 +93,9 @@ pub mod import;
 pub mod map;
 pub mod missions;
 pub mod orders;
+pub mod replay;
 pub mod simulation;
+pub mod state_hash;
 pub mod systems;
 pub mod units;
 
@@ -93,6 +104,9 @@ mod entity_components;
 
 pub use api::Api;
 pub use boarding::{BOARDING_RANGE, BoardError};
+pub use commands::{
+    Command, CommandError, CommandOutcome, CommandResult, CommandSeq, ScheduleError, StepReport,
+};
 pub use core::Core;
 pub use entity_components::EntityComponents;
 pub use export::{EntitySnapshot, WorldSnapshot};
@@ -101,7 +115,9 @@ pub use import::ImportError;
 pub use map::{MapBounds, MapError};
 pub use missions::MissionError;
 pub use orders::{EntityId, OrderReport};
+pub use replay::{REPLAY_VERSION, Replay, ReplayCommand, ReplayError};
 pub use simulation::TICK_MS;
+pub use state_hash::StateHash;
 pub use units::MILLI_PER_UNIT;
 
 /// Returns the canonical hello-world greeting.

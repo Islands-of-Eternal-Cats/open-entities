@@ -1,0 +1,7 @@
+# Pinned so the golden replay hash and clippy's verdict do not move under us with a new stable
+# release. Bump deliberately, in its own change, and re-run the golden test on every platform.
+[toolchain]
+channel = "1.99.0"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]
+profile = "minimal"

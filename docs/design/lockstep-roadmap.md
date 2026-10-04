@@ -5,8 +5,8 @@ Goal: a deterministic simulation of 100 000 units, suitable for lockstep multipl
 | Step | Topic | Status |
 | ---- | ----- | ------ |
 | 1 | Fixed timestep | done, PR #22 |
-| 2 | Integer simulation space | next |
-| 3 | Commands, replay, state hash | |
+| 2 | Integer simulation space | done, PR #23 |
+| 3 | Commands, replay, state hash | in progress |
 | 4 | Scale: benchmark and binary render boundary | |
 | 5 | Extension API | |
 
@@ -39,7 +39,8 @@ Proceed without asking unless one of these happens:
 - A command scheduled for tick T is applied at the start of the step that produces tick T
   (that is, while `current_tick() == T - 1`). `submit` targets `current_tick() + 1`.
 - Simulation modules: `components/`, `systems/`, `simulation.rs`, `orders.rs`, `groups.rs`,
-  `missions.rs`, `boarding.rs`, `core.rs`. Boundary modules: `import/`, `export/`,
+  `missions.rs`, `boarding.rs`, `core.rs`, and from step 3 `commands.rs`, `replay.rs`,
+  `state_hash.rs`. Boundary modules: `import/`, `export/`,
   `entity_components.rs`, `map.rs` and the new `units.rs`. Only boundary modules may use floats.
 
 ---
@@ -57,7 +58,7 @@ Carried forward:
 
 ---
 
-## Step 2 — Integer simulation space
+## Step 2 — Integer simulation space (done, PR #23)
 
 **Why.** Positions are `f32`, arrival is judged at 0.1, unboarding places a unit 1.5 units from the
 vehicle. Float results diverge across platforms and compilers.

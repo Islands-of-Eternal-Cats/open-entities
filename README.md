@@ -5,6 +5,8 @@ Rust workspace with the core library crate `open_entities` in `open-entities-lib
 The library uses [Bevy ECS](https://crates.io/crates/bevy_ecs) (`bevy_ecs` only, not the full Bevy engine) for entity simulation. Public entry points:
 
 - [`Api`](open-entities-lib/src/api.rs) — the facade: spawn, orders, lifecycle, import, export
+- [`Command`](open-entities-lib/src/commands.rs) — an order as data, applied at the start of a known tick: `Api::submit` / `Api::schedule`
+- [`Replay`](open-entities-lib/src/replay.rs) — content plus command log; `Api::state_hash()` proves two runs identical
 - [`EntityId`](open-entities-lib/src/orders.rs) — how every call names an entity: an `{index, generation}` pair
 - [`Core`](open-entities-lib/src/core.rs) — owns the ECS [`World`](https://docs.rs/bevy_ecs/latest/bevy_ecs/world/struct.World.html); reachable through `Api::core()` / `core_mut()`
 - [`export`](open-entities-lib/src/export/mod.rs) — `Api::world_snapshot()` captures **every entity** in the world as a `WorldSnapshot` (**schema version 5**); it serializes flat, and registered gameplay fields are omitted when absent (not `null`). The WASM bindings turn it into JSON
@@ -30,8 +32,13 @@ The simulation advances only in whole ticks of constant length, `TICK_MS` = **50
 same state at the same tick whatever the host's frame rate. `Api::current_tick()` counts the ticks
 run so far, and every `WorldSnapshot` carries it as `tick`.
 
-A tick runs the ECS schedule: `seek_system` (entities with `MoveTarget` + `BaseMoveSpeed` +
-`Velocity`) then `movement_system` (all `Position` + `Velocity`). Components hold speeds and
+A step first applies the [commands](#commands) due at the tick it produces, then runs the ECS
+schedule: mission steering, boarding approach, `seek_system` (entities with `MoveTarget` +
+`BaseMoveSpeed` + `Velocity`), `movement_system` (all `Position` + `Velocity`), passenger sync,
+mission completion and the replanner — strictly in that order. In debug builds, which is every
+test, the schedule is built with ambiguity detection set to error: two systems touching the same
+data with no order between them fail the build of the schedule instead of running in whatever
+order the executor picks. Components hold speeds and
 velocities in milli-units per tick, so movement adds `Velocity` to `Position` once per tick; see
 [Units](#units).
 
@@ -80,6 +87,115 @@ export shows the speed actually simulated.
 
 Rust host code that builds components directly writes milli-units, or uses the constructors
 `Position::from_units(x, y)` and `MoveTarget::from_units(x, y)`.
+
+## Commands
+
+Orders are data. A host does not change the world between steps; it hands the `Api` a `Command`,
+and the command is applied at the start of the step that produces its tick:
+
+```rust
+use open_entities::{Command, CommandResult};
+
+let seq = api.submit(Command::MoveTo { ids: vec![scout], target: MoveTarget::from_units(20.0, 0.0) });
+api.schedule(120, Command::Stop { ids: vec![scout] })?; // a chosen future tick
+
+let report = api.step();                 // applies `seq`, then runs the systems
+assert_eq!(report.outcomes[0].seq, seq);
+assert!(matches!(report.outcomes[0].result, Ok(CommandResult::Applied { applied: 1, .. })));
+```
+
+- `Api::submit(command)` targets the next tick, `current_tick() + 1`. `Api::schedule(tick,
+  command)` targets any later tick and refuses one that is not after `current_tick()`
+  (`ScheduleError::NotInFuture`).
+- Both return a `CommandSeq`, which grows with every call. Within a tick, commands apply in
+  `CommandSeq` order — the order they were handed in.
+- `Api::step()` returns a `StepReport { tick, outcomes }`, one `CommandOutcome { seq, result }` per
+  command applied. A result is the new id for a creation (`Spawned`, `GroupCreated`,
+  `MissionCreated`), `Applied { applied, skipped }` for anything else, or a `CommandError` saying
+  why the command was refused. A refused command changes nothing.
+
+There is one command per order: `spawn`, `despawn`, `move_to`, `stop`, `create_group`,
+`add_to_group`, `remove_from_group`, `group_move_to`, `clear_group_manual`, `create_mission`,
+`assign_group`, `unassign_group`, `board` (the walk-over order, `order_board`) and `unboard`.
+In JSON a command is tagged by `type`, with points, radii and overrides in map units like
+everywhere else outside the simulation:
+
+```json
+{ "type": "move_to", "ids": [{ "index": 5, "generation": 0 }], "target": { "x": 20.0, "y": 0.0 } }
+{ "type": "create_mission", "target": { "x": 60.0, "y": 10.0 }, "radius": 4.0 }
+{ "type": "spawn", "template": "soldier", "overrides": { "position": { "x": 5.0, "y": 40.0 } } }
+```
+
+The immediate methods described below (`order_move_to`, `create_group`, `board`, …) are what the
+commands call. They stay public for tools, scenarios and tests. **A networked host must use
+`submit` and `schedule` only**: a change made between steps is invisible to the other peers and
+to the replay, and the match diverges.
+
+## Replays
+
+A `Replay` is the content a match started from plus every command and the tick it applied at:
+
+```json
+{
+  "version": 1,
+  "templates_yaml": "entities: ...",
+  "map_yaml": "spawns: ...",
+  "seed": 20261004,
+  "commands": [{ "tick": 4, "command": { "type": "assign_group", "mission": { "index": 13, "generation": 0 }, "group": { "index": 11, "generation": 0 } } }]
+}
+```
+
+`Replay::from_json` / `to_json` read and write it, and `Replay::run(until_tick)` loads the content
+into a fresh `Api`, schedules every command and steps to `until_tick`. Commands after
+`until_tick` stay queued, so stepping the returned `Api` carries on with the recording; `run(0)`
+loads without stepping. A command at tick 0 is refused — there is no step to apply it in.
+`map_yaml` may be empty. `seed` is reserved: the RNG resource seeded from it arrives with the first
+system that needs randomness, and replays recorded before then keep their shape.
+
+The golden replay [`fixtures/replays/basic.json`](fixtures/replays/basic.json) plays 600 ticks of
+moves, stops, groups, three missions with the replanner, boarding and a despawn. Its state hash is
+pinned in [`fixtures/replays/basic.hash`](fixtures/replays/basic.hash), and CI checks it natively on
+`ubuntu-24.04`, `windows-2025` and `macos-15` and under wasm32 in Node. Regenerate the hash only for
+an intended change in behaviour, and say in the pull request why it changed:
+
+```bash
+UPDATE_GOLDEN=1 cargo test -p open_entities --test golden_replay
+```
+
+A hash that differs on one platform only is a determinism bug; it is never fixed by loosening the
+test.
+
+## State hash
+
+`Api::state_hash()` is a `u64` that two runs agree on exactly when their simulation state does:
+FNV-1a 64 over `current_tick`, then every entity in ascending `(index, generation)` — its id, then
+each simulation component it carries as a tag byte plus its fields in little-endian, then a closing
+`0` byte. All integers, so the value is the same on every platform, native and wasm32.
+
+Every component that is simulation state is in it: the registered ones (`Position`, `Velocity`,
+`Faction`, `MoveTarget`, `BaseMoveSpeed`, `Health`, `Boardable`), the template name, and the
+internal relations and markers — passenger, boarding target, group membership, the group itself,
+manual control, mission assignment, the mission, completion, the replanner's marker and the
+order-source claim. Per-tick scratch such as `ArrivedThisTick` is not. Each component implements
+the `StateHash` trait; the registry macro emits the calls for registered components.
+
+Lockstep peers compare it to detect a desync. In JavaScript, `stateHash()` returns it as 16 hex
+digits.
+
+### What keeps it deterministic
+
+- Integers only in simulation state (see [Units](#units)).
+- `clippy.toml` disallows `std::collections::HashMap` and `HashSet` — their iteration order is
+  random; use `BTreeMap` or `IndexMap`.
+- Every "pick one of several" breaks ties by `EntityId` (index, then generation), never by query
+  order: grid slots for group and mission orders, the last seat when several units reach a vehicle
+  on the same tick, the replanner's nearest mission, the order missions are closed in. Listings
+  (`group_members`, `passengers`, `approaching`, `mission_assignees`) come back in `EntityId`
+  order.
+- The schedule is built in `Api::new()`, not on the first step: building it creates resources,
+  which in `bevy_ecs` 0.19 are entities, so a lazy build would hand out an entity index in the
+  middle of a match.
+- The toolchain is pinned in `rust-toolchain.toml`.
 
 ## Move orders
 
@@ -261,7 +377,10 @@ To add a component: implement the type under `components/`, add one `register_co
 
 ## Requirements
 
-- Rust **1.85+** (edition 2024; `bevy_ecs 0.19` may require a newer toolchain — check `cargo build` if compile fails)
+- Rust **1.99.0**, pinned in [`rust-toolchain.toml`](rust-toolchain.toml) together with `rustfmt`,
+  `clippy` and the `wasm32-unknown-unknown` target; `rustup` installs it on the first `cargo`
+  call. The crate itself needs 1.85+ (edition 2024, `u64::isqrt`); the pin keeps the golden replay
+  and clippy's verdict from moving with each stable release.
 
 Check your toolchain:
 
@@ -336,8 +455,11 @@ make wasm-check
 | `loadTemplatesYaml(yaml)` | `load_templates_yaml` |
 | `spawnEntity(name, overrides)` | `spawn_entity` → id `{index, generation}` |
 | `getWorldAsJson()` | `world_json` |
-| `step()` | `step` |
+| `submit(command)` | `submit` → sequence number |
+| `schedule(tick, command)` | `schedule` → sequence number |
+| `step()` | `step` → `{ tick, outcomes }` |
 | `currentTick()` | `current_tick` |
+| `stateHash()` | `state_hash` → 16 hex digits |
 | `orderMoveTo(ids, x, y)` | `order_move_to` |
 | `orderStop(ids)` | `order_stop` |
 | `despawn(ids)` | `despawn` → count removed |
@@ -358,13 +480,14 @@ make wasm-check
 | `hello()` | `hello` |
 | `tickMs()` (module function) | `TICK_MS` |
 
-Override objects use the same snake_case keys as YAML and export (`position`, `move_target`, etc.). See [`wasm-bindings/demo/run.mjs`](wasm-bindings/demo/run.mjs) for a full example.
+Override objects use the same snake_case keys as YAML and export (`position`, `move_target`, etc.). Commands are the JSON objects from [Commands](#commands). An outcome in a step report is flat: `{ seq, ok: true, spawned | group | mission }` for a creation, `{ seq, ok: true, applied, skipped }` for anything else, `{ seq, ok: false, error }` when refused. The immediate order methods in the table remain for tools and tests; a host that wants lockstep or replays uses `submit`. See [`wasm-bindings/demo/run.mjs`](wasm-bindings/demo/run.mjs) for a full example.
 
 ## Browser demo (js-app)
 
 An interactive RTS-style demo lives in [`js-app/`](js-app/): PixiJS canvas, marquee selection,
 move orders for a group, minimap, pan and zoom. The simulation runs in a web worker; the main
-thread only renders and handles input.
+thread only renders and handles input. Every order the demo gives goes to the core as a command
+through `submit`, applies on the next tick, and its promise settles from the frame that ran it.
 
 ```bash
 cd js-app

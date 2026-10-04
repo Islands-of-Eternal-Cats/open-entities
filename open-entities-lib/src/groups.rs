@@ -15,7 +15,7 @@ use crate::api::Api;
 use crate::components::{
     AssignedTo, Faction, Group, ManualActive, MemberOf, MoveTarget, OrderSource,
 };
-use crate::orders::{EntityId, OrderReport, can_take_a_move_order, steer};
+use crate::orders::{EntityId, OrderReport, can_take_a_move_order, sort_by_id, steer};
 
 /// Errors from the group operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,7 +123,7 @@ impl Api {
         Some(EntityId::of(member_of.0))
     }
 
-    /// Every live member of a group, in no particular order.
+    /// Every live member of a group, in [`EntityId`] order.
     pub fn group_members(&mut self, group: EntityId) -> Vec<EntityId> {
         let Some(group_entity) = group.to_entity() else {
             return Vec::new();
@@ -219,15 +219,18 @@ impl Api {
             .map_or(0, |group| group.faction)
     }
 
-    /// Members of a resolved group as ECS entities.
+    /// Members of a resolved group as ECS entities, in [`EntityId`] order — which is also the
+    /// order they take slots in a group order.
     fn members_of(&mut self, group: Entity) -> Vec<Entity> {
         let world = self.core_mut().world_mut();
         let mut query = world.query::<(Entity, &MemberOf)>();
-        query
+        let mut members: Vec<Entity> = query
             .iter(world)
             .filter(|(_, member_of)| member_of.0 == group)
             .map(|(entity, _)| entity)
-            .collect()
+            .collect();
+        sort_by_id(&mut members);
+        members
     }
 }
 
@@ -255,7 +258,7 @@ mod tests {
         let mut api = Api::new();
         let group = api.create_group(1);
 
-        assert!(api.group_members(group).is_empty());
+        assert_eq!(api.group_members(group), []);
         assert!(!api.is_group_manual(group));
     }
 
@@ -270,7 +273,7 @@ mod tests {
         api.add_to_group(second, unit).expect("move to second");
 
         assert_eq!(api.group_of(unit), Some(second));
-        assert!(api.group_members(first).is_empty());
+        assert_eq!(api.group_members(first), []);
         assert_eq!(api.group_members(second), vec![unit]);
     }
 
@@ -392,7 +395,7 @@ mod tests {
 
         assert_eq!(api.despawn(&[unit]), 1);
 
-        assert!(api.group_members(group).is_empty());
+        assert_eq!(api.group_members(group), []);
         assert!(
             api.order_group_move_to(group, MoveTarget { x: 1000, y: 1000 })
                 .is_ok(),

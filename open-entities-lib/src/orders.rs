@@ -22,7 +22,10 @@ const MOVE_GROUP_GRID_SPACING: i32 = 5000;
 ///
 /// An id stays valid while the entity lives. After it is despawned the same `index` may be reused
 /// with a higher `generation`, and the old id no longer resolves.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+///
+/// Ids order by `index`, then `generation`. That order is how the simulation breaks every tie, so
+/// the same world always makes the same choice whatever order its storage happens to be in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EntityId {
     /// Transiently unique slot; reused after despawn.
@@ -58,6 +61,15 @@ impl EntityId {
             EntityGeneration::from_bits(self.generation),
         ))
     }
+}
+
+/// Sorts entities by [`EntityId`], the one order the simulation may depend on.
+///
+/// Query iteration follows ECS storage, which shifts whenever an entity gains or loses a
+/// component; anything that hands out slots, seats or picks one of several sorts first.
+/// (`Entity`'s own `Ord` compares the generation first, so it is not the same order.)
+pub(crate) fn sort_by_id(entities: &mut [Entity]) {
+    entities.sort_unstable_by_key(|entity| EntityId::of(*entity));
 }
 
 /// What [`Api::order_move_to`] did with the ids it was given.

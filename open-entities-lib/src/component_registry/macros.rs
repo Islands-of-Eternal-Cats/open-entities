@@ -8,7 +8,7 @@ macro_rules! register_component {
     };
 }
 
-/// Expands the registry list into `EntityComponents`, merge/spawn/export helpers.
+/// Expands the registry list into `EntityComponents`, merge/spawn/export/hash helpers.
 #[macro_export]
 macro_rules! define_registered_components {
     (
@@ -48,6 +48,18 @@ macro_rules! define_registered_components {
                 if let Some(value) = doc.$field {
                     entity.insert(value);
                 }
+            )*
+        }
+
+        /// Feeds each registered component the entity carries into the state hash, in registry
+        /// order. Every registered type implements [`StateHash`]($crate::state_hash::StateHash).
+        pub fn hash_registered_components(
+            world: &bevy_ecs::prelude::World,
+            entity: bevy_ecs::prelude::Entity,
+            hasher: &mut $crate::state_hash::StateHasher,
+        ) {
+            $(
+                $crate::state_hash::hash_component::<$ty>(world, entity, hasher);
             )*
         }
 

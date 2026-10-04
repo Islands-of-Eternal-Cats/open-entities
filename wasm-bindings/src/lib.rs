@@ -1,6 +1,8 @@
 use open_entities::components::MoveTarget;
 use open_entities::{Api, EntityComponents, EntityId, ImportError, hello};
 use open_entities::{BoardError, GroupError, MissionError, units};
+use open_entities::{Command, CommandOutcome, CommandResult, StepReport};
+use serde::Serialize;
 
 /// Converts a JS point in map units to a [`MoveTarget`] in milli-units.
 fn move_target(x: f64, y: f64, call: &str) -> Result<MoveTarget, JsValue> {
@@ -12,6 +14,96 @@ fn move_target(x: f64, y: f64, call: &str) -> Result<MoveTarget, JsValue> {
     })
 }
 use wasm_bindgen::prelude::*;
+
+/// A [`StepReport`] as JS sees it: `{ tick, outcomes }`.
+#[derive(Serialize)]
+struct JsStepReport {
+    tick: u64,
+    outcomes: Vec<JsOutcome>,
+}
+
+/// One [`CommandOutcome`], flattened for JS: `ok` plus whichever of the other fields apply.
+///
+/// `{ seq, ok: true, spawned | group | mission: {index, generation} }` for a creation,
+/// `{ seq, ok: true, applied, skipped }` for anything else, `{ seq, ok: false, error }` when the
+/// command was refused.
+#[derive(Serialize, Default)]
+struct JsOutcome {
+    seq: u64,
+    ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    spawned: Option<EntityId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    group: Option<EntityId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mission: Option<EntityId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    applied: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    skipped: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+impl From<CommandOutcome> for JsOutcome {
+    fn from(outcome: CommandOutcome) -> Self {
+        let seq = outcome.seq.0;
+        match outcome.result {
+            Ok(CommandResult::Spawned(id)) => Self {
+                seq,
+                ok: true,
+                spawned: Some(id),
+                ..Self::default()
+            },
+            Ok(CommandResult::GroupCreated(id)) => Self {
+                seq,
+                ok: true,
+                group: Some(id),
+                ..Self::default()
+            },
+            Ok(CommandResult::MissionCreated(id)) => Self {
+                seq,
+                ok: true,
+                mission: Some(id),
+                ..Self::default()
+            },
+            Ok(CommandResult::Applied { applied, skipped }) => Self {
+                seq,
+                ok: true,
+                applied: Some(applied),
+                skipped: Some(skipped),
+                ..Self::default()
+            },
+            Err(err) => Self {
+                seq,
+                ok: false,
+                error: Some(err.to_string()),
+                ..Self::default()
+            },
+        }
+    }
+}
+
+impl From<StepReport> for JsStepReport {
+    fn from(report: StepReport) -> Self {
+        Self {
+            tick: report.tick,
+            outcomes: report.outcomes.into_iter().map(JsOutcome::from).collect(),
+        }
+    }
+}
+
+/// Reads a command object: `{ type: "move_to", ids: [...], target: { x, y } }` and so on.
+fn command_from_js(command: JsValue, call: &str) -> Result<Command, JsValue> {
+    serde_wasm_bindgen::from_value(command)
+        .map_err(|e| JsValue::from_str(&format!("{call}: invalid command: {e}")))
+}
+
+/// Sequence numbers count calls; they stay far below 2^53, where a JS number is still exact.
+#[allow(clippy::cast_precision_loss)]
+fn seq_to_js(seq: open_entities::CommandSeq) -> f64 {
+    seq.0 as f64
+}
 
 #[wasm_bindgen]
 pub struct Simulation {
@@ -404,10 +496,58 @@ impl Simulation {
         }
     }
 
+    /// JS: `submit(command)` — queue a command for the next tick; returns its sequence number.
+    ///
+    /// Nothing changes until the `step()` that produces the next tick; that step's report carries
+    /// the outcome under the same `seq`. This is how a networked host gives orders: the immediate
+    /// methods above change the world on the spot and have no place in a lockstep match.
+    #[wasm_bindgen(js_name = submit)]
+    pub fn submit(&mut self, command: JsValue) -> Result<f64, JsValue> {
+        let command = command_from_js(command, "submit")?;
+        Ok(seq_to_js(self.api.submit(command)))
+    }
+
+    /// JS: `schedule(tick, command)` — queue a command for a later tick; returns its sequence
+    /// number. Throws when `tick` is not after `currentTick()`.
+    #[wasm_bindgen(js_name = schedule)]
+    pub fn schedule(&mut self, tick: f64, command: JsValue) -> Result<f64, JsValue> {
+        if !(tick.is_finite() && tick >= 0.0 && tick.fract() == 0.0) {
+            return Err(JsValue::from_str(
+                "schedule(tick, command) requires a whole, non-negative tick",
+            ));
+        }
+        let command = command_from_js(command, "schedule")?;
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // checked above
+        let tick = tick as u64;
+        self.api
+            .schedule(tick, command)
+            .map(seq_to_js)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
     /// JS: `step()` — advances exactly one tick of [`tickMs`](tick_ms) milliseconds.
+    ///
+    /// Returns `{ tick, outcomes }`: one outcome per command applied at the start of the step,
+    /// in `seq` order.
     #[wasm_bindgen(js_name = step)]
-    pub fn step(&mut self) {
-        self.api.step();
+    ///
+    /// # Panics
+    ///
+    /// Never in practice: the report holds ids and counts, and the tick fits a JS number for
+    /// fourteen million years at 20 Hz.
+    pub fn step(&mut self) -> JsValue {
+        JsStepReport::from(self.api.step())
+            .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
+            .expect("a step report serializes")
+    }
+
+    /// JS: `stateHash()` — the simulation state hash as 16 lowercase hex digits.
+    ///
+    /// Equal on every platform for the same state; peers compare it to detect a desync.
+    #[wasm_bindgen(js_name = stateHash)]
+    #[must_use]
+    pub fn state_hash(&self) -> String {
+        format!("{:016x}", self.api.state_hash())
     }
 
     /// JS: `currentTick()` — ticks advanced since the simulation was created.
@@ -832,6 +972,121 @@ mod wasm_tests {
             msg.contains("no seats to board"),
             "expected NotBoardable message, got: {msg}"
         );
+    }
+
+    const GOLDEN_REPLAY: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../fixtures/replays/basic.json"
+    ));
+    const GOLDEN_HASH: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../fixtures/replays/basic.hash"
+    ));
+
+    /// The golden replay under wasm32: the same hash the native runners pin. A mismatch here is
+    /// a determinism bug in the core, not something to fix in this test.
+    #[wasm_bindgen_test]
+    fn golden_replay_hash_matches_under_wasm() {
+        let replay = open_entities::Replay::from_json(GOLDEN_REPLAY).expect("golden replay parses");
+        let api = replay.run(600).expect("replay runs");
+        assert_eq!(format!("{:016x}", api.state_hash()), GOLDEN_HASH.trim());
+    }
+
+    fn report(value: JsValue) -> serde_json::Value {
+        serde_wasm_bindgen::from_value(value).expect("step report")
+    }
+
+    /// A sequence number as JSON compares it: an integer, not the `f64` JS hands back.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    fn seq(value: f64) -> u64 {
+        value as u64
+    }
+
+    fn command(json: serde_json::Value) -> JsValue {
+        json.serialize(&serde_wasm_bindgen::Serializer::json_compatible())
+            .expect("command")
+    }
+
+    #[wasm_bindgen_test]
+    fn a_submitted_command_comes_back_as_an_outcome_of_the_next_step() {
+        let mut sim = Simulation::new();
+        sim.load_templates_yaml(FIXTURE_YAML).expect("load fixture");
+
+        let spawn = sim
+            .submit(command(serde_json::json!({
+                "type": "spawn",
+                "template": "scout",
+                "overrides": { "position": { "x": 3, "y": 4.5 } }
+            })))
+            .expect("submit");
+        assert_eq!(
+            report(sim.step()),
+            serde_json::json!({
+                "tick": 1,
+                "outcomes": [{ "seq": seq(spawn), "ok": true, "spawned": { "index": 4, "generation": 0 } }]
+            })
+        );
+
+        let moved = sim
+            .submit(command(serde_json::json!({
+                "type": "move_to",
+                "ids": [{ "index": 4, "generation": 0 }, { "index": 99, "generation": 0 }],
+                "target": { "x": 10, "y": 10 }
+            })))
+            .expect("submit");
+        let refused = sim
+            .submit(command(serde_json::json!({
+                "type": "add_to_group",
+                "group": { "index": 4, "generation": 0 },
+                "unit": { "index": 4, "generation": 0 }
+            })))
+            .expect("submit");
+        let outcomes = report(sim.step())["outcomes"].clone();
+        assert_eq!(
+            outcomes,
+            serde_json::json!([
+                { "seq": seq(moved), "ok": true, "applied": 1, "skipped": 1 },
+                { "seq": seq(refused), "ok": false, "error": "no group with id 4:0" },
+            ])
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn a_malformed_command_is_refused_at_submit() {
+        let mut sim = Simulation::new();
+        let err = sim
+            .submit(command(serde_json::json!({ "type": "teleport" })))
+            .unwrap_err();
+        let msg = err.as_string().expect("string error");
+        assert!(msg.contains("invalid command"), "got: {msg}");
+    }
+
+    #[wasm_bindgen_test]
+    fn schedule_refuses_the_past_and_state_hash_is_hex() {
+        let mut sim = Simulation::new();
+        sim.step();
+        let past = sim
+            .schedule(
+                1.0,
+                command(serde_json::json!({ "type": "create_group", "faction": 1 })),
+            )
+            .unwrap_err();
+        assert!(
+            past.as_string()
+                .expect("string")
+                .contains("cannot schedule for tick 1")
+        );
+        assert!(
+            sim.schedule(
+                2.0,
+                command(serde_json::json!({ "type": "create_group", "faction": 1 }))
+            )
+            .is_ok()
+        );
+
+        let hash = sim.state_hash();
+        assert_eq!(hash.len(), 16);
+        assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
     }
 
     #[wasm_bindgen_test]
