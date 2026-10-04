@@ -8,7 +8,7 @@ Goal: a deterministic simulation of 100 000 units, suitable for lockstep multipl
 | 2 | Integer simulation space | done, PR #23 |
 | 3 | Commands, replay, state hash | done, PR #24 |
 | 4 | Scale: benchmark and binary render boundary | done, PR #25 |
-| 5 | Extension API | in progress |
+| 5 | Extension API | in progress, PR #26 |
 
 ## How to work through this file
 
